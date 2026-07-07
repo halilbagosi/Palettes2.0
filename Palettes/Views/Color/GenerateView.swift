@@ -16,8 +16,7 @@ struct GenerateView: View {
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var showCamera = false
 
-    @State private var isGenerating = false
-    @State private var generatedPalette: PaletteViewModel?
+    @State private var showGenerationExperience = false
 
     private var glowGradient: AnyShapeStyle {
         if #available(iOS 18.0, *) {
@@ -73,8 +72,8 @@ struct GenerateView: View {
                 }
             }
         }
-        .sheet(item: $generatedPalette) { palette in
-            GeneratedPaletteSheet(palette: palette, onRegenerate: performGeneration)
+        .fullScreenCover(isPresented: $showGenerationExperience) {
+            GenerationExperienceView(statusText: generationStatusText, generate: performGeneration)
                 .environmentObject(appData)
         }
     }
@@ -91,7 +90,6 @@ struct GenerateView: View {
             }
             .padding(.bottom, 40)
         }
-        .disabled(isGenerating)
     }
 
     // MARK: - Unavailable State
@@ -132,7 +130,7 @@ struct GenerateView: View {
                     Circle()
                         .fill(
                             RadialGradient(
-                                colors: [color.opacity(0.2), color.opacity(0)],
+                                colors: [color.opacity(0.12), color.opacity(0)],
                                 center: .center,
                                 startRadius: 0,
                                 endRadius: max(w, h) * 0.42
@@ -180,6 +178,8 @@ struct GenerateView: View {
                     }
                 }
             }
+            .padding(14)
+            .glassEffect(.regular, in: .rect(cornerRadius: 20))
         }
         .padding(.horizontal)
     }
@@ -247,8 +247,7 @@ struct GenerateView: View {
                         }
                         .padding(10)
                         .background(isSelected ? Color.accentColor.opacity(0.08) : Color.clear)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(16)
+                        .glassEffect(.regular, in: .rect(cornerRadius: 16))
                         .onTapGesture {
                             withAnimation(.spring(response: 0.25)) {
                                 if isSelected {
@@ -274,9 +273,11 @@ struct GenerateView: View {
             if let image = selectedImage {
                 imageChip(image)
             }
-            HStack(spacing: 10) {
-                vibeTextField
-                imageMenuButton
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 10) {
+                    vibeTextField
+                    imageMenuButton
+                }
             }
         }
         .padding(.horizontal)
@@ -286,6 +287,11 @@ struct GenerateView: View {
         !selectedColorIDs.isEmpty
             || !vibeDescription.trimmingCharacters(in: .whitespaces).isEmpty
             || selectedImage != nil
+    }
+
+    private var generationStatusText: String {
+        let vibe = vibeDescription.trimmingCharacters(in: .whitespaces)
+        return vibe.isEmpty ? "Generating palette…" : vibe
     }
 
     private var vibeTextField: some View {
@@ -299,27 +305,20 @@ struct GenerateView: View {
 
             if hasInput {
                 Button {
-                    startGeneration()
+                    showGenerationExperience = true
                 } label: {
-                    if isGenerating {
-                        ProgressView()
-                            .frame(width: 28, height: 28)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(glowGradient)
-                    }
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(glowGradient)
                 }
-                .disabled(isGenerating)
                 .transition(.scale.combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hasInput)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.thinMaterial)
-        .clipShape(Capsule())
+        .glassEffect(.regular.interactive(), in: .capsule)
     }
 
     private func imageChip(_ image: UIImage) -> some View {
@@ -349,8 +348,7 @@ struct GenerateView: View {
             }
         }
         .padding(8)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassEffect(.regular, in: .rect(cornerRadius: 14))
         .transition(.scale.combined(with: .opacity))
     }
 
@@ -367,22 +365,12 @@ struct GenerateView: View {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
             }
         } label: {
-            if #available(iOS 26.0, *) {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.title3)
-                    .frame(width: 44, height: 44)
-                    .foregroundColor(.accentColor)
-                    .contentShape(Circle())
-                    .glassEffect(.regular.interactive(), in: .circle)
-            } else {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.title3)
-                    .foregroundColor(.accentColor)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-                    .contentShape(Circle())
-            }
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.title3)
+                .frame(width: 44, height: 44)
+                .foregroundColor(.accentColor)
+                .contentShape(Circle())
+                .glassEffect(.regular.interactive(), in: .circle)
         }
         .clipShape(Circle())
         .onChange(of: photosPickerItem) { _, newItem in
@@ -399,19 +387,6 @@ struct GenerateView: View {
     }
 
     // MARK: - Generation
-
-    private func startGeneration() {
-        guard !isGenerating else { return }
-        isGenerating = true
-        Task {
-            do {
-                generatedPalette = try await performGeneration()
-            } catch {
-                ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
-            }
-            isGenerating = false
-        }
-    }
 
     private func performGeneration() async throws -> PaletteViewModel {
         var baseColors: [PaletteGenerator.BaseColor] = appData.colors
