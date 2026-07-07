@@ -17,6 +17,8 @@ struct GenerateView: View {
     @State private var showCamera = false
 
     @State private var showGenerationExperience = false
+    @State private var glowPulse = false
+    @FocusState private var vibeFocused: Bool
 
     private var glowGradient: AnyShapeStyle {
         if #available(iOS 18.0, *) {
@@ -61,7 +63,16 @@ struct GenerateView: View {
                     unavailableView(for: reason)
                 }
             }
-            .background { animatedBackground }
+            .background {
+                ZStack {
+                    LiquidGradientView(speed: 0.4, intensity: 0.18)
+                        .blur(radius: 60)
+                        .ignoresSafeArea()
+                    animatedBackground
+                    SparkleFieldView()
+                        .ignoresSafeArea()
+                }
+            }
             .navigationTitle("Generate")
             .onAppear {
                 withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
@@ -70,6 +81,7 @@ struct GenerateView: View {
                 withAnimation(.linear(duration: 14).repeatForever(autoreverses: true)) {
                     bgPhase = 1
                 }
+                glowPulse = true
             }
         }
         .fullScreenCover(isPresented: $showGenerationExperience) {
@@ -90,6 +102,9 @@ struct GenerateView: View {
             }
             .padding(.bottom, 40)
         }
+        .sensoryFeedback(.selection, trigger: selectedColorIDs)
+        .sensoryFeedback(.selection, trigger: Int(paletteSize))
+        .sensoryFeedback(.impact, trigger: showGenerationExperience)
     }
 
     // MARK: - Unavailable State
@@ -177,11 +192,30 @@ struct GenerateView: View {
                         if value < 12 { Spacer() }
                     }
                 }
+
+                sizeDots
+                    .padding(.top, 10)
             }
             .padding(14)
             .glassEffect(.regular, in: .rect(cornerRadius: 20))
         }
         .padding(.horizontal)
+    }
+
+    private var sizeDots: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                ForEach(0..<Int(paletteSize), id: \.self) { i in
+                    Circle()
+                        .fill(bgBlobColors[i % bgBlobColors.count].opacity(0.5))
+                        .frame(width: 20, height: 20)
+                        .glassEffect(.regular, in: .circle)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.6), value: Int(paletteSize))
     }
 
     // MARK: - Colors
@@ -230,6 +264,7 @@ struct GenerateView: View {
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                                         .stroke(.white.opacity(0.2), lineWidth: 1)
                                 )
+                                .shadow(color: colorItem.color.opacity(isSelected ? 0.7 : 0), radius: 10)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(colorItem.name)
@@ -247,7 +282,9 @@ struct GenerateView: View {
                         }
                         .padding(10)
                         .background(isSelected ? Color.accentColor.opacity(0.08) : Color.clear)
-                        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+                        .scaleEffect(isSelected ? 1.02 : 1.0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
                         .onTapGesture {
                             withAnimation(.spring(response: 0.25)) {
                                 if isSelected {
@@ -302,6 +339,7 @@ struct GenerateView: View {
 
             TextField("Describe palette vibe!", text: $vibeDescription)
                 .font(.headline)
+                .focused($vibeFocused)
 
             if hasInput {
                 Button {
@@ -312,6 +350,13 @@ struct GenerateView: View {
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(glowGradient)
                 }
+                .background {
+                    Circle()
+                        .fill(glowGradient)
+                        .blur(radius: 10)
+                        .opacity(glowPulse ? 0.7 : 0.3)
+                        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: glowPulse)
+                }
                 .transition(.scale.combined(with: .opacity))
             }
         }
@@ -319,6 +364,15 @@ struct GenerateView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .glassEffect(.regular.interactive(), in: .capsule)
+        .background {
+            Capsule()
+                .fill(glowGradient)
+                .blur(radius: 18)
+                .opacity(vibeFocused ? 0.55 : 0.25)
+                .scaleEffect(x: glowPulse ? 1.03 : 0.97, y: glowPulse ? 1.15 : 0.9)
+                .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: glowPulse)
+                .animation(.easeInOut(duration: 0.3), value: vibeFocused)
+        }
     }
 
     private func imageChip(_ image: UIImage) -> some View {
