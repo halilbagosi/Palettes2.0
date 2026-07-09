@@ -3,3 +3,9 @@ graphify-out/
 
 # Claude
 .claude/
+
+# Superpowers Documentation
+docs/superpowers/
+
+# Build artifacts
+build/
