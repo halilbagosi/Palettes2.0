@@ -1,0 +1,64 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Palette/NewPaletteView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Palette Name",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "Added Colors",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 45
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Palette",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 80
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld color%@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add at least 2 colors to build your palette",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "Color Name",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 190
+        }
+      }
+    ]
+  },
+  "version": 1
+}

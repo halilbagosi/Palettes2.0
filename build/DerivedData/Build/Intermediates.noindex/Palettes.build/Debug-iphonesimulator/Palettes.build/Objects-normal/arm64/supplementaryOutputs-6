@@ -1,0 +1,23 @@
+{
+  "/Users/halilbagosi/Palettes/Palettes/Views/Components/AddColorToPaletteSheet.swift" : {
+    "const-values" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AddColorToPaletteSheet.swiftconstvalues",
+    "dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AddColorToPaletteSheet.d",
+    "diagnostics" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AddColorToPaletteSheet.dia",
+    "object" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AddColorToPaletteSheet.o",
+    "swift-dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AddColorToPaletteSheet.swiftdeps"
+  },
+  "/Users/halilbagosi/Palettes/Palettes/Views/Components/AdjustmentSlider.swift" : {
+    "const-values" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AdjustmentSlider.swiftconstvalues",
+    "dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AdjustmentSlider.d",
+    "diagnostics" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AdjustmentSlider.dia",
+    "object" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AdjustmentSlider.o",
+    "swift-dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/AdjustmentSlider.swiftdeps"
+  },
+  "/Users/halilbagosi/Palettes/Palettes/Views/Components/ColorInputView.swift" : {
+    "const-values" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorInputView.swiftconstvalues",
+    "dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorInputView.d",
+    "diagnostics" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorInputView.dia",
+    "object" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorInputView.o",
+    "swift-dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorInputView.swiftdeps"
+  }
+}

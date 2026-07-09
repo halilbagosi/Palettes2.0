@@ -1,0 +1,72 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Components/SearchComponents.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 28
+        }
+      },
+      {
+        "comment": "",
+        "key": "Recent",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 80
+        }
+      },
+      {
+        "comment": "",
+        "key": "Clear",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing to search yet",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 126
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create colors and palettes and they'll show up here, ready to browse and search.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create a Palette",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Results",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 162
+        }
+      },
+      {
+        "comment": "",
+        "key": "No results for \"%@\"",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 166
+        }
+      }
+    ]
+  },
+  "version": 1
+}

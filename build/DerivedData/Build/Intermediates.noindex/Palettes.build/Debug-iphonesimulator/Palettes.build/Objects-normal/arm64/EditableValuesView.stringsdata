@@ -1,0 +1,40 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Components/EditableValuesView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "HEX",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 19
+        }
+      },
+      {
+        "comment": "",
+        "key": "#",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 24
+        }
+      },
+      {
+        "comment": "",
+        "key": "000000",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 28
+        }
+      },
+      {
+        "comment": "",
+        "key": "0",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 99
+        }
+      }
+    ]
+  },
+  "version": 1
+}

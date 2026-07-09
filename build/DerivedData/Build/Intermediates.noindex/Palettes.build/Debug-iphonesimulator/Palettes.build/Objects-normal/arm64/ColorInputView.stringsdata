@@ -1,0 +1,80 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Components/ColorInputView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Turn Off True Tone",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "Input",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "Got It",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 139
+        }
+      },
+      {
+        "comment": "",
+        "key": "For accurate color scanning, turn off True Tone in Settings → Display & Brightness. True Tone adjusts your screen's warmth, which can affect how scanned colors appear.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 141
+        }
+      },
+      {
+        "comment": "",
+        "key": "Camera",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 183
+        }
+      },
+      {
+        "comment": "",
+        "key": "Library",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 193
+        }
+      },
+      {
+        "comment": "",
+        "key": "Color Name",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 265
+        }
+      },
+      {
+        "comment": "",
+        "key": "No saved colors yet. Use Pick or Scan to add one.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 331
+        }
+      },
+      {
+        "comment": "",
+        "key": "Added",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 376
+        }
+      }
+    ]
+  },
+  "version": 1
+}

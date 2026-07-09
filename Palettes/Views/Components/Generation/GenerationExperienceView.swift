@@ -5,105 +5,94 @@
 
 import SwiftUI
 
-/// Full-screen generation session presented as a cover: the waiting orb morphs
-/// into the result stage; Regenerate morphs back.
-struct GenerationExperienceView: View {
+/// Editable result stage shown inline after generation: rename the palette,
+/// edit or remove individual colors, regenerate, or save.
+struct GenerationResultView: View {
+    @Binding var name: String
+    @Binding var colors: [Color]
+    @Binding var hexCodes: [String]
+    @Binding var colorNames: [String]
+    var onBack: () -> Void
+    var onRegenerate: () -> Void
+    var onDescribeChange: (String) -> Void
+    var onSave: () -> Void
+
     @EnvironmentObject var appData: AppData
-    @Environment(\.dismiss) private var dismiss
 
-    let statusText: String
-    let generate: () async throws -> PaletteViewModel
-
-    @State private var palette: PaletteViewModel?
+    private struct EditTarget: Identifiable { let id: Int }
+    @State private var editTarget: EditTarget?
+    @State private var changeText = ""
+    @FocusState private var changeFocused: Bool
 
     var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color(.systemBackground))
-                .ignoresSafeArea()
+        ScrollView {
+            VStack(spacing: 20) {
+                nameField
+                    .padding(.top, 8)
 
-            if let palette {
-                resultStage(palette)
-                    .transition(.blurReplace)
-            } else {
-                GenerationOrbView(statusText: statusText)
-                    .transition(.blurReplace)
+                swatchStrip
+                colorList
             }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal)
+            .padding(.bottom, 40)
         }
-        .task {
-            if palette == nil { await run() }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 12) {
+                describeChangeField
+                actionBar
+            }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
-    }
-
-    // MARK: - Generation
-
-    private func run() async {
-        do {
-            let result = try await generate()
-            withAnimation(.smooth(duration: 0.7)) { palette = result }
-        } catch {
-            ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
-            dismiss()
-        }
-    }
-
-    private func regenerate() {
-        withAnimation(.smooth(duration: 0.5)) { palette = nil }
-        Task { await run() }
-    }
-
-    private func save() {
-        guard let palette else { return }
-        appData.palettes.append(palette)
-        ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
-        dismiss()
-    }
-
-    // MARK: - Result Stage
-
-    private func resultStage(_ palette: PaletteViewModel) -> some View {
-        ZStack(alignment: .top) {
-            LiquidGradientView(speed: 0.35, intensity: 0.22)
-                .blur(radius: 80)
-                .ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: 20) {
-                    Text(palette.name)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .padding(.top, 72)
-
-                    swatchStrip(palette)
-                    colorList(palette)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { onBack() } label: {
+                    Image(systemName: "chevron.backward")
+                        .fontWeight(.semibold)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 40)
             }
-
-            header
         }
-        .safeAreaInset(edge: .bottom) { actionBar }
+        .sheet(item: $editTarget) { target in
+            if target.id < colors.count {
+                ColorEditView(
+                    colorName: $colorNames[target.id],
+                    hexCode: $hexCodes[target.id],
+                    colorValue: $colors[target.id]
+                )
+                .environmentObject(appData)
+                .presentationDetents([.large])
+                .presentationSizing(.form)
+            }
+        }
     }
 
-    private var header: some View {
-        HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
+    // MARK: - Name
 
-            Spacer()
+    private var nameField: some View {
+        HStack(spacing: 8) {
+            TextField("Palette Name", text: $name)
+                .font(.system(.title, design: .rounded).weight(.bold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: true, vertical: false)
+
+            Image(systemName: "pencil")
+                .font(.body)
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal)
+        .frame(maxWidth: .infinity)
     }
 
-    private func swatchStrip(_ palette: PaletteViewModel) -> some View {
+    // MARK: - Swatches
+
+    private var swatchStrip: some View {
         HStack(spacing: 0) {
-            ForEach(0..<palette.colors.count, id: \.self) { i in
-                Rectangle().fill(palette.colors[i])
+            ForEach(colors.indices, id: \.self) { i in
+                Rectangle().fill(colors[i])
             }
         }
         .frame(height: 140)
@@ -112,41 +101,119 @@ struct GenerationExperienceView: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(.white.opacity(0.25), lineWidth: 1)
         )
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: colors.count)
     }
 
-    private func colorList(_ palette: PaletteViewModel) -> some View {
+    // MARK: - Color Rows
+
+    private var colorList: some View {
         VStack(spacing: 10) {
-            ForEach(0..<palette.colors.count, id: \.self) { i in
-                HStack(spacing: 14) {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(palette.colors[i].gradient)
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(.white.opacity(0.2), lineWidth: 1)
-                        )
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(i < palette.colorNames.count ? palette.colorNames[i] : "Color \(i + 1)")
-                            .font(.system(size: 15, weight: .semibold))
-                        Text(i < palette.hexCodes.count ? palette.hexCodes[i] : "")
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-                }
-                .padding(10)
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+            ForEach(colors.indices, id: \.self) { i in
+                colorRow(at: i)
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: colors.count)
     }
+
+    private func colorRow(at index: Int) -> some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(colors[index].gradient)
+                .frame(width: 50, height: 50)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(index < colorNames.count ? colorNames[index] : "Color \(index + 1)")
+                    .font(.system(size: 15, weight: .semibold))
+                Text(index < hexCodes.count ? hexCodes[index] : "")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                editTarget = EditTarget(id: index)
+            } label: {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityLabel("Edit color")
+
+            Button {
+                removeColor(at: index)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(colors.count > 2 ? Color.red.opacity(0.8) : Color.secondary.opacity(0.4))
+            }
+            .disabled(colors.count <= 2)
+            .accessibilityLabel("Remove color")
+        }
+        .padding(10)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+    }
+
+    private func removeColor(at index: Int) {
+        guard colors.count > 2, index < colors.count else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            colors.remove(at: index)
+            if index < hexCodes.count { hexCodes.remove(at: index) }
+            if index < colorNames.count { colorNames.remove(at: index) }
+        }
+    }
+
+    // MARK: - Describe a Change
+
+    private var describeChangeField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "apple.intelligence")
+                .font(.title3)
+                .foregroundStyle(.tint)
+
+            TextField("Describe a change…", text: $changeText)
+                .font(.body)
+                .focused($changeFocused)
+                .submitLabel(.go)
+                .onSubmit(submitChange)
+
+            if !changeText.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(action: submitChange) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.tint)
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .animation(.spring(response: 0.3), value: changeText.isEmpty)
+    }
+
+    private func submitChange() {
+        let text = changeText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        changeFocused = false
+        onDescribeChange(text)
+        changeText = ""
+    }
+
+    // MARK: - Actions
 
     private var actionBar: some View {
         GlassEffectContainer(spacing: 16) {
             HStack(spacing: 16) {
                 Button {
-                    regenerate()
+                    onRegenerate()
                 } label: {
                     Label("Regenerate", systemImage: "sparkles")
                         .font(.headline)
@@ -156,7 +223,7 @@ struct GenerationExperienceView: View {
                 .buttonStyle(.glass)
 
                 Button {
-                    save()
+                    onSave()
                 } label: {
                     Label("Save", systemImage: "checkmark")
                         .font(.headline)
@@ -166,23 +233,20 @@ struct GenerationExperienceView: View {
                 .buttonStyle(.glassProminent)
             }
         }
-        .padding(.horizontal)
-        .padding(.bottom, 8)
     }
 }
 
 #Preview {
-    GenerationExperienceView(
-        statusText: "Warm autumn forest",
-        generate: {
-            try await Task.sleep(for: .seconds(3))
-            return PaletteViewModel(
-                name: "Warm Autumn Forest",
-                colors: [Color(hex: "A95F4D")!, Color(hex: "D98A6C")!, Color(hex: "F5C79A")!, Color(hex: "E29C88")!],
-                hexCodes: ["#A95F4D", "#D98A6C", "#F5C79A", "#E29C88"],
-                colorNames: ["Amber", "Maple", "Goldenrod", "Moss"]
-            )
-        }
-    )
+    @Previewable @State var name = "Warm Autumn Forest"
+    @Previewable @State var colors: [Color] = [Color(hex: "A95F4D")!, Color(hex: "D98A6C")!, Color(hex: "F5C79A")!, Color(hex: "E29C88")!]
+    @Previewable @State var hexes = ["#A95F4D", "#D98A6C", "#F5C79A", "#E29C88"]
+    @Previewable @State var names = ["Amber", "Maple", "Goldenrod", "Moss"]
+
+    NavigationStack {
+        GenerationResultView(
+            name: $name, colors: $colors, hexCodes: $hexes, colorNames: $names,
+            onBack: {}, onRegenerate: {}, onDescribeChange: { _ in }, onSave: {}
+        )
+    }
     .environmentObject(AppData())
 }

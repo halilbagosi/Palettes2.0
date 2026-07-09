@@ -1,0 +1,1 @@
+@rpath/Palettes.debug.dylib

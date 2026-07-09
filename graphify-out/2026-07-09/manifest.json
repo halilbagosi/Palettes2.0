@@ -1,0 +1,267 @@
+{
+  ".claude/settings.local.json": {
+    "mtime": 1783433789.427122,
+    "ast_hash": "98181b9806a33c5d45ff9361d84b2214",
+    "semantic_hash": "98181b9806a33c5d45ff9361d84b2214"
+  },
+  "Palettes/App/AppData.swift": {
+    "mtime": 1783603885.2626977,
+    "ast_hash": "e257dd782be01ee3c82c9fb7afca64e0",
+    "semantic_hash": "e257dd782be01ee3c82c9fb7afca64e0"
+  },
+  "Palettes/App/MyApp.swift": {
+    "mtime": 1783456056.7949402,
+    "ast_hash": "a67ef21b9fcc4a74e2ca285e02b38977",
+    "semantic_hash": "a67ef21b9fcc4a74e2ca285e02b38977"
+  },
+  "Palettes/Extensions/Color+Extensions.swift": {
+    "mtime": 1783522874.5030103,
+    "ast_hash": "8c0496537fb616d519fc63e0cdff708e",
+    "semantic_hash": ""
+  },
+  "Palettes/Managers/PaletteGenerator.swift": {
+    "mtime": 1783560161.6799526,
+    "ast_hash": "07a7a21c2b69fdaa60ff5ab5577f0115",
+    "semantic_hash": ""
+  },
+  "Palettes/Managers/PaletteImageRenderer.swift": {
+    "mtime": 1783432557.7451968,
+    "ast_hash": "c36d38c9d6ff3ecae4b7ba049dde6e8f",
+    "semantic_hash": "c36d38c9d6ff3ecae4b7ba049dde6e8f"
+  },
+  "Palettes/Managers/ToastManager.swift": {
+    "mtime": 1783455020.147271,
+    "ast_hash": "b1665f67a5a07ac91592f73b50762e5a",
+    "semantic_hash": "b1665f67a5a07ac91592f73b50762e5a"
+  },
+  "Palettes/Utilities/AppError.swift": {
+    "mtime": 1783435146.548478,
+    "ast_hash": "547fe317644ba69ee2219d94da80759c",
+    "semantic_hash": "547fe317644ba69ee2219d94da80759c"
+  },
+  "Palettes/Utilities/Assets.xcassets/AccentColor.colorset/Contents.json": {
+    "mtime": 1783432557.7460108,
+    "ast_hash": "88cd26db3e6a44fc46b1d81444089bbc",
+    "semantic_hash": "88cd26db3e6a44fc46b1d81444089bbc"
+  },
+  "Palettes/Utilities/Assets.xcassets/AppIcon.appiconset/Contents.json": {
+    "mtime": 1783432557.7462065,
+    "ast_hash": "656e426612a7126f2dc91453413e7c4a",
+    "semantic_hash": "656e426612a7126f2dc91453413e7c4a"
+  },
+  "Palettes/Utilities/Assets.xcassets/Color.colorset/Contents.json": {
+    "mtime": 1783432557.7464035,
+    "ast_hash": "a173a65c0d09d8ee330856fc36797396",
+    "semantic_hash": "a173a65c0d09d8ee330856fc36797396"
+  },
+  "Palettes/Utilities/Assets.xcassets/Contents.json": {
+    "mtime": 1783432557.74651,
+    "ast_hash": "9deb2ada1cc834bbebf8bbad9c8978a1",
+    "semantic_hash": "9deb2ada1cc834bbebf8bbad9c8978a1"
+  },
+  "Palettes/Utilities/HEXParser.swift": {
+    "mtime": 1783432557.7466862,
+    "ast_hash": "f262963ed647182fb8a7cf2138db4a09",
+    "semantic_hash": "f262963ed647182fb8a7cf2138db4a09"
+  },
+  "Palettes/Utilities/ImageColorExtractor.swift": {
+    "mtime": 1783432557.7469156,
+    "ast_hash": "94bf7a11e338354feb2873d4f2046c23",
+    "semantic_hash": "94bf7a11e338354feb2873d4f2046c23"
+  },
+  "Palettes/Utilities/PaletteShaders.metal": {
+    "mtime": 1783505405.2717352,
+    "ast_hash": "657c64732b019b0f287a42f8ca129770",
+    "semantic_hash": ""
+  },
+  "Palettes/ViewModels/ColorViewModel.swift": {
+    "mtime": 1783432557.7471137,
+    "ast_hash": "fabeb369ce46a1867cbe3e05ecf09047",
+    "semantic_hash": "fabeb369ce46a1867cbe3e05ecf09047"
+  },
+  "Palettes/ViewModels/PaletteViewModel.swift": {
+    "mtime": 1783432557.747237,
+    "ast_hash": "38fd7d204406124d3dab288746bd90d9",
+    "semantic_hash": "38fd7d204406124d3dab288746bd90d9"
+  },
+  "Palettes/Views/Color/ColorEditView.swift": {
+    "mtime": 1783522759.4147463,
+    "ast_hash": "a1475f75c3ab98321c815f4cfb01650e",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Color/ColorsView.swift": {
+    "mtime": 1783523039.1143734,
+    "ast_hash": "126f76e339f3f2cfdacae92761941a6a",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Color/GenerateView.swift": {
+    "mtime": 1783586370.5009522,
+    "ast_hash": "e8261099007fd1e1393972fc2a051d2b",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Color/NewColorView.swift": {
+    "mtime": 1783522777.6998856,
+    "ast_hash": "8c2d2c4161336fcdc8b6f3472a9e11ee",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/AddColorToPaletteSheet.swift": {
+    "mtime": 1783522698.3579705,
+    "ast_hash": "6f302494d00395e49de30bdcde70ee20",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/AdjustmentSlider.swift": {
+    "mtime": 1783455849.1464536,
+    "ast_hash": "6a0bc47efee86e39aa26e33a61fb5dc5",
+    "semantic_hash": "6a0bc47efee86e39aa26e33a61fb5dc5"
+  },
+  "Palettes/Views/Components/Buttons/viewButtonCell.swift": {
+    "mtime": 1783455015.4423606,
+    "ast_hash": "a5eded4e96757829e361b9033474dffe",
+    "semantic_hash": "a5eded4e96757829e361b9033474dffe"
+  },
+  "Palettes/Views/Components/Cells/ColorCellSearch.swift": {
+    "mtime": 1783562232.6289055,
+    "ast_hash": "80bf7140200666b3632951b6788186b7",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Cells/ColorsCellBig.swift": {
+    "mtime": 1783603776.5047817,
+    "ast_hash": "d035b5f2ccc600a53968ba064f2da02e",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Cells/PaletteCell.swift": {
+    "mtime": 1783561300.7390237,
+    "ast_hash": "452dfeb8486f83f21bde291369f1e6f9",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Cells/PaletteCellSearch.swift": {
+    "mtime": 1783562225.9695318,
+    "ast_hash": "cb2272ab9230ea92c7c7eaa93c8bbb7d",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/EditableValuesView.swift": {
+    "mtime": 1783432557.749058,
+    "ast_hash": "6e134e927eb84fa5f0b2491dddb356a0",
+    "semantic_hash": "6e134e927eb84fa5f0b2491dddb356a0"
+  },
+  "Palettes/Views/Components/EmptyStates/PaletteEmpty.swift": {
+    "mtime": 1783523029.032799,
+    "ast_hash": "d5fb1ea428239d9d9cd2b6197f1cb665",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Generation/GenerationExperienceView.swift": {
+    "mtime": 1783560187.0961199,
+    "ast_hash": "c3f56c0fdf8d7cdcacbb6496a03729e4",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Generation/GenerationOrbView.swift": {
+    "mtime": 1783586368.1936157,
+    "ast_hash": "6338d918044c80cd8e58dd9ae9f13d91",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Generation/LiquidGradientView.swift": {
+    "mtime": 1783471924.8120866,
+    "ast_hash": "8116ecaaf76da5b713ce396f2cde789b",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/Generation/SparkleFieldView.swift": {
+    "mtime": 1783454882.6729312,
+    "ast_hash": "161da55522045406023f0b278060a6e6",
+    "semantic_hash": "161da55522045406023f0b278060a6e6"
+  },
+  "Palettes/Views/Components/InteractiveColorPicker.swift": {
+    "mtime": 1783455801.0935364,
+    "ast_hash": "d28b9d6ddb040c56f2df8880d4879e3a",
+    "semantic_hash": "d28b9d6ddb040c56f2df8880d4879e3a"
+  },
+  "Palettes/Views/Components/PaletteEditSheet.swift": {
+    "mtime": 1783523046.0516114,
+    "ast_hash": "ad2dc7add1c2f0f3e1250da2cd06e537",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/SearchComponents.swift": {
+    "mtime": 1783522905.178626,
+    "ast_hash": "58f0012e10f0eb4150102c68e66f8677",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/ShareSheetView.swift": {
+    "mtime": 1783432557.7497532,
+    "ast_hash": "4240802b088b24262dc91747b663e7f1",
+    "semantic_hash": "4240802b088b24262dc91747b663e7f1"
+  },
+  "Palettes/Views/Main/PaletteTabView.swift": {
+    "mtime": 1783471733.862598,
+    "ast_hash": "c5dbe5a481fbca47dc0a9ae9e007f422",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Main/SearchView.swift": {
+    "mtime": 1783522978.7904718,
+    "ast_hash": "21a8836b79e4e91a54adf8850f538be3",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Palette/ColorPalettesView.swift": {
+    "mtime": 1783471790.7194169,
+    "ast_hash": "e54213e68e49e86abef0b31dc2b52f4b",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Palette/NewPaletteView.swift": {
+    "mtime": 1783522684.0525727,
+    "ast_hash": "f105d7485eb9542b963721fdd3d59992",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Palette/PaletteDetailView.swift": {
+    "mtime": 1783523022.620986,
+    "ast_hash": "af23e52f3048c2f299c702cd300b176b",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Palette/PaletteView.swift": {
+    "mtime": 1783523359.246058,
+    "ast_hash": "15435691cf0611c17675894033f5e507",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-07-07-ai-palette-generation.md": {
+    "mtime": 1783435085.2226484,
+    "ast_hash": "0568a00ed3ebf0b50cd7b3cff2d6cb92",
+    "semantic_hash": "0568a00ed3ebf0b50cd7b3cff2d6cb92"
+  },
+  "docs/superpowers/plans/2026-07-07-liquid-glass-generation-ui.md": {
+    "mtime": 1783436300.6987832,
+    "ast_hash": "0ee47a5f9aa6a6fbd42ee64cece359a9",
+    "semantic_hash": "0ee47a5f9aa6a6fbd42ee64cece359a9"
+  },
+  "docs/superpowers/specs/2026-07-07-ai-palette-generation-design.md": {
+    "mtime": 1783434893.0414999,
+    "ast_hash": "b89a9e243f7667791f5652cf91f95c6e",
+    "semantic_hash": "b89a9e243f7667791f5652cf91f95c6e"
+  },
+  "docs/superpowers/specs/2026-07-07-glow-sparkle-polish-design.md": {
+    "mtime": 1783454844.7538736,
+    "ast_hash": "1343fcb9d7c3be94366df5a52ba69acc",
+    "semantic_hash": "1343fcb9d7c3be94366df5a52ba69acc"
+  },
+  "docs/superpowers/specs/2026-07-07-liquid-glass-generation-ui-design.md": {
+    "mtime": 1783436146.9324288,
+    "ast_hash": "8234958010b6436837e8527fe19e10c6",
+    "semantic_hash": "8234958010b6436837e8527fe19e10c6"
+  },
+  "docs/superpowers/specs/2026-07-07-new-color-redesign-design.md": {
+    "mtime": 1783455700.6395378,
+    "ast_hash": "936eedeb00b1b02f213f2110627f78ac",
+    "semantic_hash": "936eedeb00b1b02f213f2110627f78ac"
+  },
+  "Palettes/Utilities/ColorAdjustment.swift": {
+    "mtime": 1783522498.3283267,
+    "ast_hash": "0c6ec01dda55ae8e3f2624c689b55219",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/CameraPicker.swift": {
+    "mtime": 1783522509.3051891,
+    "ast_hash": "e89f76a0ac897d545510ad92bb9d218e",
+    "semantic_hash": ""
+  },
+  "Palettes/Views/Components/ColorInputView.swift": {
+    "mtime": 1783522764.0880756,
+    "ast_hash": "1f74a53f181935db06480348ae55aa6d",
+    "semantic_hash": ""
+  }
+}

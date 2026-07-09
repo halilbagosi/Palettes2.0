@@ -1,0 +1,88 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Color/NewColorView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Turn Off True Tone",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 146
+        }
+      },
+      {
+        "comment": "",
+        "key": "Input",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Color",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Got It",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 147
+        }
+      },
+      {
+        "comment": "",
+        "key": "For accurate color scanning, turn off True Tone in Settings → Display & Brightness. True Tone adjusts your screen's warmth, which can affect how scanned colors appear.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 149
+        }
+      },
+      {
+        "comment": "",
+        "key": "Color Name",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 257
+        }
+      },
+      {
+        "comment": "",
+        "key": "Camera",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 180
+        }
+      },
+      {
+        "comment": "",
+        "key": "Library",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 190
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pick or take a photo to extract the dominant color",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 285
+        }
+      }
+    ]
+  },
+  "version": 1
+}

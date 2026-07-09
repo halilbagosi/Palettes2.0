@@ -7,44 +7,53 @@
 
 import SwiftUI
 
+/// Compact full-bleed palette row for search and browse: stripes fill the
+/// card with the name and color count floating as liquid glass pills.
 struct PaletteCellSearch: View {
     let paletteName: String
     let colors: [Color]
-    
+    var highlight: String = ""
+
     var body: some View {
-        VStack(spacing: 0) {
-            if !colors.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(0..<colors.count, id: \.self) { (index: Int) in
-                        Rectangle()
-                            .fill(colors[index])
+        ZStack(alignment: .bottom) {
+            HStack(spacing: 0) {
+                if colors.isEmpty {
+                    Rectangle().fill(.quaternary)
+                } else {
+                    ForEach(colors.indices, id: \.self) { i in
+                        Rectangle().fill(colors[i])
                     }
                 }
-                .frame(height: 48)
             }
-            
-            Divider()
-            
-            HStack {
-                Text(paletteName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                
-                Spacer()
-                
-                Text("\(colors.count) color\(colors.count == 1 ? "" : "s")")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+
+            GlassEffectContainer(spacing: 10) {
+                HStack(spacing: 10) {
+                    Text(highlightedText(paletteName, matching: highlight))
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .glassEffect(.regular, in: .capsule)
+
+                    Spacer(minLength: 0)
+
+                    HStack(spacing: 4) {
+                        Text("\(colors.count)")
+                            .font(.caption.weight(.semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .glassEffect(.regular, in: .capsule)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: .rect(cornerRadius: 0))
+            .padding(8)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(height: 96)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 }

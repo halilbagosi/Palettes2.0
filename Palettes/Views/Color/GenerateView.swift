@@ -5,106 +5,183 @@ import FoundationModels
 struct GenerateView: View {
     @EnvironmentObject var appData: AppData
 
-    @State private var paletteSize: Double = 4
+    private enum Phase { case form, generating, result }
+    @State private var phase: Phase = .form
+    @Namespace private var orbNamespace
+
+    // Form state
+    @State private var paletteSize = 4
     @State private var selectedColorIDs: Set<UUID> = []
     @State private var vibeDescription = ""
     @State private var glowPhase: CGFloat = 0
-    @State private var bgPhase: CGFloat = 0
-    @State private var colorsExpanded = false
-
     @State private var selectedImage: UIImage?
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var showCamera = false
-
-    @State private var showGenerationExperience = false
-    @State private var glowPulse = false
     @FocusState private var vibeFocused: Bool
 
+    // Generation state
+    @State private var arrivedColors: [Color] = []
+    @State private var generationTask: Task<Void, Never>?
+
+    // Result state (editable draft)
+    @State private var resultName = ""
+    @State private var resultColors: [Color] = []
+    @State private var resultHexes: [String] = []
+    @State private var resultColorNames: [String] = []
+    @State private var pendingRefinement = ""
+
+    private let sizeOptions = [2, 4, 6, 8, 10, 12]
+    private let formOrbDiameter: CGFloat = 150
+
+    /// Iridescent tint reserved for the Apple Intelligence glyph.
     private var glowGradient: AnyShapeStyle {
-        if #available(iOS 18.0, *) {
-            let t = Float(glowPhase)
-            let d: Float = 0.18
-            return AnyShapeStyle(MeshGradient(width: 3, height: 3, points: [
-                SIMD2(-0.5, -0.5),
-                SIMD2(0.5 + d * sin(t * .pi * 2), -0.5),
-                SIMD2(1.5, -0.5),
-                SIMD2(-0.5, 0.5 + d * cos(t * .pi * 2 + 1)),
-                SIMD2(0.5 + d * cos(t * .pi * 2), 0.5 + d * sin(t * .pi * 2)),
-                SIMD2(1.5, 0.5 - d * cos(t * .pi * 2 + 2)),
-                SIMD2(-0.5, 1.5),
-                SIMD2(0.5 - d * sin(t * .pi * 2 + 1.5), 1.5),
-                SIMD2(1.5, 1.5)
-            ], colors: [
-                .yellow,  .orange, .pink,
-                .orange,  .purple, .indigo,
-                .pink,    .indigo, .blue
-            ]))
-        } else {
-            return AnyShapeStyle(LinearGradient(
-                colors: [.yellow, .orange, .pink, .purple, .indigo, .blue],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ))
-        }
+        let t = Float(glowPhase)
+        let d: Float = 0.18
+        return AnyShapeStyle(MeshGradient(width: 3, height: 3, points: [
+            SIMD2(-0.5, -0.5),
+            SIMD2(0.5 + d * sin(t * .pi * 2), -0.5),
+            SIMD2(1.5, -0.5),
+            SIMD2(-0.5, 0.5 + d * cos(t * .pi * 2 + 1)),
+            SIMD2(0.5 + d * cos(t * .pi * 2), 0.5 + d * sin(t * .pi * 2)),
+            SIMD2(1.5, 0.5 - d * cos(t * .pi * 2 + 2)),
+            SIMD2(-0.5, 1.5),
+            SIMD2(0.5 - d * sin(t * .pi * 2 + 1.5), 1.5),
+            SIMD2(1.5, 1.5)
+        ], colors: [
+            .yellow,  .orange, .pink,
+            .orange,  .purple, .indigo,
+            .pink,    .indigo, .blue
+        ]))
     }
 
-    private let bgBlobColors: [Color] = [
-        .pink, .purple, .indigo,
-        Color(red: 0.6, green: 0.6, blue: 1.0),
-        .blue, .cyan, .yellow, .orange
-    ]
+    /// The simulator can't run Apple Intelligence; show the form there so the
+    /// flow stays developable. Devices still gate on real availability.
+    private var isModelAvailable: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        if case .available = SystemLanguageModel.default.availability { return true }
+        return false
+        #endif
+    }
+
+    private var selectedColors: [Color] {
+        appData.colors.filter { selectedColorIDs.contains($0.id) }.map { $0.color }
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                switch SystemLanguageModel.default.availability {
-                case .available:
-                    generateContent
-                case .unavailable(let reason):
+                if isModelAvailable {
+                    stage
+                } else if case .unavailable(let reason) = SystemLanguageModel.default.availability {
                     unavailableView(for: reason)
                 }
             }
             .background {
-                ZStack {
-                    LiquidGradientView(speed: 0.4, intensity: 0.18)
-                        .blur(radius: 60)
-                        .ignoresSafeArea()
-                    animatedBackground
-                    SparkleFieldView()
-                        .ignoresSafeArea()
-                }
+                LiquidGradientView(
+                    speed: 0.25,
+                    intensity: phase == .result ? 0.22 : 0.10,
+                    colors: phase == .result ? resultColors : []
+                )
+                .blur(radius: 60)
+                .ignoresSafeArea()
             }
-            .navigationTitle("Generate")
+            .navigationTitle(phase == .form ? "Generate" : "")
+            .toolbar(phase == .generating ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
                 withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
                     glowPhase = 1
                 }
-                withAnimation(.linear(duration: 14).repeatForever(autoreverses: true)) {
-                    bgPhase = 1
-                }
-                glowPulse = true
             }
-        }
-        .fullScreenCover(isPresented: $showGenerationExperience) {
-            GenerationExperienceView(statusText: generationStatusText, generate: performGeneration)
-                .environmentObject(appData)
         }
     }
 
-    private var generateContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                descriptionText
-                    .padding(.top, 4)
-                paletteSizeSection
-                colorsSection
-                vibeInputSection
-                    .padding(.top, 8)
+    // MARK: - Stage (form / generating / result)
+
+    private var stage: some View {
+        ZStack {
+            formContent
+                .opacity(phase == .form ? 1 : 0)
+                .allowsHitTesting(phase == .form)
+
+            if phase == .result {
+                GenerationResultView(
+                    name: $resultName,
+                    colors: $resultColors,
+                    hexCodes: $resultHexes,
+                    colorNames: $resultColorNames,
+                    onBack: { withAnimation(.smooth(duration: 0.5)) { phase = .form } },
+                    onRegenerate: {
+                        pendingRefinement = ""
+                        startGeneration()
+                    },
+                    onDescribeChange: { change in
+                        pendingRefinement = change
+                        startGeneration()
+                    },
+                    onSave: saveResult
+                )
+                .environmentObject(appData)
+                .transition(.blurReplace)
             }
-            .padding(.bottom, 40)
+
+            // While generating, the orb takes center stage as the waiting moment.
+            if phase == .generating {
+                generatingOrb
+            }
+        }
+        .coordinateSpace(name: "genStage")
+    }
+
+    private var generatingOrb: some View {
+        GenerationOrbView(
+            colors: arrivedColors,
+            promptText: generationStatusText,
+            photo: selectedImage,
+            expectedCount: paletteSize,
+            showsProgress: true
+        )
+        .matchedGeometryEffect(id: "orb", in: orbNamespace)
+        .frame(width: 340, height: 340)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    // MARK: - Form
+
+    private var formContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                GenerateHeaderView(
+                    showsOrb: phase == .form,
+                    orbDiameter: formOrbDiameter,
+                    colors: selectedColors,
+                    expectedCount: paletteSize,
+                    orbNamespace: orbNamespace
+                )
+                .zIndex(1)
+
+                sizeSection
+                colorsSection
+                vibeSection
+            }
+            .padding(.horizontal)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        // Pinned above the keyboard and home indicator
+        .safeAreaInset(edge: .bottom) {
+            if phase == .form {
+                generateBar
+            }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
-        .sensoryFeedback(.selection, trigger: Int(paletteSize))
-        .sensoryFeedback(.impact, trigger: showGenerationExperience)
+        .sensoryFeedback(.selection, trigger: paletteSize)
+        .sensoryFeedback(.impact, trigger: phase == .generating)
     }
 
     // MARK: - Unavailable State
@@ -128,196 +205,135 @@ struct GenerateView: View {
         }
     }
 
-    // MARK: - Animated Background
+    // MARK: - Size
 
-    private var animatedBackground: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-
-            ZStack {
-                ForEach(Array(bgBlobColors.enumerated()), id: \.offset) { index, color in
-                    let angle = Double(index) / Double(bgBlobColors.count) * .pi * 2
-                    let edgeX = (1 + cos(angle)) / 2
-                    let edgeY = (1 + sin(angle)) / 2
-                    let drift = bgPhase * 0.12
-
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [color.opacity(0.12), color.opacity(0)],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: max(w, h) * 0.42
-                            )
-                        )
-                        .frame(width: max(w, h) * 0.85, height: max(w, h) * 0.85)
-                        .position(
-                            x: w * (edgeX + drift * sin(angle + Double(index))),
-                            y: h * (edgeY + drift * cos(angle + Double(index)))
-                        )
-                        .blendMode(.normal)
-                }
-            }
-        }
-        .ignoresSafeArea()
-    }
-
-    // MARK: - Description
-
-    private var descriptionText: some View {
-        Text("Choose or create a color to generate a complementary palette with the power of Apple Intelligence")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal)
-    }
-
-    // MARK: - Palette Size
-
-    private var paletteSizeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var sizeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Palette Size")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
 
-            VStack(spacing: 4) {
-                Slider(value: $paletteSize, in: 2...12, step: 2)
-                    .tint(.accentColor)
-
-                HStack {
-                    ForEach([2, 4, 6, 8, 10, 12], id: \.self) { value in
-                        Text("\(value)")
-                            .font(.system(.caption, design: .monospaced).weight(.semibold))
-                            .foregroundStyle(Int(paletteSize) == value ? .primary : .tertiary)
-                        if value < 12 { Spacer() }
-                    }
-                }
-
-                sizeDots
-                    .padding(.top, 10)
-            }
-            .padding(14)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
-        }
-        .padding(.horizontal)
-    }
-
-    private var sizeDots: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
-                ForEach(0..<Int(paletteSize), id: \.self) { i in
-                    Circle()
-                        .fill(bgBlobColors[i % bgBlobColors.count].opacity(0.5))
-                        .frame(width: 20, height: 20)
-                        .glassEffect(.regular, in: .circle)
-                        .transition(.scale.combined(with: .opacity))
+            Picker("Palette Size", selection: $paletteSize) {
+                ForEach(sizeOptions, id: \.self) { size in
+                    Text("\(size)").tag(size)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .pickerStyle(.segmented)
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.6), value: Int(paletteSize))
     }
 
     // MARK: - Colors
 
+    @ViewBuilder
     private var colorsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    colorsExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Text("Colors")
+        if !appData.colors.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Text("Start From Your Colors")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
 
                     if !selectedColorIDs.isEmpty {
-                        Text("\(selectedColorIDs.count) selected")
-                            .font(.caption)
-                            .foregroundColor(.accentColor)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(colorsExpanded ? 90 : 0))
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if colorsExpanded {
-                LazyVStack(spacing: 10) {
-                    ForEach(appData.colors) { colorItem in
-                        let isSelected = selectedColorIDs.contains(colorItem.id)
-
-                        HStack(spacing: 14) {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(colorItem.color.gradient)
-                                .frame(width: 50, height: 50)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(.white.opacity(0.2), lineWidth: 1)
-                                )
-                                .shadow(color: colorItem.color.opacity(isSelected ? 0.7 : 0), radius: 10)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(colorItem.name)
-                                    .font(.system(size: 15, weight: .semibold))
-                                Text(colorItem.HEX)
-                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                .font(.title3)
-                                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                        }
-                        .padding(10)
-                        .background(isSelected ? Color.accentColor.opacity(0.08) : Color.clear)
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
-                        .scaleEffect(isSelected ? 1.02 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.25)) {
-                                if isSelected {
-                                    selectedColorIDs.remove(colorItem.id)
-                                } else {
-                                    selectedColorIDs.insert(colorItem.id)
-                                }
-                            }
-                        }
+                        Text("· \(selectedColorIDs.count) selected")
+                            .font(.subheadline)
+                            .foregroundStyle(.tint)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 6)
-                .transition(.opacity)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(appData.colors) { colorItem in
+                            colorSwatch(colorItem)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 2)
+                }
             }
         }
     }
 
-    // MARK: - Vibe Input
+    private func colorSwatch(_ colorItem: ColorViewModel) -> some View {
+        let isSelected = selectedColorIDs.contains(colorItem.id)
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                if isSelected {
+                    selectedColorIDs.remove(colorItem.id)
+                } else {
+                    selectedColorIDs.insert(colorItem.id)
+                }
+            }
+        } label: {
+            VStack(spacing: 6) {
+                ZStack(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(colorItem.color.gradient)
+                        .frame(width: 54, height: 54)
+                        .overlay {
+                            Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                        }
+                        .overlay {
+                            if isSelected {
+                                Circle()
+                                    .strokeBorder(.tint, lineWidth: 3)
+                                    .padding(-4)
+                            }
+                        }
 
-    private var vibeInputSection: some View {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.body)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.accentColor)
+                            .offset(x: 3, y: 3)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+
+                Text(colorItem.name)
+                    .font(.caption2)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .frame(width: 62)
+            }
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.lift)
+        .accessibilityLabel(Text(colorItem.name))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    // MARK: - Vibe
+
+    private var vibeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("Vibe")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+
             if let image = selectedImage {
                 imageChip(image)
             }
-            GlassEffectContainer(spacing: 12) {
+
+            HStack(spacing: 12) {
                 HStack(spacing: 10) {
-                    vibeTextField
-                    imageMenuButton
+                    Image(systemName: "apple.intelligence")
+                        .font(.title3)
+                        .foregroundStyle(glowGradient)
+
+                    TextField("Warm autumn forest, neon arcade…", text: $vibeDescription)
+                        .font(.body)
+                        .focused($vibeFocused)
+                        .submitLabel(.done)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .glassEffect(.regular.interactive(), in: .capsule)
+
+                imageMenuButton
             }
         }
-        .padding(.horizontal)
     }
 
     private var hasInput: Bool {
@@ -331,48 +347,27 @@ struct GenerateView: View {
         return vibe.isEmpty ? "Generating palette…" : vibe
     }
 
-    private var vibeTextField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "apple.intelligence")
-                .font(.title3)
-                .foregroundStyle(glowGradient)
+    // MARK: - Generate Button
 
-            TextField("Describe palette vibe!", text: $vibeDescription)
-                .font(.headline)
-                .focused($vibeFocused)
-
-            if hasInput {
+    private var generateBar: some View {
+        GlassEffectContainer(spacing: 16) {
+            HStack(spacing: 16) {
                 Button {
-                    showGenerationExperience = true
+                    startGeneration()
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(glowGradient)
+                    Label("Generate Palette", systemImage: "sparkles")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
-                .background {
-                    Circle()
-                        .fill(glowGradient)
-                        .blur(radius: 10)
-                        .opacity(glowPulse ? 0.7 : 0.3)
-                        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: glowPulse)
-                }
-                .transition(.scale.combined(with: .opacity))
+                .buttonStyle(.glassProminent)
+                .disabled(!hasInput)
+                .keyboardShortcut(.return, modifiers: .command)
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hasInput)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .background {
-            Capsule()
-                .fill(glowGradient)
-                .blur(radius: 18)
-                .opacity(vibeFocused ? 0.55 : 0.25)
-                .scaleEffect(x: glowPulse ? 1.03 : 0.97, y: glowPulse ? 1.15 : 0.9)
-                .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: glowPulse)
-                .animation(.easeInOut(duration: 0.3), value: vibeFocused)
-        }
+        .frame(maxWidth: 640)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 
     private func imageChip(_ image: UIImage) -> some View {
@@ -442,7 +437,57 @@ struct GenerateView: View {
 
     // MARK: - Generation
 
-    private func performGeneration() async throws -> PaletteViewModel {
+    private func startGeneration() {
+        guard generationTask == nil else { return }
+        vibeFocused = false
+        arrivedColors = selectedColors
+        withAnimation(.smooth(duration: 0.6)) { phase = .generating }
+
+        generationTask = Task {
+            defer { generationTask = nil }
+            do {
+                let palette = try await performGeneration { colors in
+                    arrivedColors = colors
+                }
+                resultName = palette.name
+                resultColors = palette.colors
+                resultHexes = palette.hexCodes
+                resultColorNames = palette.colorNames
+                // Let the last drop settle before revealing the result
+                try? await Task.sleep(for: .milliseconds(900))
+                withAnimation(.smooth(duration: 0.7)) { phase = .result }
+            } catch {
+                ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
+                withAnimation(.smooth(duration: 0.5)) { phase = .form }
+            }
+        }
+    }
+
+    private func saveResult() {
+        guard resultColors.count >= 2 else { return }
+        let trimmed = resultName.trimmingCharacters(in: .whitespaces)
+        appData.palettes.append(PaletteViewModel(
+            name: trimmed.isEmpty ? "Generated Palette" : trimmed,
+            colors: resultColors,
+            hexCodes: resultHexes,
+            colorNames: resultColorNames
+        ))
+
+        // Add any newly generated colors to the Colors library.
+        for i in resultColors.indices {
+            let hex = i < resultHexes.count ? resultHexes[i] : ""
+            guard !hex.isEmpty else { continue }
+            let alreadyExists = appData.colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
+            guard !alreadyExists else { continue }
+            let name = i < resultColorNames.count && !resultColorNames[i].isEmpty ? resultColorNames[i] : "Color \(i + 1)"
+            appData.colors.append(ColorViewModel(name: name, color: resultColors[i], HEX: hex, usedInPalette: true))
+        }
+
+        ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
+        withAnimation(.smooth(duration: 0.5)) { phase = .form }
+    }
+
+    private func performGeneration(onColors: @escaping @MainActor ([Color]) -> Void) async throws -> PaletteViewModel {
         var baseColors: [PaletteGenerator.BaseColor] = appData.colors
             .filter { selectedColorIDs.contains($0.id) }
             .map { PaletteGenerator.BaseColor(hex: $0.HEX, name: $0.name) }
@@ -452,11 +497,72 @@ struct GenerateView: View {
             baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
         }
 
+        let combinedVibe = [vibeDescription, pendingRefinement]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ". ")
+
         return try await PaletteGenerator.generate(
             baseColors: baseColors,
-            size: Int(paletteSize),
-            vibe: vibeDescription
+            size: paletteSize,
+            vibe: combinedVibe,
+            onPartialColors: onColors
         )
+    }
+}
+
+/// Orb + lensed description text, extracted so the per-frame frame reports
+/// (scroll, keyboard push-up, drag) only invalidate this small subtree instead
+/// of the entire GenerateView body.
+private struct GenerateHeaderView: View {
+    let showsOrb: Bool
+    let orbDiameter: CGFloat
+    let colors: [Color]
+    let expectedCount: Int
+    let orbNamespace: Namespace.ID
+
+    // Lens geometry — the orb warps the text beneath it (frames in "genStage").
+    @State private var orbFrame: CGRect = .zero
+    @State private var descFrame: CGRect = .zero
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            // The orb is part of the scroll content, so it moves with the
+            // view and is pushed up by the keyboard instead of overlaying.
+            // When generation starts it morphs into the big centered orb.
+            ZStack {
+                if showsOrb {
+                    GenerationOrbView(
+                        colors: colors,
+                        expectedCount: expectedCount,
+                        coordinateSpaceName: "genStage",
+                        onLiveFrameChange: { orbFrame = $0 }
+                    )
+                    .matchedGeometryEffect(id: "orb", in: orbNamespace)
+                    .frame(width: orbDiameter, height: orbDiameter)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: orbDiameter)
+            .padding(.top, 8)
+            .zIndex(1)
+
+            Text("Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named("genStage"))
+                } action: { descFrame = $0 }
+                // Pull the orb down over this text and the clear glass lenses it.
+                .distortionEffect(
+                    ShaderLibrary.lensWarp(
+                        .float2(Float(orbFrame.midX - descFrame.minX), Float(orbFrame.midY - descFrame.minY)),
+                        .float(Float(max(orbFrame.width, orbFrame.height) / 2)),
+                        .float(0.5)
+                    ),
+                    maxSampleOffset: CGSize(width: 90, height: 90)
+                )
+        }
     }
 }
 

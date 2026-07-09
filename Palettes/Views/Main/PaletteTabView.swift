@@ -29,8 +29,26 @@ struct PaletteTabView: View {
                 SearchView()
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environmentObject(appData)
+        .background { tabShortcuts }
+    }
+
+    /// Hidden buttons providing ⌘1–⌘4 tab switching for iPad keyboards.
+    private var tabShortcuts: some View {
+        Group {
+            Button("") { appData.activeTab = .palettes }
+                .keyboardShortcut("1", modifiers: .command)
+            Button("") { appData.activeTab = .colors }
+                .keyboardShortcut("2", modifiers: .command)
+            Button("") { appData.activeTab = .generate }
+                .keyboardShortcut("3", modifiers: .command)
+            Button("") { appData.activeTab = .search }
+                .keyboardShortcut("4", modifiers: .command)
+        }
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 }
 

@@ -56,48 +56,22 @@ struct NewColorView: View {
 
     private var adjustedRGB: (r: Double, g: Double, b: Double) {
         guard hasExtractedColor else { return (128, 128, 128) }
-
-        let tempFactor = (scanTemperatureValue - 0.5) * 2.0
-        let tempAmount = tempFactor * 40.0
-
-        let rTemp = min(255, max(0, baseR + tempAmount))
-        let gTemp = min(255, max(0, baseG + tempAmount * 0.15))
-        let bTemp = min(255, max(0, baseB - tempAmount))
-
-        let uiColor = UIColor(
-            red: rTemp / 255.0,
-            green: gTemp / 255.0,
-            blue: bTemp / 255.0,
-            alpha: 1.0
-        )
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-
-        let satFactor = (scanSaturationValue - 0.5) * 2.0
-        let newSat = min(1, max(0, s + CGFloat(satFactor) * 0.5))
-
-        let briFactor = (scanBrightnessValue - 0.5) * 2.0
-        let newBri = min(1, max(0, b + CGFloat(briFactor) * 0.5))
-
-        let adjusted = UIColor(hue: h, saturation: newSat, brightness: newBri, alpha: 1)
-        var rOut: CGFloat = 0, gOut: CGFloat = 0, bOut: CGFloat = 0
-        adjusted.getRed(&rOut, green: &gOut, blue: &bOut, alpha: &a)
-
-        return (
-            min(255, max(0, Double(rOut) * 255)),
-            min(255, max(0, Double(gOut) * 255)),
-            min(255, max(0, Double(bOut) * 255))
+        return ColorAdjustment.apply(
+            baseR: baseR, baseG: baseG, baseB: baseB,
+            temperature: scanTemperatureValue,
+            saturation: scanSaturationValue,
+            brightness: scanBrightnessValue
         )
     }
 
     private var adjustedHex: String {
         let c = adjustedRGB
-        return String(format: "#%02X%02X%02X", Int(round(c.r)), Int(round(c.g)), Int(round(c.b)))
+        return ColorAdjustment.hexString(r: c.r, g: c.g, b: c.b)
     }
 
     private var adjustedSwiftColor: Color {
         let c = adjustedRGB
-        return Color(red: c.r / 255.0, green: c.g / 255.0, blue: c.b / 255.0)
+        return ColorAdjustment.color(r: c.r, g: c.g, b: c.b)
     }
 
     // MARK: - Body
@@ -325,12 +299,7 @@ struct NewColorView: View {
     // MARK: - Labels
 
     private func offsetLabel(_ value: Double, positive: String? = nil, negative: String? = nil) -> String {
-        let offset = Int(round((value - 0.5) * 100))
-        if offset == 0 { return "Neutral" }
-        if offset > 0 {
-            return positive.map { "+\(offset) \($0)" } ?? "+\(offset)"
-        }
-        return negative.map { "\(offset) \($0)" } ?? "\(offset)"
+        ColorAdjustment.offsetLabel(value, positive: positive, negative: negative)
     }
 
     // MARK: - Actions

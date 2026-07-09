@@ -1,0 +1,24 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Components/Generation/GenerationExperienceView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Regenerate",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 166
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 176
+        }
+      }
+    ]
+  },
+  "version": 1
+}

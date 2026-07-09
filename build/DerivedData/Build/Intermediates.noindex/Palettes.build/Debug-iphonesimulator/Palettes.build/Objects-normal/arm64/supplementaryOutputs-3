@@ -1,0 +1,23 @@
+{
+  "/Users/halilbagosi/Palettes/Palettes/Views/Components/Cells/ColorCellSearch.swift" : {
+    "const-values" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorCellSearch.swiftconstvalues",
+    "dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorCellSearch.d",
+    "diagnostics" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorCellSearch.dia",
+    "object" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorCellSearch.o",
+    "swift-dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorCellSearch.swiftdeps"
+  },
+  "/Users/halilbagosi/Palettes/Palettes/Views/Components/Cells/ColorsCellBig.swift" : {
+    "const-values" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorsCellBig.swiftconstvalues",
+    "dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorsCellBig.d",
+    "diagnostics" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorsCellBig.dia",
+    "object" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorsCellBig.o",
+    "swift-dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/ColorsCellBig.swiftdeps"
+  },
+  "/Users/halilbagosi/Palettes/Palettes/Views/Components/Cells/PaletteCell.swift" : {
+    "const-values" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/PaletteCell.swiftconstvalues",
+    "dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/PaletteCell.d",
+    "diagnostics" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/PaletteCell.dia",
+    "object" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/PaletteCell.o",
+    "swift-dependencies" : "/Users/halilbagosi/Palettes/build/DerivedData/Build/Intermediates.noindex/Palettes.build/Debug-iphonesimulator/Palettes.build/Objects-normal/arm64/PaletteCell.swiftdeps"
+  }
+}

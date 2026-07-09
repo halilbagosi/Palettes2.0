@@ -8,10 +8,12 @@
 import SwiftUI
 
 struct PaletteEmptyView: View {
-    
+
     let imageName: String
     let message: String
-    
+    var actionTitle: String? = nil
+    var action: () -> Void = {}
+
     @State private var animateIcon = false
     
     var body: some View {
@@ -48,6 +50,19 @@ struct PaletteEmptyView: View {
                     .padding(.vertical, 18)
                     .glassEffect(.regular, in: .rect(cornerRadius: 22))
                     .padding(.horizontal, 32)
+
+                if let actionTitle {
+                    Button {
+                        action()
+                    } label: {
+                        Label(actionTitle, systemImage: "plus")
+                            .font(.headline)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(.accentColor)
+                }
             }
             .offset(y: -50)
         }

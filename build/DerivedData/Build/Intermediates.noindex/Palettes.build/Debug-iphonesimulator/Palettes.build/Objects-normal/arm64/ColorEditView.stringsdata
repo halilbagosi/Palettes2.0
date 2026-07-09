@@ -1,0 +1,136 @@
+{
+  "source": "/Users/halilbagosi/Palettes/Palettes/Views/Color/ColorEditView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Edit Color",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "Overwrite or Create New?",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 220
+        }
+      },
+      {
+        "comment": "",
+        "key": "Color Name",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 73
+        }
+      },
+      {
+        "comment": "",
+        "key": "Color Wheel",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "Select Color",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "Adjustments",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "Values",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 148
+        }
+      },
+      {
+        "comment": "",
+        "key": "HEX",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 156
+        }
+      },
+      {
+        "comment": "",
+        "key": "#",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "FF0000",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 164
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 213
+        }
+      },
+      {
+        "comment": "",
+        "key": "Overwrite Existing",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 221
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create New Color",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 225
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 229
+        }
+      },
+      {
+        "comment": "",
+        "key": "You changed this color without changing its name. Would you like to overwrite it globally or create a new global color?",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 231
+        }
+      },
+      {
+        "comment": "",
+        "key": "0",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 257
+        }
+      }
+    ]
+  },
+  "version": 1
+}
