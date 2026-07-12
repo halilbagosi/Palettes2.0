@@ -23,6 +23,7 @@ struct GenerationResultView: View {
     @State private var editTarget: EditTarget?
     @State private var changeText = ""
     @FocusState private var changeFocused: Bool
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         ScrollView {
@@ -40,15 +41,26 @@ struct GenerationResultView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 12) {
-                describeChangeField
-                actionBar
+            // Hidden entirely while renaming the palette, so the keyboard
+            // area stays clear of buttons and fields.
+            if !nameFocused {
+                VStack(spacing: 12) {
+                    describeChangeField
+                    // While typing, the field's send arrow takes over — hide the bar.
+                    if !changeFocused {
+                        actionBar
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .animation(.spring(response: 0.3), value: changeFocused)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
         }
+        .animation(.spring(response: 0.3), value: nameFocused)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { onBack() } label: {
@@ -58,7 +70,7 @@ struct GenerationResultView: View {
             }
         }
         .sheet(item: $editTarget) { target in
-            if target.id < colors.count {
+            if target.id < colors.count, target.id < hexCodes.count, target.id < colorNames.count {
                 ColorEditView(
                     colorName: $colorNames[target.id],
                     hexCode: $hexCodes[target.id],
@@ -69,22 +81,47 @@ struct GenerationResultView: View {
                 .presentationSizing(.form)
             }
         }
+        // The generator can return mismatched array lengths; keep names and
+        // hex codes in lockstep with the colors so index access is safe.
+        .onAppear(perform: normalizeArrays)
+        .onChange(of: colors.count) { _, _ in normalizeArrays() }
+    }
+
+    /// Pads or trims `hexCodes`/`colorNames` to match `colors` exactly.
+    private func normalizeArrays() {
+        while hexCodes.count < colors.count { hexCodes.append("") }
+        while colorNames.count < colors.count { colorNames.append("Color \(colorNames.count + 1)") }
+        if hexCodes.count > colors.count { hexCodes.removeLast(hexCodes.count - colors.count) }
+        if colorNames.count > colors.count { colorNames.removeLast(colorNames.count - colors.count) }
     }
 
     // MARK: - Name
 
     private var nameField: some View {
-        HStack(spacing: 8) {
-            TextField("Palette Name", text: $name)
-                .font(.system(.title, design: .rounded).weight(.bold))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: true, vertical: false)
-
-            Image(systemName: "pencil")
-                .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
+        TextField("Palette Name", text: $name)
+            .font(.system(.title, design: .rounded).weight(.bold))
+            .multilineTextAlignment(.center)
+            .focused($nameFocused)
+            .submitLabel(.done)
+            .onSubmit {
+                name = name.trimmingCharacters(in: .whitespaces)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 44)
+            .overlay(alignment: .trailing) {
+                if !nameFocused {
+                    Button {
+                        nameFocused = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Circle())
+                    }
+                    .accessibilityLabel("Edit palette name")
+                }
+            }
     }
 
     // MARK: - Swatches
@@ -183,13 +220,15 @@ struct GenerationResultView: View {
                 .submitLabel(.go)
                 .onSubmit(submitChange)
 
-            if !changeText.trimmingCharacters(in: .whitespaces).isEmpty {
+            if changeFocused || !changeText.trimmingCharacters(in: .whitespaces).isEmpty {
+                let hasText = !changeText.trimmingCharacters(in: .whitespaces).isEmpty
                 Button(action: submitChange) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(hasText ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                 }
+                .disabled(!hasText)
                 .transition(.scale.combined(with: .opacity))
             }
         }
@@ -197,6 +236,7 @@ struct GenerationResultView: View {
         .padding(.vertical, 12)
         .glassEffect(.regular.interactive(), in: .capsule)
         .animation(.spring(response: 0.3), value: changeText.isEmpty)
+        .animation(.spring(response: 0.3), value: changeFocused)
     }
 
     private func submitChange() {

@@ -31,19 +31,19 @@ struct PaletteCell: View {
             GlassEffectContainer(spacing: 10) {
                 HStack(spacing: 10) {
                     Text(paletteName)
-                        .font(.headline)
+                        .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
                         .glassEffect(.regular, in: .capsule)
 
                     Spacer(minLength: 0)
 
+                    viewButton
+
                     if let onCopy {
                         copyButton(onCopy)
                     }
-
-                    viewButton
                 }
             }
             .padding(12)
@@ -58,15 +58,13 @@ struct PaletteCell: View {
 
     private var viewButton: some View {
         Button(action: onViewPalette) {
-            HStack(spacing: 5) {
-                Text("View")
-                Image(systemName: "chevron.right")
-                    .imageScale(.small)
-            }
-            .font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .contentShape(Capsule())
+            Text("View")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
@@ -76,7 +74,7 @@ struct PaletteCell: View {
         Button(action: action) {
             Image(systemName: "doc.on.doc")
                 .font(.subheadline.weight(.semibold))
-                .frame(width: 40, height: 40)
+                .frame(width: 38, height: 38)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

@@ -48,7 +48,7 @@ struct ColorsView: View {
                                         color: color.color,
                                         isUsedInPalette: isInPalette,
                                         onCardTap: {
-                                            colorToEdit = ColorBindingWrapper(color: color)
+                                            path.append(color)
                                         },
                                         onViewPalettes: {
                                             path.append(color)
@@ -119,10 +119,7 @@ struct ColorsView: View {
                 }
                 .navigationTitle("Colors")
                 .navigationDestination(for: ColorViewModel.self) { color in
-                    ColorPalettesView(
-                        colorItem: color,
-                        palettes: palettes(for: color)
-                    )
+                    ColorDetailView(colorItem: color)
                 }
                 .navigationDestination(for: PaletteViewModel.self) { palette in
                     PaletteDetailView(paletteName: palette.name, palette: palette)
@@ -135,7 +132,7 @@ struct ColorsView: View {
                             Image(systemName: "plus")
                                 .fontWeight(.semibold)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                         .tint(.accentColor)
                         .keyboardShortcut("n", modifiers: [.command, .shift])
                     }

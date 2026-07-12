@@ -34,8 +34,9 @@ using namespace metal;
     return half4(half3(col) * a, a);
 }
 
-// Glass lens: magnifies content under the orb with a smooth falloff toward
-// the rim, so text warps as the orb is dragged across it.
+// Glass rim refraction: content under the orb's interior is left untouched
+// and bends only in a band near the rim, like the edge of a clear lens.
+// The bump returns to zero at the boundary so there is no seam.
 [[ stitchable ]] float2 lensWarp(
     float2 position,
     float2 center,
@@ -45,8 +46,9 @@ using namespace metal;
     float2 d = position - center;
     float dist = length(d);
     if (dist >= radius || radius <= 0.0) { return position; }
-    float f = 1.0 - dist / radius;
-    float mag = 1.0 + strength * f * f;
+    float q = dist / radius;
+    float w = smoothstep(0.95, 1.0, q);
+    float mag = 1.0 + strength * w;
     return center + d / mag;
 }
 

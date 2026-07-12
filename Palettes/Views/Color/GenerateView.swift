@@ -11,6 +11,8 @@ struct GenerateView: View {
 
     // Form state
     @State private var paletteSize = 4
+    @State private var colorsFadeLeading = false
+    @State private var colorsFadeTrailing = true
     @State private var selectedColorIDs: Set<UUID> = []
     @State private var vibeDescription = ""
     @State private var glowPhase: CGFloat = 0
@@ -94,6 +96,10 @@ struct GenerateView: View {
                 withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
                     glowPhase = 1
                 }
+                consumePendingColor()
+            }
+            .onChange(of: appData.pendingGenerateColorID) {
+                consumePendingColor()
             }
         }
     }
@@ -132,7 +138,6 @@ struct GenerateView: View {
                 generatingOrb
             }
         }
-        .coordinateSpace(name: "genStage")
     }
 
     private var generatingOrb: some View {
@@ -151,37 +156,71 @@ struct GenerateView: View {
     // MARK: - Form
 
     private var formContent: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 GenerateHeaderView(
                     showsOrb: phase == .form,
                     orbDiameter: formOrbDiameter,
                     colors: selectedColors,
-                    expectedCount: paletteSize,
                     orbNamespace: orbNamespace
                 )
                 .zIndex(1)
 
                 sizeSection
                 colorsSection
-                vibeSection
+
+                Color.clear
+                    .frame(height: 1)
+                    .id("formBottom")
             }
             .padding(.horizontal)
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.bottom, 8)
         }
         .scrollDismissesKeyboard(.interactively)
-        // Pinned above the keyboard and home indicator
+        // Pinned above the keyboard and home indicator, like the result
+        // view's describe-change field.
         .safeAreaInset(edge: .bottom) {
             if phase == .form {
-                generateBar
+                VStack(spacing: 12) {
+                    if let image = selectedImage {
+                        imageChip(image)
+                    }
+
+                    vibeField
+
+                    // While typing, the field's send arrow takes over — hide the bar.
+                    if !vibeFocused {
+                        generateBar
+                            .padding(.top, 8)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.bottom, 24)
+                .animation(.spring(response: 0.3), value: vibeFocused)
             }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
         .sensoryFeedback(.selection, trigger: paletteSize)
         .sensoryFeedback(.impact, trigger: phase == .generating)
+        .onChange(of: vibeFocused) { _, focused in
+            guard focused else { return }
+            // Scroll fully down once the keyboard inset lands, so the color
+            // strip isn't hidden behind the pinned field.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(80))
+                withAnimation(.smooth(duration: 0.35)) {
+                    scrollProxy.scrollTo("formBottom", anchor: .bottom)
+                }
+            }
+        }
+        }
     }
 
     // MARK: - Unavailable State
@@ -249,6 +288,29 @@ struct GenerateView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 2)
                 }
+                .onScrollGeometryChange(for: Bool.self) { geo in
+                    geo.contentOffset.x > 4
+                } action: { _, scrolled in
+                    colorsFadeLeading = scrolled
+                }
+                .onScrollGeometryChange(for: Bool.self) { geo in
+                    geo.contentOffset.x < geo.contentSize.width - geo.containerSize.width - 4
+                } action: { _, more in
+                    colorsFadeTrailing = more
+                }
+                // Soften the edges while there is off-screen content, so
+                // swatches fade out instead of cutting off harshly.
+                .mask {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: colorsFadeLeading ? 28 : 0)
+                        Rectangle()
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: colorsFadeTrailing ? 28 : 0)
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
+                    .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+                }
             }
         }
     }
@@ -305,34 +367,50 @@ struct GenerateView: View {
 
     // MARK: - Vibe
 
-    private var vibeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Vibe")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+    private var vibeField: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "apple.intelligence")
+                    .font(.title3)
+                    .foregroundStyle(glowGradient)
 
-            if let image = selectedImage {
-                imageChip(image)
-            }
+                TextField("Warm autumn forest, neon arcade…", text: $vibeDescription)
+                    .font(.body)
+                    .focused($vibeFocused)
+                    .submitLabel(.go)
+                    .onSubmit { if hasInput { startGeneration() } }
 
-            HStack(spacing: 12) {
-                HStack(spacing: 10) {
-                    Image(systemName: "apple.intelligence")
-                        .font(.title3)
-                        .foregroundStyle(glowGradient)
-
-                    TextField("Warm autumn forest, neon arcade…", text: $vibeDescription)
-                        .font(.body)
-                        .focused($vibeFocused)
-                        .submitLabel(.done)
+                if vibeFocused {
+                    Button(action: startGeneration) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(hasInput ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    }
+                    .disabled(!hasInput)
+                    .transition(.scale.combined(with: .opacity))
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
-                .glassEffect(.regular.interactive(), in: .capsule)
-
-                imageMenuButton
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .glassEffect(.regular.interactive(), in: .capsule)
+
+            if !vibeFocused {
+                imageMenuButton
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+    }
+
+    /// Picks up a color handed off from a color detail view's "Generate Palette" button.
+    private func consumePendingColor() {
+        guard let id = appData.pendingGenerateColorID else { return }
+        appData.pendingGenerateColorID = nil
+        guard appData.colors.contains(where: { $0.id == id }) else { return }
+        withAnimation(.smooth(duration: 0.4)) {
+            phase = .form
+            selectedColorIDs.insert(id)
         }
     }
 
@@ -357,17 +435,15 @@ struct GenerateView: View {
                 } label: {
                     Label("Generate Palette", systemImage: "sparkles")
                         .font(.headline)
-                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 24)
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(!hasInput)
                 .keyboardShortcut(.return, modifiers: .command)
             }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: 640)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
     }
 
     private func imageChip(_ image: UIImage) -> some View {
@@ -485,6 +561,20 @@ struct GenerateView: View {
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
         withAnimation(.smooth(duration: 0.5)) { phase = .form }
+        resetForm()
+    }
+
+    /// Fresh form for the next generation after a palette was saved.
+    /// Result state is left alone so the outgoing result view doesn't blank
+    /// mid-transition; it's overwritten by the next generation anyway.
+    private func resetForm() {
+        paletteSize = 4
+        selectedColorIDs = []
+        vibeDescription = ""
+        selectedImage = nil
+        photosPickerItem = nil
+        pendingRefinement = ""
+        arrivedColors = []
     }
 
     private func performGeneration(onColors: @escaping @MainActor ([Color]) -> Void) async throws -> PaletteViewModel {
@@ -511,19 +601,12 @@ struct GenerateView: View {
     }
 }
 
-/// Orb + lensed description text, extracted so the per-frame frame reports
-/// (scroll, keyboard push-up, drag) only invalidate this small subtree instead
-/// of the entire GenerateView body.
+/// Orb + description text at the top of the form.
 private struct GenerateHeaderView: View {
     let showsOrb: Bool
     let orbDiameter: CGFloat
     let colors: [Color]
-    let expectedCount: Int
     let orbNamespace: Namespace.ID
-
-    // Lens geometry — the orb warps the text beneath it (frames in "genStage").
-    @State private var orbFrame: CGRect = .zero
-    @State private var descFrame: CGRect = .zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -532,14 +615,9 @@ private struct GenerateHeaderView: View {
             // When generation starts it morphs into the big centered orb.
             ZStack {
                 if showsOrb {
-                    GenerationOrbView(
-                        colors: colors,
-                        expectedCount: expectedCount,
-                        coordinateSpaceName: "genStage",
-                        onLiveFrameChange: { orbFrame = $0 }
-                    )
-                    .matchedGeometryEffect(id: "orb", in: orbNamespace)
-                    .frame(width: orbDiameter, height: orbDiameter)
+                    GenerationOrbView(colors: colors)
+                        .matchedGeometryEffect(id: "orb", in: orbNamespace)
+                        .frame(width: orbDiameter, height: orbDiameter)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -550,18 +628,6 @@ private struct GenerateHeaderView: View {
             Text("Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .onGeometryChange(for: CGRect.self) { proxy in
-                    proxy.frame(in: .named("genStage"))
-                } action: { descFrame = $0 }
-                // Pull the orb down over this text and the clear glass lenses it.
-                .distortionEffect(
-                    ShaderLibrary.lensWarp(
-                        .float2(Float(orbFrame.midX - descFrame.minX), Float(orbFrame.midY - descFrame.minY)),
-                        .float(Float(max(orbFrame.width, orbFrame.height) / 2)),
-                        .float(0.5)
-                    ),
-                    maxSampleOffset: CGSize(width: 90, height: 90)
-                )
         }
     }
 }

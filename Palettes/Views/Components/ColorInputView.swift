@@ -89,8 +89,6 @@ struct ColorInputView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(6)
-                .glassEffect(.regular, in: .rect(cornerRadius: 14))
                 .padding(.horizontal)
                 .padding(.top, 12)
             }
@@ -184,8 +182,9 @@ struct ColorInputView: View {
                             .font(.subheadline.weight(.medium))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
+                            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.plain)
                     .tint(.primary)
                 }
 

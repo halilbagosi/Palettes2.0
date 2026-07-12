@@ -9,24 +9,17 @@ import SwiftUI
 /// drops of liquid that drift and mingle; an optional prompt, photo, and
 /// progress dots render inside the glass. Dragging stretches the orb toward
 /// the finger like pulled liquid and it springs back on release.
-///
-/// Hosts can receive the orb's live frame (including drag and stretch) via
-/// `onLiveFrameChange` — expressed in the host's named coordinate space — to
-/// drive a lens-warp distortion on content beneath the orb.
 struct GenerationOrbView: View {
     var colors: [Color] = []
     var promptText: String? = nil
     var photo: UIImage? = nil
     var expectedCount: Int = 0
     var showsProgress: Bool = false
-    var coordinateSpaceName: String = "orbStage"
-    var onLiveFrameChange: ((CGRect) -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var arrivalTimes: [Date] = []
     @State private var dragOffset: CGSize = .zero
-    @State private var baseFrame: CGRect = .zero
 
     private let startDate = Date()
 
@@ -57,34 +50,27 @@ struct GenerationOrbView: View {
                     .glassEffect(.clear, in: .circle)
                     .frame(width: diameter, height: diameter)
 
+                // Drawn above the liquid so it stays readable as colors arrive
                 innerContent(diameter: diameter)
             }
             .frame(width: diameter, height: diameter)
         }
         .scaleEffect(
-            x: 1 + abs(squish.width) * 0.35 - abs(squish.height) * 0.12,
-            y: 1 + abs(squish.height) * 0.35 - abs(squish.width) * 0.12,
+            x: 1 + abs(squish.width) * malleability - abs(squish.height) * 0.12,
+            y: 1 + abs(squish.height) * malleability - abs(squish.width) * 0.12,
             anchor: stretchAnchor
         )
         .offset(effectiveOffset)
-        .onGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .named(coordinateSpaceName))
-        } action: { newValue in
-            baseFrame = newValue
-            onLiveFrameChange?(liveFrame)
-        }
         .contentShape(Circle())
         .gesture(
             DragGesture()
                 .onChanged { value in
                     dragOffset = value.translation
-                    onLiveFrameChange?(liveFrame)
                 }
                 .onEnded { _ in
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
                         dragOffset = .zero
                     }
-                    onLiveFrameChange?(baseFrame)
                 }
         )
         .sensoryFeedback(.impact(weight: .light), trigger: colors.count)
@@ -147,6 +133,9 @@ struct GenerationOrbView: View {
 
     // MARK: - Deformation
 
+    /// How far the orb leans/stretches toward the finger.
+    private let malleability: CGFloat = 0.35
+
     /// Normalized stretch amount from the current drag, capped so the orb
     /// deforms gently rather than tearing apart.
     private var squish: CGSize {
@@ -156,10 +145,12 @@ struct GenerationOrbView: View {
         )
     }
 
-    /// Rubber-band displacement: the orb leans toward the finger without
-    /// leaving its place.
+    /// Slight rubber-band lean. Most of the pull is expressed as an anchored
+    /// stretch (the far side stays put); only a small residual translation
+    /// moves the whole orb.
     private var effectiveOffset: CGSize {
-        CGSize(width: dragOffset.width * 0.35, height: dragOffset.height * 0.35)
+        CGSize(width: dragOffset.width * malleability * 0.25,
+               height: dragOffset.height * malleability * 0.25)
     }
 
     /// How hard the orb is being pulled right now, 0…1 — drives inner refraction.
@@ -167,24 +158,12 @@ struct GenerationOrbView: View {
         min(1, hypot(dragOffset.width, dragOffset.height) / 200)
     }
 
-    /// The orb's current frame including drag lean and stretch, reported to the
-    /// host to drive a lens-warp on the content beneath the orb.
-    private var liveFrame: CGRect {
-        let scaleX = 1 + abs(squish.width) * 0.35 - abs(squish.height) * 0.12
-        let scaleY = 1 + abs(squish.height) * 0.35 - abs(squish.width) * 0.12
-        let w = baseFrame.width * scaleX
-        let h = baseFrame.height * scaleY
-        let cx = baseFrame.midX + effectiveOffset.width
-        let cy = baseFrame.midY + effectiveOffset.height
-        return CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h)
-    }
-
-    /// Stretch away from the side opposite the drag, so the orb elongates
-    /// toward the finger.
+    /// Anchor the stretch at the side opposite the drag, so the orb elongates
+    /// toward the finger while the far side stays in place.
     private var stretchAnchor: UnitPoint {
         UnitPoint(
-            x: 0.5 - Double(squish.width) * 0.35,
-            y: 0.5 - Double(squish.height) * 0.35
+            x: 0.5 - Double(squish.width) * 0.5,
+            y: 0.5 - Double(squish.height) * 0.5
         )
     }
 
@@ -204,15 +183,15 @@ struct GenerationOrbView: View {
             ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
                 let bloom = bloomProgress(for: index, at: now)
                 Circle()
-                    .fill(color.opacity(0.55))
-                    .frame(width: diameter * 0.48, height: diameter * 0.48)
+                    .fill(color.opacity(0.7))
+                    .frame(width: diameter * 0.52, height: diameter * 0.52)
                     .offset(drift(index: index, time: t, orbit: diameter * 0.19))
                     .scaleEffect(bloom)
                     .opacity(Double(bloom))
             }
         }
         .blur(radius: diameter * 0.07)
-        .saturation(1.1)
+        .saturation(1.2)
         // Slosh: the liquid lags slightly behind the glass while stretching
         .offset(x: effectiveOffset.width * -0.15, y: effectiveOffset.height * -0.15)
         .frame(width: diameter, height: diameter)
@@ -221,7 +200,7 @@ struct GenerationOrbView: View {
     /// Slow orbital drift, unique per drop.
     private func drift(index: Int, time t: Double, orbit: CGFloat) -> CGSize {
         let i = Double(index)
-        let speed = 0.35 + 0.06 * i.truncatingRemainder(dividingBy: 3)
+        let speed = 0.55 + 0.06 * i.truncatingRemainder(dividingBy: 3)
         return CGSize(
             width: orbit * sin(t * speed + i * 2.4),
             height: orbit * cos(t * (speed * 0.8) + i * 1.7)

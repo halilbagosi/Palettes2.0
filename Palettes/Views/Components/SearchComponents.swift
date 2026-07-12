@@ -52,6 +52,11 @@ struct HueChip: View {
                 }
                 Text(title)
                     .font(.subheadline.weight(isSelected ? .semibold : .medium))
+                if isSelected, swatch != nil {
+                    Image(systemName: "checkmark")
+                        .font(.caption2.weight(.bold))
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)

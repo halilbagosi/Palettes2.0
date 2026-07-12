@@ -128,12 +128,7 @@ struct PaletteView: View {
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }
                 .navigationDestination(for: ColorViewModel.self) { color in
-                    ColorPalettesView(
-                        colorItem: color,
-                        palettes: appData.palettes.filter { palette in
-                            palette.hexCodes.contains(where: { $0.caseInsensitiveCompare(color.HEX) == .orderedSame })
-                        }
-                    )
+                    ColorDetailView(colorItem: color)
                 }
                 .toolbar {
                     ToolbarItem(id: "palette-add", placement: .topBarTrailing) {
@@ -143,7 +138,7 @@ struct PaletteView: View {
                             Image(systemName: "plus")
                                 .fontWeight(.semibold)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                         .tint(.accentColor)
                         .keyboardShortcut("n", modifiers: .command)
                     }

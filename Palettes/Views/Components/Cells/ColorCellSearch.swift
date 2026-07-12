@@ -28,13 +28,15 @@ struct ColorCellSearch: View {
                     .font(.system(.caption2, design: .monospaced).weight(.medium))
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
             .glassEffect(.regular, in: .capsule)
             .padding(8)
         }
         .frame(height: 118)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        // Card radius = pill capsule radius (~20) + 8pt inset, so the pill
+        // sits concentric with the card corner.
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }

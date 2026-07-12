@@ -11,7 +11,7 @@ struct SearchView: View {
     @EnvironmentObject var appData: AppData
     @State private var searchText: String = ""
     @State private var scope: SearchScope = .all
-    @State private var selectedHue: HueCategory? = nil
+    @State private var selectedHues: Set<HueCategory> = []
     @AppStorage("recentSearches") private var recentSearchesJSON: String = "[]"
 
     // MARK: - Query
@@ -55,14 +55,14 @@ struct SearchView: View {
     // MARK: - Browse (idle) Filtering
 
     private var browseColors: [ColorViewModel] {
-        guard let hue = selectedHue else { return appData.colors }
-        return appData.colors.filter { $0.color.hueCategory == hue }
+        guard !selectedHues.isEmpty else { return appData.colors }
+        return appData.colors.filter { selectedHues.contains($0.color.hueCategory) }
     }
 
     private var browsePalettes: [PaletteViewModel] {
-        guard let hue = selectedHue else { return appData.palettes }
+        guard !selectedHues.isEmpty else { return appData.palettes }
         return appData.palettes.filter { palette in
-            palette.colors.contains(where: { $0.hueCategory == hue })
+            palette.colors.contains(where: { selectedHues.contains($0.hueCategory) })
         }
     }
 
@@ -110,12 +110,7 @@ struct SearchView: View {
             }
             .navigationTitle("Search")
             .navigationDestination(for: ColorViewModel.self) { color in
-                ColorPalettesView(
-                    colorItem: color,
-                    palettes: appData.palettes.filter { palette in
-                        palette.hexCodes.contains(where: { $0.caseInsensitiveCompare(color.HEX) == .orderedSame })
-                    }
-                )
+                ColorDetailView(colorItem: color)
             }
             .navigationDestination(for: PaletteViewModel.self) { palette in
                 PaletteDetailView(paletteName: palette.name, palette: palette)
@@ -130,7 +125,7 @@ struct SearchView: View {
         .onSubmit(of: .search) {
             recordRecentSearch()
         }
-        .sensoryFeedback(.selection, trigger: selectedHue)
+        .sensoryFeedback(.selection, trigger: selectedHues)
         .sensoryFeedback(.selection, trigger: scope)
     }
 
@@ -243,17 +238,17 @@ struct SearchView: View {
                 }
             }
 
-            if browseColors.isEmpty && browsePalettes.isEmpty, let hue = selectedHue {
+            if browseColors.isEmpty && browsePalettes.isEmpty, !selectedHues.isEmpty {
                 ContentUnavailableView(
-                    "No \(hue.rawValue.lowercased()) yet",
+                    "No matches",
                     systemImage: "paintpalette",
-                    description: Text("Nothing in your library falls in this hue range.")
+                    description: Text("Nothing in your library falls in the selected hue range\(selectedHues.count == 1 ? "" : "s").")
                 )
                 .padding(.top, 40)
             }
         }
         .padding()
-        .animation(.spring(response: 0.3), value: selectedHue)
+        .animation(.spring(response: 0.3), value: selectedHues)
     }
 
     private var hueChips: some View {
@@ -262,19 +257,23 @@ struct SearchView: View {
                 HueChip(
                     title: "All",
                     swatch: nil,
-                    isSelected: selectedHue == nil
+                    isSelected: selectedHues.isEmpty
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedHue = nil }
+                    withAnimation(.spring(response: 0.3)) { selectedHues.removeAll() }
                 }
 
                 ForEach(availableHues) { hue in
                     HueChip(
                         title: hue.rawValue,
                         swatch: hue.representativeColor,
-                        isSelected: selectedHue == hue
+                        isSelected: selectedHues.contains(hue)
                     ) {
                         withAnimation(.spring(response: 0.3)) {
-                            selectedHue = (selectedHue == hue) ? nil : hue
+                            if selectedHues.contains(hue) {
+                                selectedHues.remove(hue)
+                            } else {
+                                selectedHues.insert(hue)
+                            }
                         }
                     }
                 }

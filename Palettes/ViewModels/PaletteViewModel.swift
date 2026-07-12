@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct PaletteViewModel: Identifiable, Sendable, Hashable {
-    let id = UUID()
+    var id = UUID()
     var name: String
     var colors: [Color]
     var hexCodes: [String] = []

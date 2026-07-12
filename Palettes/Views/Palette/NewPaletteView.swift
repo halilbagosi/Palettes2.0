@@ -11,8 +11,6 @@ struct NewPaletteView: View {
     @State private var paletteHexCodes: [String] = []
     @State private var paletteColorNames: [String] = []
 
-    // Edit mode for color names in the draft list
-    @FocusState private var focusedColorIndex: Int?
     @State private var editColorIndex: Int?
 
     struct ColorBindingWrapper: Identifiable {
@@ -143,14 +141,24 @@ struct NewPaletteView: View {
                 .glassEffect(.regular, in: .rect(cornerRadius: 16))
                 .padding(.horizontal)
                 .padding(.top, 12)
+                // Vanish instantly when the first color arrives — a fading
+                // glass rim reads as a stray hairline over the strip.
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
             } else {
                 HStack(spacing: 0) {
                     ForEach(paletteColors.indices, id: \.self) { index in
                         Rectangle()
                             .fill(paletteColors[index])
+                            // Overlap neighbors a hairline so antialiasing
+                            // can't show a background seam mid-animation.
+                            .padding(.horizontal, -0.5)
                     }
                 }
                 .frame(height: 56)
+                // Backdrop inside the clip: the spring bounce briefly leaves
+                // gaps between segments, which show this instead of the
+                // sheet background.
+                .background(paletteColors.last ?? Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal)
                 .padding(.top, 12)
@@ -167,7 +175,6 @@ struct NewPaletteView: View {
 
     @ViewBuilder
     private func editableColorRow(index: Int, swatchSize: CGFloat = 40) -> some View {
-        let isEditing = focusedColorIndex == index
         let displayName = index < paletteColorNames.count && !paletteColorNames[index].isEmpty
             ? paletteColorNames[index]
             : "Color \(index + 1)"
@@ -186,19 +193,8 @@ struct NewPaletteView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                ZStack(alignment: .leading) {
-                    TextField("Color Name", text: colorNameBinding(for: index))
-                        .font(.system(size: 14, weight: .medium))
-                        .focused($focusedColorIndex, equals: index)
-                        .opacity(isEditing ? 1 : 0)
-                        .disabled(!isEditing)
-                        .onSubmit { focusedColorIndex = nil }
-
-                    if !isEditing {
-                        Text(displayName)
-                            .font(.system(size: 14, weight: .medium))
-                    }
-                }
+                Text(displayName)
+                    .font(.system(size: 14, weight: .medium))
 
                 if index < paletteHexCodes.count {
                     HStack(spacing: 6) {
@@ -215,25 +211,16 @@ struct NewPaletteView: View {
             Spacer()
 
             Button {
-                withAnimation(.spring(response: 0.25)) {
-                    focusedColorIndex = isEditing ? nil : index
-                }
-            } label: {
-                Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle")
-                    .font(.caption)
-                    .foregroundColor(isEditing ? .accentColor : .secondary)
-            }
-
-            Button {
                 withAnimation(.spring(response: 0.3)) {
-                    if focusedColorIndex == index { focusedColorIndex = nil }
                     removeColor(at: index)
                 }
             } label: {
-                Image(systemName: "trash")
-                    .font(.subheadline)
-                    .foregroundColor(.red)
+                Image(systemName: "minus.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.red.opacity(0.8))
             }
+            .accessibilityLabel("Remove color")
         }
         .padding(10)
         .glassEffect(.regular, in: .rect(cornerRadius: 14))
@@ -292,11 +279,6 @@ struct NewPaletteView: View {
 
     private func removeColor(at index: Int) {
         guard index < paletteColors.count else { return }
-        if focusedColorIndex == index {
-            focusedColorIndex = nil
-        } else if let focused = focusedColorIndex, focused > index {
-            focusedColorIndex = focused - 1
-        }
         paletteColors.remove(at: index)
         if index < paletteHexCodes.count { paletteHexCodes.remove(at: index) }
         if index < paletteColorNames.count { paletteColorNames.remove(at: index) }

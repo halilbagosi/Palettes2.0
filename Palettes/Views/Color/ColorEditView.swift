@@ -42,7 +42,7 @@ struct ColorEditView: View {
     // Error tracking
     @State private var hexError = false
     
-    // Gradient end color matched from ColorPalettesView logic
+    // Gradient end color matched from ColorDetailView logic
     private var gradientEnd: Color {
         let uiColor = UIColor(internalColorValue)
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0

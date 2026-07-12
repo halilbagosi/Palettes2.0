@@ -15,7 +15,9 @@ struct LiquidGradientView: View {
     private let startDate = Date()
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        // 30fps is indistinguishable under the heavy blur this renders behind,
+        // and halves the constant full-screen GPU cost.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             GeometryReader { geo in
                 let time = timeline.date.timeIntervalSince(startDate) * speed
                 if colors.isEmpty {

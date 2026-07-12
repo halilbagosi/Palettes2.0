@@ -8,7 +8,7 @@ import Foundation
 import SwiftUI
 
 struct ColorViewModel: Identifiable, Sendable, Hashable {
-    let id = UUID()
+    var id = UUID()
     var name: String
     var color: Color
     var HEX: String

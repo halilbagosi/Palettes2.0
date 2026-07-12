@@ -31,6 +31,8 @@ struct PaletteTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .scrollEdgeEffectHidden(false, for: .all)
+        .scrollEdgeEffectStyle(.soft, for: .all)
         .environmentObject(appData)
         .background { tabShortcuts }
     }

@@ -85,8 +85,6 @@ struct NewColorView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(6)
-                .glassEffect(.regular, in: .rect(cornerRadius: 14))
                 .padding(.horizontal)
                 .padding(.top, 12)
 

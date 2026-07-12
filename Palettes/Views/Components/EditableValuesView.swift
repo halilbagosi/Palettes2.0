@@ -29,7 +29,7 @@ struct EditableValuesView: View {
                     .font(.system(size: 16, design: .monospaced))
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
-                    .onChange(of: currentHex) { newValue in
+                    .onChange(of: currentHex) { _, newValue in
                         guard !isSyncing else { return }
                         hexError = false
                         let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -81,7 +81,7 @@ struct EditableValuesView: View {
                 .padding(.leading, 4)
             }
         }
-        .onChange(of: color) { newColor in
+        .onChange(of: color) { _, newColor in
             syncText(from: newColor)
         }
         .onAppear {
@@ -100,7 +100,7 @@ struct EditableValuesView: View {
                 .font(.system(size: 16, design: .monospaced))
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
-                .onChange(of: text.wrappedValue) { newValue in
+                .onChange(of: text.wrappedValue) { _, newValue in
                     let filtered = newValue.filter { "0123456789".contains($0) }
                     if filtered != newValue {
                         text.wrappedValue = filtered

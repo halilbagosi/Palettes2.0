@@ -13,9 +13,9 @@ struct ColorCellBig: View {
     let hexCode: String
     let color: Color
     let isUsedInPalette: Bool
-    /// Tapping the card body (opens the color editor).
+    /// Tapping the card body (opens the color detail view).
     var onCardTap: (() -> Void)? = nil
-    /// Shown as a "View Palettes" pill when the color is in a palette.
+    /// Shown as a "View" pill; opens the color detail view.
     var onViewPalettes: (() -> Void)? = nil
 
     var body: some View {
@@ -51,7 +51,7 @@ struct ColorCellBig: View {
 
                 Spacer(minLength: 0)
 
-                if isUsedInPalette, let onViewPalettes {
+                if let onViewPalettes {
                     viewPalettesButton(onViewPalettes)
                 }
 
@@ -71,7 +71,7 @@ struct ColorCellBig: View {
 
     private func viewPalettesButton(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text("View Palettes")
+            Text("View")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)

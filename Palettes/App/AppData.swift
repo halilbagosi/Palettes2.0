@@ -1,11 +1,133 @@
 import SwiftUI
 import Combine
+import SwiftData
 
 @MainActor
 class AppData: ObservableObject {
     @Published var activeTab: TabValue = .palettes
 
-    @Published var colors: [ColorViewModel] = [
+    /// Color to pre-select when the Generate tab is opened from a color detail view.
+    @Published var pendingGenerateColorID: UUID?
+
+    @Published var colors: [ColorViewModel] = []
+    @Published var palettes: [PaletteViewModel] = []
+
+    private var container: ModelContainer?
+    private var cancellables: Set<AnyCancellable> = []
+
+    init(inMemory: Bool = false) {
+        do {
+            let config = ModelConfiguration(isStoredInMemoryOnly: inMemory)
+            container = try ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: config)
+        } catch {
+            // Fall back to a session-only experience rather than crashing.
+            container = nil
+        }
+
+        load()
+
+        // Persist whenever the arrays change, debounced so bursts of edits
+        // (e.g. saving a generated palette) write once.
+        $colors
+            .dropFirst()
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] updated in
+                Task { @MainActor in self?.persistColors(updated) }
+            }
+            .store(in: &cancellables)
+
+        $palettes
+            .dropFirst()
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] updated in
+                Task { @MainActor in self?.persistPalettes(updated) }
+            }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Load
+
+    private func load() {
+        guard let context = container?.mainContext else {
+            colors = Self.sampleColors
+            palettes = Self.samplePalettes
+            return
+        }
+
+        let storedColors = (try? context.fetch(
+            FetchDescriptor<StoredColor>(sortBy: [SortDescriptor(\.sortIndex)])
+        )) ?? []
+        let storedPalettes = (try? context.fetch(
+            FetchDescriptor<StoredPalette>(sortBy: [SortDescriptor(\.sortIndex)])
+        )) ?? []
+
+        let didSeed = UserDefaults.standard.bool(forKey: "didSeedSampleData")
+        if storedColors.isEmpty && storedPalettes.isEmpty && !didSeed {
+            // First launch: start from the sample library.
+            colors = Self.sampleColors
+            palettes = Self.samplePalettes
+            UserDefaults.standard.set(true, forKey: "didSeedSampleData")
+            persistColors(colors)
+            persistPalettes(palettes)
+        } else {
+            colors = storedColors.map {
+                ColorViewModel(
+                    id: $0.id,
+                    name: $0.name,
+                    color: Color(hex: $0.hex) ?? .gray,
+                    HEX: $0.hex,
+                    usedInPalette: $0.usedInPalette
+                )
+            }
+            palettes = storedPalettes.map { stored in
+                PaletteViewModel(
+                    id: stored.id,
+                    name: stored.name,
+                    colors: stored.hexCodes.map { Color(hex: $0) ?? .gray },
+                    hexCodes: stored.hexCodes,
+                    colorNames: stored.colorNames
+                )
+            }
+        }
+    }
+
+    // MARK: - Persist
+
+    /// The library is small, so each save simply rewrites the table; this
+    /// keeps ordering, edits, and deletions correct without diffing.
+    private func persistColors(_ list: [ColorViewModel]) {
+        guard let context = container?.mainContext else { return }
+        try? context.delete(model: StoredColor.self)
+        for (index, color) in list.enumerated() {
+            context.insert(StoredColor(
+                id: color.id,
+                name: color.name,
+                hex: color.HEX,
+                usedInPalette: color.usedInPalette,
+                sortIndex: index
+            ))
+        }
+        try? context.save()
+    }
+
+    private func persistPalettes(_ list: [PaletteViewModel]) {
+        guard let context = container?.mainContext else { return }
+        try? context.delete(model: StoredPalette.self)
+        for (index, palette) in list.enumerated() {
+            context.insert(StoredPalette(
+                id: palette.id,
+                name: palette.name,
+                hexCodes: palette.hexCodes,
+                colorNames: palette.colorNames,
+                sortIndex: index
+            ))
+        }
+        try? context.save()
+    }
+
+    // MARK: - Sample Data (first launch only)
+
+    private static let sampleColors: [ColorViewModel] = [
         ColorViewModel(name: "Maroon", color: Color(hex: "800000")!, HEX: "#800000", usedInPalette: true),
         ColorViewModel(name: "Electric Blue", color: Color(hex: "007AFF")!, HEX: "#007AFF", usedInPalette: false),
         ColorViewModel(name: "Sunset Orange", color: Color(hex: "FF5D00")!, HEX: "#FF5D00", usedInPalette: true),
@@ -18,8 +140,8 @@ class AppData: ObservableObject {
         ColorViewModel(name: "Charcoal", color: Color(hex: "333333")!, HEX: "#333333", usedInPalette: true),
         ColorViewModel(name: "Forest Green", color: Color(hex: "1B4D1B")!, HEX: "#1B4D1B", usedInPalette: true),
     ]
-    
-    @Published var palettes: [PaletteViewModel] = [
+
+    private static let samplePalettes: [PaletteViewModel] = [
         PaletteViewModel(
             name: "Midnight Ocean",
             colors: [
