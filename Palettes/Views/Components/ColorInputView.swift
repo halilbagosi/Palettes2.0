@@ -247,13 +247,10 @@ struct ColorInputView: View {
             .padding(.horizontal)
 
             EditableValuesView(color: adjustedColor) { newColor in
-                let uiColor = UIColor(newColor)
-                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-
-                baseR = Double(Int(round(r * 255)))
-                baseG = Double(Int(round(g * 255)))
-                baseB = Double(Int(round(b * 255)))
+                let c = newColor.rgbComponents
+                baseR = Double(Int(round(c.r)))
+                baseG = Double(Int(round(c.g)))
+                baseB = Double(Int(round(c.b)))
 
                 temperatureValue = 0.5
                 saturationValue = 0.5

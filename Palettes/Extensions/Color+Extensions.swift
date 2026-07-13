@@ -51,16 +51,32 @@ extension Color {
         }
     }
 
-    /// Returns the RGB components formatted as "R: 255 G: 255 B: 255"
-    var rgbString: String {
+    /// sRGB components in the 0–255 range.
+    var rgbComponents: (r: Double, g: Double, b: Double) {
         let uiColor = UIColor(self)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-        
-        let rInt = Int(round(r * 255))
-        let gInt = Int(round(g * 255))
-        let bInt = Int(round(b * 255))
-        
-        return "R: \(rInt) G: \(gInt) B: \(bInt)"
+        return (Double(r) * 255, Double(g) * 255, Double(b) * 255)
+    }
+
+    /// Hue/saturation/brightness components in the 0–1 range.
+    var hsbComponents: (h: Double, s: Double, b: Double) {
+        let uiColor = UIColor(self)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return (Double(h), Double(s), Double(b))
+    }
+
+    /// Uppercase hex string, e.g. "#FF8800". Pass `withHash: false` to drop the leading '#'.
+    func toHex(withHash: Bool = true) -> String {
+        let c = rgbComponents
+        let hex = String(format: "%02X%02X%02X", Int(round(c.r)), Int(round(c.g)), Int(round(c.b)))
+        return withHash ? "#\(hex)" : hex
+    }
+
+    /// Returns the RGB components formatted as "R: 255 G: 255 B: 255"
+    var rgbString: String {
+        let c = rgbComponents
+        return "R: \(Int(round(c.r))) G: \(Int(round(c.g))) B: \(Int(round(c.b)))"
     }
 }

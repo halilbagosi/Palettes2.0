@@ -36,12 +36,10 @@ struct EditableValuesView: View {
                         if clean.count == 6, let newColor = Color(hex: clean) {
                             isSyncing = true
                             // Sync RGB fields to match
-                            let uiC = UIColor(newColor)
-                            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                            uiC.getRed(&r, green: &g, blue: &b, alpha: &a)
-                            rString = "\(Int(round(r * 255)))"
-                            gString = "\(Int(round(g * 255)))"
-                            bString = "\(Int(round(b * 255)))"
+                            let c = newColor.rgbComponents
+                            rString = "\(Int(round(c.r)))"
+                            gString = "\(Int(round(c.g)))"
+                            bString = "\(Int(round(c.b)))"
                             isSyncing = false
                             onColorChanged(newColor)
                         } else if clean.count > 6 {
@@ -126,14 +124,11 @@ struct EditableValuesView: View {
     
     private func syncText(from c: Color) {
         isSyncing = true
-        let uiColor = UIColor(c)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-        
-        let rInt = Int(round(r * 255))
-        let gInt = Int(round(g * 255))
-        let bInt = Int(round(b * 255))
-        
+        let comps = c.rgbComponents
+        let rInt = Int(round(comps.r))
+        let gInt = Int(round(comps.g))
+        let bInt = Int(round(comps.b))
+
         currentHex = String(format: "%02X%02X%02X", rInt, gInt, bInt)
         rString = "\(rInt)"
         gString = "\(gInt)"

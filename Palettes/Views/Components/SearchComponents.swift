@@ -152,28 +152,3 @@ struct SearchEmptyLibraryView: View {
         .padding(.top, 80)
     }
 }
-
-// MARK: - iOS 16 Fallback for ContentUnavailableView
-
-struct SearchEmptyStateView: View {
-    let searchText: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 40))
-                .foregroundColor(.secondary)
-
-            Text("No Results")
-                .font(.title2.bold())
-
-            if !searchText.isEmpty {
-                Text("No results for \"\(searchText)\"")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
-    }
-}

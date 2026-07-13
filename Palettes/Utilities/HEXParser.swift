@@ -23,14 +23,6 @@ extension Color {
         
         self.init(red: r, green: g, blue: b)
     }
-    
-    // Explicit static throwing function for parsing
-    static func parse(hex: String) throws -> Color {
-        guard let color = Color(hex: hex) else {
-            throw AppError.invalidHex(hex)
-        }
-        return color
-    }
 }
 
 // MARK: - CIEDE2000 Color Naming

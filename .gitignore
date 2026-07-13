@@ -9,3 +9,6 @@ docs/superpowers/
 
 # Build artifacts
 build/
+
+# macOS
+.DS_Store

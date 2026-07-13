@@ -55,7 +55,7 @@ struct PaletteTabView: View {
 }
 
 enum TabValue {
-    case palettes, colors, account, search, generate
+    case palettes, colors, search, generate
 }
 
 #Preview {

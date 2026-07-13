@@ -44,13 +44,11 @@ struct ColorEditView: View {
     
     // Gradient end color matched from ColorDetailView logic
     private var gradientEnd: Color {
-        let uiColor = UIColor(internalColorValue)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let (h, s, _) = internalColorValue.hsbComponents
         if colorScheme == .dark {
-            return Color(hue: Double(h), saturation: Double(s), brightness: 0.08)
+            return Color(hue: h, saturation: s, brightness: 0.08)
         } else {
-            return Color(hue: Double(h), saturation: Double(s * 0.08), brightness: 0.97)
+            return Color(hue: h, saturation: s * 0.08, brightness: 0.97)
         }
     }
     
@@ -276,13 +274,10 @@ struct ColorEditView: View {
     
     private func syncTextToColor() {
         // Convert Color to RGB and Hex
-        let uiColor = UIColor(internalColorValue)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-        
-        let rInt = Int(round(r * 255))
-        let gInt = Int(round(g * 255))
-        let bInt = Int(round(b * 255))
+        let comps = internalColorValue.rgbComponents
+        let rInt = Int(round(comps.r))
+        let gInt = Int(round(comps.g))
+        let bInt = Int(round(comps.b))
         
         rString = "\(rInt)"
         gString = "\(gInt)"
@@ -298,15 +293,13 @@ struct ColorEditView: View {
         guard cleanHex.count == 6 else { return }
         if let newColor = Color(hex: cleanHex) {
             internalColorValue = newColor
-            
+
             // Sync RGB text to match new hex
-            let uiColor = UIColor(newColor)
-            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-            rString = "\(Int(round(r * 255)))"
-            gString = "\(Int(round(g * 255)))"
-            bString = "\(Int(round(b * 255)))"
-            
+            let c = newColor.rgbComponents
+            rString = "\(Int(round(c.r)))"
+            gString = "\(Int(round(c.g)))"
+            bString = "\(Int(round(c.b)))"
+
             resetSlidersAndSetBase()
         } else {
             hexError = true
@@ -350,13 +343,10 @@ struct ColorEditView: View {
     }
 
     private func resetSlidersAndSetBase() {
-        let uiColor = UIColor(internalColorValue)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-        
-        baseR = Double(Int(round(r * 255)))
-        baseG = Double(Int(round(g * 255)))
-        baseB = Double(Int(round(b * 255)))
+        let c = internalColorValue.rgbComponents
+        baseR = Double(Int(round(c.r)))
+        baseG = Double(Int(round(c.g)))
+        baseB = Double(Int(round(c.b)))
         
         temperatureValue = 0.5
         saturationValue = 0.5

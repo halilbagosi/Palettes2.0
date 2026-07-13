@@ -171,13 +171,10 @@ struct InteractiveColorPicker: View {
     private func syncComponentsToColor() {
         isUpdatingFromComponents = true
 
-        let uiColor = UIColor(colorValue)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-
-        let rInt = Int(round(r * 255))
-        let gInt = Int(round(g * 255))
-        let bInt = Int(round(b * 255))
+        let c = colorValue.rgbComponents
+        let rInt = Int(round(c.r))
+        let gInt = Int(round(c.g))
+        let bInt = Int(round(c.b))
 
         rString = "\(rInt)"
         gString = "\(gInt)"
@@ -202,12 +199,10 @@ struct InteractiveColorPicker: View {
             isUpdatingFromComponents = true
             colorValue = newColor
 
-            let uiColor = UIColor(newColor)
-            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-            rString = "\(Int(round(r * 255)))"
-            gString = "\(Int(round(g * 255)))"
-            bString = "\(Int(round(b * 255)))"
+            let c = newColor.rgbComponents
+            rString = "\(Int(round(c.r)))"
+            gString = "\(Int(round(c.g)))"
+            bString = "\(Int(round(c.b)))"
 
             isUpdatingFromComponents = false
         } else {

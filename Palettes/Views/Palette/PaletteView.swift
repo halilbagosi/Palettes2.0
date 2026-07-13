@@ -7,6 +7,9 @@ struct PaletteView: View {
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
     @State private var showDeleteAlert = false
+    @State private var isSelecting = false
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var showBulkDeleteAlert = false
     @EnvironmentObject var appData: AppData
 
     private let gridColumns = [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)]
@@ -36,6 +39,24 @@ struct PaletteView: View {
                                         }
                                     )
                                     .hoverEffect(.lift)
+                                    .overlay(alignment: .topTrailing) {
+                                        if isSelecting {
+                                            SelectionCheckmark(isSelected: selectedIDs.contains(palette.id))
+                                        }
+                                    }
+                                    .overlay {
+                                        if isSelecting {
+                                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                                .strokeBorder(Color.accentColor, lineWidth: selectedIDs.contains(palette.id) ? 3 : 0)
+                                        }
+                                    }
+                                    .overlay {
+                                        if isSelecting {
+                                            Color.white.opacity(0.001)
+                                                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                                                .onTapGesture { toggleSelection(palette.id) }
+                                        }
+                                    }
                                     .contextMenu {
                                         Button {
                                             paletteToEdit = palette
@@ -131,16 +152,40 @@ struct PaletteView: View {
                     ColorDetailView(colorItem: color)
                 }
                 .toolbar {
-                    ToolbarItem(id: "palette-add", placement: .topBarTrailing) {
-                        Button {
-                            isCreatingPalette = true
-                        } label: {
-                            Image(systemName: "plus")
+                    if !appData.palettes.isEmpty {
+                        if isSelecting {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button(role: .destructive) {
+                                    showBulkDeleteAlert = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .tint(.red)
+                                .disabled(selectedIDs.isEmpty)
+                            }
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") {
+                                    exitSelection()
+                                }
                                 .fontWeight(.semibold)
+                            }
+                        } else {
+                            ToolbarItemGroup(placement: .topBarTrailing) {
+                                Button("Select") {
+                                    withAnimation { isSelecting = true }
+                                }
+
+                                Button {
+                                    isCreatingPalette = true
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .fontWeight(.semibold)
+                                }
+                                .buttonStyle(.glassProminent)
+                                .tint(.accentColor)
+                                .keyboardShortcut("n", modifiers: .command)
+                            }
                         }
-                        .buttonStyle(.glassProminent)
-                        .tint(.accentColor)
-                        .keyboardShortcut("n", modifiers: .command)
                     }
                 }
                 .sheet(isPresented: $isCreatingPalette) {
@@ -164,9 +209,35 @@ struct PaletteView: View {
                         .environmentObject(appData)
                         .presentationSizing(.form)
                 }
+                .alert("Delete Palettes", isPresented: $showBulkDeleteAlert) {
+                    Button("Delete", role: .destructive) {
+                        withAnimation(.spring()) {
+                            appData.palettes.removeAll { selectedIDs.contains($0.id) }
+                        }
+                        exitSelection()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Delete \(selectedIDs.count) palette\(selectedIDs.count == 1 ? "" : "s")? This cannot be undone.")
+                }
             } else {
                 // Fallback on earlier versions
             }
+        }
+    }
+
+    private func toggleSelection(_ id: UUID) {
+        if selectedIDs.contains(id) {
+            selectedIDs.remove(id)
+        } else {
+            selectedIDs.insert(id)
+        }
+    }
+
+    private func exitSelection() {
+        withAnimation {
+            isSelecting = false
+            selectedIDs = []
         }
     }
 }

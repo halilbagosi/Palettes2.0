@@ -15,6 +15,9 @@ struct ColorsView: View {
     @State private var colorToDelete: ColorViewModel?
     @State private var colorToEdit: ColorBindingWrapper?
     @State private var showDeleteAlert = false
+    @State private var isSelecting = false
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var showBulkDeleteAlert = false
     @EnvironmentObject var appData: AppData
     
     struct ColorBindingWrapper: Identifiable {
@@ -55,6 +58,24 @@ struct ColorsView: View {
                                         }
                                     )
                                     .hoverEffect(.lift)
+                                    .overlay(alignment: .topTrailing) {
+                                        if isSelecting {
+                                            SelectionCheckmark(isSelected: selectedIDs.contains(color.id))
+                                        }
+                                    }
+                                    .overlay {
+                                        if isSelecting {
+                                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                                .strokeBorder(Color.accentColor, lineWidth: selectedIDs.contains(color.id) ? 3 : 0)
+                                        }
+                                    }
+                                    .overlay {
+                                        if isSelecting {
+                                            Color.white.opacity(0.001)
+                                                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                                                .onTapGesture { toggleSelection(color.id) }
+                                        }
+                                    }
                                     .contextMenu {
                                         Button {
                                             colorToEdit = ColorBindingWrapper(color: color)
@@ -125,16 +146,40 @@ struct ColorsView: View {
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }
                 .toolbar {
-                    ToolbarItem(id: "color-add", placement: .topBarTrailing) {
-                        Button {
-                            isCreatingColor = true
-                        } label: {
-                            Image(systemName: "plus")
+                    if !appData.colors.isEmpty {
+                        if isSelecting {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button(role: .destructive) {
+                                    showBulkDeleteAlert = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .tint(.red)
+                                .disabled(selectedIDs.isEmpty)
+                            }
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") {
+                                    exitSelection()
+                                }
                                 .fontWeight(.semibold)
+                            }
+                        } else {
+                            ToolbarItemGroup(placement: .topBarTrailing) {
+                                Button("Select") {
+                                    withAnimation { isSelecting = true }
+                                }
+
+                                Button {
+                                    isCreatingColor = true
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .fontWeight(.semibold)
+                                }
+                                .buttonStyle(.glassProminent)
+                                .tint(.accentColor)
+                                .keyboardShortcut("n", modifiers: [.command, .shift])
+                            }
                         }
-                        .buttonStyle(.glassProminent)
-                        .tint(.accentColor)
-                        .keyboardShortcut("n", modifiers: [.command, .shift])
                     }
                 }
                 .sheet(isPresented: $isCreatingColor) {
@@ -194,6 +239,14 @@ struct ColorsView: View {
                         Text("Deleting \"\(color.name)\" will also remove it from \(affected.count) palette\(affected.count == 1 ? "" : "s"): \(affected.map(\.name).joined(separator: ", ")).")
                     }
                 }
+                .alert("Delete Colors", isPresented: $showBulkDeleteAlert) {
+                    Button("Delete", role: .destructive) {
+                        deleteSelectedColors()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Delete \(selectedIDs.count) color\(selectedIDs.count == 1 ? "" : "s")? They will also be removed from any palettes that use them.")
+                }
             } else {
                 // Fallback on earlier versions
             }
@@ -204,5 +257,42 @@ struct ColorsView: View {
         appData.palettes.filter { palette in
             palette.hexCodes.contains(where: { $0.caseInsensitiveCompare(color.HEX) == .orderedSame })
         }
+    }
+
+    private func toggleSelection(_ id: UUID) {
+        if selectedIDs.contains(id) {
+            selectedIDs.remove(id)
+        } else {
+            selectedIDs.insert(id)
+        }
+    }
+
+    private func exitSelection() {
+        withAnimation {
+            isSelecting = false
+            selectedIDs = []
+        }
+    }
+
+    private func deleteSelectedColors() {
+        let colorsToDelete = appData.colors.filter { selectedIDs.contains($0.id) }
+        withAnimation(.spring()) {
+            for color in colorsToDelete {
+                // Remove this color from every palette that references its HEX.
+                for i in appData.palettes.indices {
+                    if let colorIndex = appData.palettes[i].hexCodes.firstIndex(where: {
+                        $0.caseInsensitiveCompare(color.HEX) == .orderedSame
+                    }) {
+                        appData.palettes[i].colors.remove(at: colorIndex)
+                        appData.palettes[i].hexCodes.remove(at: colorIndex)
+                        appData.palettes[i].colorNames.remove(at: colorIndex)
+                    }
+                }
+            }
+            // Drop any palettes left empty, then remove the colors globally.
+            appData.palettes.removeAll { $0.colors.isEmpty }
+            appData.colors.removeAll { selectedIDs.contains($0.id) }
+        }
+        exitSelection()
     }
 }

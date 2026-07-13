@@ -98,24 +98,6 @@ struct ColorCellBig: View {
     }
 }
 
-// MARK: - Color Extension for Text Contrast
-// This determines if the background is light or dark
-extension Color {
-    var isLight: Bool {
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var opacity: CGFloat = 0
-
-        // Convert SwiftUI Color to UIColor to get components
-        UIColor(self).getRed(&red, green: &green, blue: &blue, alpha: &opacity)
-
-        // Calculate luminance
-        let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        return luminance > 0.6 // Threshold for "light" color
-    }
-}
-
 // MARK: - Preview
 #Preview {
     ScrollView {
