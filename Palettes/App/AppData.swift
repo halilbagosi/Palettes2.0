@@ -21,6 +21,10 @@ class AppData: ObservableObject {
     /// the debounced persistence sinks don't write back what was just read.
     private var isReloading = false
 
+    /// Pending task that clears `isReloading`; cancelled and replaced on each
+    /// reload so the flag clears 600 ms after the most recent one.
+    private var reloadResetTask: Task<Void, Never>?
+
     init(inMemory: Bool = false) {
         if inMemory {
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -81,13 +85,16 @@ class AppData: ObservableObject {
     // MARK: - Load
 
     /// Refetches the store and replaces the published arrays without
-    /// triggering a write-back. The flag outlives the sinks' 300 ms debounce.
+    /// triggering a write-back. The flag outlives the sinks' 300 ms debounce
+    /// and clears 600 ms after the most recent reload.
     private func reloadFromStore() {
         guard container != nil else { return }
         isReloading = true
         load()
-        Task { @MainActor in
+        reloadResetTask?.cancel()
+        reloadResetTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
             self.isReloading = false
         }
     }
