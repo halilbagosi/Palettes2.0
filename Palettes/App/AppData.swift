@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 import SwiftData
+import CoreData
+import UIKit
 
 @MainActor
 class AppData: ObservableObject {
@@ -14,6 +16,10 @@ class AppData: ObservableObject {
 
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []
+
+    /// True while the published arrays are being replaced from the store, so
+    /// the debounced persistence sinks don't write back what was just read.
+    private var isReloading = false
 
     init(inMemory: Bool = false) {
         if inMemory {
@@ -40,7 +46,8 @@ class AppData: ObservableObject {
             .dropFirst()
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] updated in
-                Task { @MainActor in self?.persistColors(updated) }
+                guard let self, !self.isReloading else { return }
+                Task { @MainActor in self.persistColors(updated) }
             }
             .store(in: &cancellables)
 
@@ -48,12 +55,42 @@ class AppData: ObservableObject {
             .dropFirst()
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] updated in
-                Task { @MainActor in self?.persistPalettes(updated) }
+                guard let self, !self.isReloading else { return }
+                Task { @MainActor in self.persistPalettes(updated) }
             }
+            .store(in: &cancellables)
+
+        // Reload when CloudKit finishes importing changes from another
+        // device, and on foregrounding as a safety net.
+        NotificationCenter.default.publisher(for: NSPersistentCloudKitContainer.eventChangedNotification)
+            .compactMap { note in
+                note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                    as? NSPersistentCloudKitContainer.Event
+            }
+            .filter { $0.type == .import && $0.endDate != nil }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.reloadFromStore() }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.reloadFromStore() }
             .store(in: &cancellables)
     }
 
     // MARK: - Load
+
+    /// Refetches the store and replaces the published arrays without
+    /// triggering a write-back. The flag outlives the sinks' 300 ms debounce.
+    private func reloadFromStore() {
+        guard container != nil else { return }
+        isReloading = true
+        load()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            self.isReloading = false
+        }
+    }
 
     private func load() {
         guard let context = container?.mainContext else {
@@ -78,7 +115,12 @@ class AppData: ObservableObject {
             persistColors(colors)
             persistPalettes(palettes)
         } else {
-            colors = storedColors.map {
+            var seenColorIDs = Set<UUID>()
+            let uniqueColors = storedColors.filter { seenColorIDs.insert($0.id).inserted }
+            var seenPaletteIDs = Set<UUID>()
+            let uniquePalettes = storedPalettes.filter { seenPaletteIDs.insert($0.id).inserted }
+
+            colors = uniqueColors.map {
                 ColorViewModel(
                     id: $0.id,
                     name: $0.name,
@@ -88,7 +130,7 @@ class AppData: ObservableObject {
                     isFavorite: $0.isFavorite
                 )
             }
-            palettes = storedPalettes.map { stored in
+            palettes = uniquePalettes.map { stored in
                 PaletteViewModel(
                     id: stored.id,
                     name: stored.name,
