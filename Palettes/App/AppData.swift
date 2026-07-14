@@ -115,7 +115,10 @@ class AppData: ObservableObject {
 
         let didSeed = UserDefaults.standard.bool(forKey: "didSeedSampleData")
         if storedColors.isEmpty && storedPalettes.isEmpty && !didSeed {
-            // First launch: start from the sample library.
+            // First launch with an empty store: seed the sample library. On a
+            // new device whose iCloud data hasn't downloaded yet this may run
+            // once; the flag prevents repeats and synced records merge in on
+            // the next import event.
             colors = Self.sampleColors
             palettes = Self.samplePalettes
             UserDefaults.standard.set(true, forKey: "didSeedSampleData")
