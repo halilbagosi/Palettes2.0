@@ -103,38 +103,60 @@ class AppData: ObservableObject {
 
     // MARK: - Persist
 
-    /// The library is small, so each save simply rewrites the table; this
-    /// keeps ordering, edits, and deletions correct without diffing.
+    /// Upserts by id instead of rewriting the table so CloudKit only syncs
+    /// the records that actually changed.
     private func persistColors(_ list: [ColorViewModel]) {
         guard let context = container?.mainContext else { return }
-        try? context.delete(model: StoredColor.self)
+        let existing = (try? context.fetch(FetchDescriptor<StoredColor>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
         for (index, color) in list.enumerated() {
-            context.insert(StoredColor(
-                id: color.id,
-                name: color.name,
-                hex: color.HEX,
-                usedInPalette: color.usedInPalette,
-                isFavorite: color.isFavorite,
-                sortIndex: index
-            ))
+            if let stored = byID.removeValue(forKey: color.id) {
+                if stored.name != color.name { stored.name = color.name }
+                if stored.hex != color.HEX { stored.hex = color.HEX }
+                if stored.usedInPalette != color.usedInPalette { stored.usedInPalette = color.usedInPalette }
+                if stored.isFavorite != color.isFavorite { stored.isFavorite = color.isFavorite }
+                if stored.sortIndex != index { stored.sortIndex = index }
+            } else {
+                context.insert(StoredColor(
+                    id: color.id,
+                    name: color.name,
+                    hex: color.HEX,
+                    usedInPalette: color.usedInPalette,
+                    isFavorite: color.isFavorite,
+                    sortIndex: index
+                ))
+            }
         }
-        try? context.save()
+        for orphan in byID.values { context.delete(orphan) }
+        if context.hasChanges { try? context.save() }
     }
 
     private func persistPalettes(_ list: [PaletteViewModel]) {
         guard let context = container?.mainContext else { return }
-        try? context.delete(model: StoredPalette.self)
+        let existing = (try? context.fetch(FetchDescriptor<StoredPalette>())) ?? []
+        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
         for (index, palette) in list.enumerated() {
-            context.insert(StoredPalette(
-                id: palette.id,
-                name: palette.name,
-                hexCodes: palette.hexCodes,
-                colorNames: palette.colorNames,
-                isFavorite: palette.isFavorite,
-                sortIndex: index
-            ))
+            if let stored = byID.removeValue(forKey: palette.id) {
+                if stored.name != palette.name { stored.name = palette.name }
+                if stored.hexCodes != palette.hexCodes { stored.hexCodes = palette.hexCodes }
+                if stored.colorNames != palette.colorNames { stored.colorNames = palette.colorNames }
+                if stored.isFavorite != palette.isFavorite { stored.isFavorite = palette.isFavorite }
+                if stored.sortIndex != index { stored.sortIndex = index }
+            } else {
+                context.insert(StoredPalette(
+                    id: palette.id,
+                    name: palette.name,
+                    hexCodes: palette.hexCodes,
+                    colorNames: palette.colorNames,
+                    isFavorite: palette.isFavorite,
+                    sortIndex: index
+                ))
+            }
         }
-        try? context.save()
+        for orphan in byID.values { context.delete(orphan) }
+        if context.hasChanges { try? context.save() }
     }
 
     // MARK: - Favorites
