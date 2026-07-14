@@ -16,12 +16,20 @@ class AppData: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     init(inMemory: Bool = false) {
-        do {
-            let config = ModelConfiguration(isStoredInMemoryOnly: inMemory)
-            container = try ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: config)
-        } catch {
-            // Fall back to a session-only experience rather than crashing.
-            container = nil
+        if inMemory {
+            let config = ModelConfiguration(isStoredInMemoryOnly: true)
+            container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: config)
+        } else {
+            // Prefer iCloud-synced storage; fall back to a purely local store
+            // (e.g. entitlement missing or iCloud unavailable), then to a
+            // session-only experience rather than crashing.
+            let cloud = ModelConfiguration(cloudKitDatabase: .automatic)
+            if let cloudContainer = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: cloud) {
+                container = cloudContainer
+            } else {
+                let local = ModelConfiguration(cloudKitDatabase: .none)
+                container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: local)
+            }
         }
 
         load()
@@ -76,7 +84,8 @@ class AppData: ObservableObject {
                     name: $0.name,
                     color: Color(hex: $0.hex) ?? .gray,
                     HEX: $0.hex,
-                    usedInPalette: $0.usedInPalette
+                    usedInPalette: $0.usedInPalette,
+                    isFavorite: $0.isFavorite
                 )
             }
             palettes = storedPalettes.map { stored in
@@ -85,7 +94,8 @@ class AppData: ObservableObject {
                     name: stored.name,
                     colors: stored.hexCodes.map { Color(hex: $0) ?? .gray },
                     hexCodes: stored.hexCodes,
-                    colorNames: stored.colorNames
+                    colorNames: stored.colorNames,
+                    isFavorite: stored.isFavorite
                 )
             }
         }
@@ -104,6 +114,7 @@ class AppData: ObservableObject {
                 name: color.name,
                 hex: color.HEX,
                 usedInPalette: color.usedInPalette,
+                isFavorite: color.isFavorite,
                 sortIndex: index
             ))
         }
@@ -119,10 +130,31 @@ class AppData: ObservableObject {
                 name: palette.name,
                 hexCodes: palette.hexCodes,
                 colorNames: palette.colorNames,
+                isFavorite: palette.isFavorite,
                 sortIndex: index
             ))
         }
         try? context.save()
+    }
+
+    // MARK: - Favorites
+
+    /// Stars every id in `ids`; if they are all already starred, clears them
+    /// instead (matching the toggle behaviour of Mail's flag button).
+    func setColorsFavorite(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let allFavorite = colors.filter { ids.contains($0.id) }.allSatisfy(\.isFavorite)
+        for i in colors.indices where ids.contains(colors[i].id) {
+            colors[i].isFavorite = !allFavorite
+        }
+    }
+
+    func setPalettesFavorite(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let allFavorite = palettes.filter { ids.contains($0.id) }.allSatisfy(\.isFavorite)
+        for i in palettes.indices where ids.contains(palettes[i].id) {
+            palettes[i].isFavorite = !allFavorite
+        }
     }
 
     // MARK: - Sample Data (first launch only)
