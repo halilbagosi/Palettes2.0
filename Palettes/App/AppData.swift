@@ -104,11 +104,17 @@ class AppData: ObservableObject {
     // MARK: - Persist
 
     /// Upserts by id instead of rewriting the table so CloudKit only syncs
-    /// the records that actually changed.
+    /// the records that actually changed. Duplicate-id records (which CloudKit
+    /// can create when two devices insert before first sync) are deleted on
+    /// the next save.
     private func persistColors(_ list: [ColorViewModel]) {
         guard let context = container?.mainContext else { return }
         let existing = (try? context.fetch(FetchDescriptor<StoredColor>())) ?? []
-        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byID: [UUID: StoredColor] = [:]
+        var duplicates: [StoredColor] = []
+        for item in existing {
+            if byID[item.id] != nil { duplicates.append(item) } else { byID[item.id] = item }
+        }
 
         for (index, color) in list.enumerated() {
             if let stored = byID.removeValue(forKey: color.id) {
@@ -128,6 +134,7 @@ class AppData: ObservableObject {
                 ))
             }
         }
+        for duplicate in duplicates { context.delete(duplicate) }
         for orphan in byID.values { context.delete(orphan) }
         if context.hasChanges { try? context.save() }
     }
@@ -135,7 +142,11 @@ class AppData: ObservableObject {
     private func persistPalettes(_ list: [PaletteViewModel]) {
         guard let context = container?.mainContext else { return }
         let existing = (try? context.fetch(FetchDescriptor<StoredPalette>())) ?? []
-        var byID = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var byID: [UUID: StoredPalette] = [:]
+        var duplicates: [StoredPalette] = []
+        for item in existing {
+            if byID[item.id] != nil { duplicates.append(item) } else { byID[item.id] = item }
+        }
 
         for (index, palette) in list.enumerated() {
             if let stored = byID.removeValue(forKey: palette.id) {
@@ -155,6 +166,7 @@ class AppData: ObservableObject {
                 ))
             }
         }
+        for duplicate in duplicates { context.delete(duplicate) }
         for orphan in byID.values { context.delete(orphan) }
         if context.hasChanges { try? context.save() }
     }
