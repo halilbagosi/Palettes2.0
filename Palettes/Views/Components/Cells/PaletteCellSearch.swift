@@ -13,6 +13,8 @@ struct PaletteCellSearch: View {
     let paletteName: String
     let colors: [Color]
     var highlight: String = ""
+    /// When provided, the trailing color-count pill is replaced by a copy button.
+    var onCopy: (() -> Void)? = nil
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -26,27 +28,22 @@ struct PaletteCellSearch: View {
                 }
             }
 
-            GlassEffectContainer(spacing: 10) {
+            GlassContainer(spacing: 10) {
                 HStack(spacing: 10) {
                     Text(highlightedText(paletteName, matching: highlight))
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .glassEffect(.regular, in: .capsule)
+                        .liquidGlass(.regular, in: .capsule)
 
                     Spacer(minLength: 0)
 
-                    HStack(spacing: 4) {
-                        Text("\(colors.count)")
-                            .font(.caption.weight(.semibold))
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                    if let onCopy {
+                        copyButton(onCopy)
+                    } else {
+                        countPill
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .glassEffect(.regular, in: .capsule)
                 }
             }
             .padding(8)
@@ -56,6 +53,31 @@ struct PaletteCellSearch: View {
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    private var countPill: some View {
+        HStack(spacing: 4) {
+            Text("\(colors.count)")
+                .font(.caption.weight(.semibold))
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .liquidGlass(.regular, in: .capsule)
+    }
+
+    private func copyButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "doc.on.doc")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .liquidGlass(.interactive, in: .circle)
+        .accessibilityLabel("Copy HEX")
     }
 }
 

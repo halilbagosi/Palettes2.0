@@ -48,7 +48,7 @@ struct PaletteEmptyView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 18)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                    .liquidGlass(.regular, in: .rect(cornerRadius: 22))
                     .padding(.horizontal, 32)
 
                 if let actionTitle {
@@ -60,7 +60,7 @@ struct PaletteEmptyView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                     }
-                    .buttonStyle(.glassProminent)
+                    .glassButton(prominent: true)
                     .tint(.accentColor)
                 }
             }

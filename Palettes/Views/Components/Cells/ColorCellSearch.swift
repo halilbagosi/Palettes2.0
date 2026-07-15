@@ -14,24 +14,35 @@ struct ColorCellSearch: View {
     let hexCode: String
     let color: Color
     var highlight: String = ""
+    /// When provided, a copy button is shown in the trailing corner.
+    var onCopy: (() -> Void)? = nil
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Rectangle()
                 .fill(color.gradient)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(highlightedText(colorName, matching: highlight))
-                    .font(.footnote.weight(.semibold))
-                    .lineLimit(1)
-                Text(highlightedText(hexCode, matching: highlight))
-                    .font(.system(.caption2, design: .monospaced).weight(.medium))
-                    .foregroundStyle(.secondary)
+            GlassContainer(spacing: 10) {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(highlightedText(colorName, matching: highlight))
+                            .font(.footnote.weight(.semibold))
+                            .lineLimit(1)
+                        Text(highlightedText(hexCode, matching: highlight))
+                            .font(.system(.caption2, design: .monospaced).weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .liquidGlass(.regular, in: .capsule)
+
+                    if let onCopy {
+                        Spacer(minLength: 0)
+                        copyButton(onCopy)
+                    }
+                }
+                .padding(8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .glassEffect(.regular, in: .capsule)
-            .padding(8)
         }
         .frame(height: 118)
         // Card radius = pill capsule radius (~20) + 8pt inset, so the pill
@@ -39,6 +50,18 @@ struct ColorCellSearch: View {
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    private func copyButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "doc.on.doc")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .liquidGlass(.interactive, in: .circle)
+        .accessibilityLabel("Copy HEX")
     }
 }
 

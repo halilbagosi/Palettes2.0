@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import FoundationModels
 
+@available(iOS 26.0, *)
 struct GenerateView: View {
     @EnvironmentObject var appData: AppData
 
@@ -149,7 +150,7 @@ struct GenerateView: View {
             showsProgress: true
         )
         .matchedGeometryEffect(id: "orb", in: orbNamespace)
-        .frame(width: 340, height: 340)
+        .frame(width: 260, height: 260)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
@@ -394,7 +395,7 @@ struct GenerateView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .liquidGlass(.interactive, in: .capsule)
 
             if !vibeFocused {
                 imageMenuButton
@@ -428,7 +429,7 @@ struct GenerateView: View {
     // MARK: - Generate Button
 
     private var generateBar: some View {
-        GlassEffectContainer(spacing: 16) {
+        GlassContainer(spacing: 16) {
             HStack(spacing: 16) {
                 Button {
                     startGeneration()
@@ -438,7 +439,7 @@ struct GenerateView: View {
                         .padding(.horizontal, 24)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.glassProminent)
+                .glassButton(prominent: true)
                 .disabled(!hasInput)
                 .keyboardShortcut(.return, modifiers: .command)
             }
@@ -473,7 +474,7 @@ struct GenerateView: View {
             }
         }
         .padding(8)
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
         .transition(.scale.combined(with: .opacity))
     }
 
@@ -495,7 +496,7 @@ struct GenerateView: View {
                 .frame(width: 44, height: 44)
                 .foregroundColor(.accentColor)
                 .contentShape(Circle())
-                .glassEffect(.regular.interactive(), in: .circle)
+                .liquidGlass(.interactive, in: .circle)
         }
         .clipShape(Circle())
         .onChange(of: photosPickerItem) { _, newItem in
@@ -602,6 +603,7 @@ struct GenerateView: View {
 }
 
 /// Orb + description text at the top of the form.
+@available(iOS 26.0, *)
 private struct GenerateHeaderView: View {
     let showsOrb: Bool
     let orbDiameter: CGFloat
@@ -633,6 +635,8 @@ private struct GenerateHeaderView: View {
 }
 
 #Preview {
-    GenerateView()
-        .environmentObject(AppData())
+    if #available(iOS 26.0, *) {
+        GenerateView()
+            .environmentObject(AppData())
+    }
 }

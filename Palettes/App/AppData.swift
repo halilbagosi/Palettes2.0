@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 import SwiftData
+import CoreData
+import UIKit
 
 @MainActor
 class AppData: ObservableObject {
@@ -15,13 +17,29 @@ class AppData: ObservableObject {
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []
 
+    /// True while the published arrays are being replaced from the store, so
+    /// the debounced persistence sinks don't write back what was just read.
+    private var isReloading = false
+
+    /// Pending task that clears `isReloading`; cancelled and replaced on each
+    /// reload so the flag clears 600 ms after the most recent one.
+    private var reloadResetTask: Task<Void, Never>?
+
     init(inMemory: Bool = false) {
-        do {
-            let config = ModelConfiguration(isStoredInMemoryOnly: inMemory)
-            container = try ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: config)
-        } catch {
-            // Fall back to a session-only experience rather than crashing.
-            container = nil
+        if inMemory {
+            let config = ModelConfiguration(isStoredInMemoryOnly: true)
+            container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: config)
+        } else {
+            // Prefer iCloud-synced storage; fall back to a purely local store
+            // (e.g. entitlement missing or iCloud unavailable), then to a
+            // session-only experience rather than crashing.
+            let cloud = ModelConfiguration(cloudKitDatabase: .automatic)
+            if let cloudContainer = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: cloud) {
+                container = cloudContainer
+            } else {
+                let local = ModelConfiguration(cloudKitDatabase: .none)
+                container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: local)
+            }
         }
 
         load()
@@ -32,7 +50,8 @@ class AppData: ObservableObject {
             .dropFirst()
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] updated in
-                Task { @MainActor in self?.persistColors(updated) }
+                guard let self, !self.isReloading else { return }
+                Task { @MainActor in self.persistColors(updated) }
             }
             .store(in: &cancellables)
 
@@ -40,12 +59,45 @@ class AppData: ObservableObject {
             .dropFirst()
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] updated in
-                Task { @MainActor in self?.persistPalettes(updated) }
+                guard let self, !self.isReloading else { return }
+                Task { @MainActor in self.persistPalettes(updated) }
             }
+            .store(in: &cancellables)
+
+        // Reload when CloudKit finishes importing changes from another
+        // device, and on foregrounding as a safety net.
+        NotificationCenter.default.publisher(for: NSPersistentCloudKitContainer.eventChangedNotification)
+            .compactMap { note in
+                note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                    as? NSPersistentCloudKitContainer.Event
+            }
+            .filter { $0.type == .import && $0.endDate != nil }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.reloadFromStore() }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.reloadFromStore() }
             .store(in: &cancellables)
     }
 
     // MARK: - Load
+
+    /// Refetches the store and replaces the published arrays without
+    /// triggering a write-back. The flag outlives the sinks' 300 ms debounce
+    /// and clears 600 ms after the most recent reload.
+    private func reloadFromStore() {
+        guard container != nil else { return }
+        isReloading = true
+        load()
+        reloadResetTask?.cancel()
+        reloadResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            self.isReloading = false
+        }
+    }
 
     private func load() {
         guard let context = container?.mainContext else {
@@ -63,29 +115,39 @@ class AppData: ObservableObject {
 
         let didSeed = UserDefaults.standard.bool(forKey: "didSeedSampleData")
         if storedColors.isEmpty && storedPalettes.isEmpty && !didSeed {
-            // First launch: start from the sample library.
+            // First launch with an empty store: seed the sample library. On a
+            // new device whose iCloud data hasn't downloaded yet this may run
+            // once; the flag prevents repeats and synced records merge in on
+            // the next import event.
             colors = Self.sampleColors
             palettes = Self.samplePalettes
             UserDefaults.standard.set(true, forKey: "didSeedSampleData")
             persistColors(colors)
             persistPalettes(palettes)
         } else {
-            colors = storedColors.map {
+            var seenColorIDs = Set<UUID>()
+            let uniqueColors = storedColors.filter { seenColorIDs.insert($0.id).inserted }
+            var seenPaletteIDs = Set<UUID>()
+            let uniquePalettes = storedPalettes.filter { seenPaletteIDs.insert($0.id).inserted }
+
+            colors = uniqueColors.map {
                 ColorViewModel(
                     id: $0.id,
                     name: $0.name,
                     color: Color(hex: $0.hex) ?? .gray,
                     HEX: $0.hex,
-                    usedInPalette: $0.usedInPalette
+                    usedInPalette: $0.usedInPalette,
+                    isFavorite: $0.isFavorite
                 )
             }
-            palettes = storedPalettes.map { stored in
+            palettes = uniquePalettes.map { stored in
                 PaletteViewModel(
                     id: stored.id,
                     name: stored.name,
                     colors: stored.hexCodes.map { Color(hex: $0) ?? .gray },
                     hexCodes: stored.hexCodes,
-                    colorNames: stored.colorNames
+                    colorNames: stored.colorNames,
+                    isFavorite: stored.isFavorite
                 )
             }
         }
@@ -93,36 +155,92 @@ class AppData: ObservableObject {
 
     // MARK: - Persist
 
-    /// The library is small, so each save simply rewrites the table; this
-    /// keeps ordering, edits, and deletions correct without diffing.
+    /// Upserts by id instead of rewriting the table so CloudKit only syncs
+    /// the records that actually changed. Duplicate-id records (which CloudKit
+    /// can create when two devices insert before first sync) are deleted on
+    /// the next save.
     private func persistColors(_ list: [ColorViewModel]) {
         guard let context = container?.mainContext else { return }
-        try? context.delete(model: StoredColor.self)
-        for (index, color) in list.enumerated() {
-            context.insert(StoredColor(
-                id: color.id,
-                name: color.name,
-                hex: color.HEX,
-                usedInPalette: color.usedInPalette,
-                sortIndex: index
-            ))
+        let existing = (try? context.fetch(FetchDescriptor<StoredColor>())) ?? []
+        var byID: [UUID: StoredColor] = [:]
+        var duplicates: [StoredColor] = []
+        for item in existing {
+            if byID[item.id] != nil { duplicates.append(item) } else { byID[item.id] = item }
         }
-        try? context.save()
+
+        for (index, color) in list.enumerated() {
+            if let stored = byID.removeValue(forKey: color.id) {
+                if stored.name != color.name { stored.name = color.name }
+                if stored.hex != color.HEX { stored.hex = color.HEX }
+                if stored.usedInPalette != color.usedInPalette { stored.usedInPalette = color.usedInPalette }
+                if stored.isFavorite != color.isFavorite { stored.isFavorite = color.isFavorite }
+                if stored.sortIndex != index { stored.sortIndex = index }
+            } else {
+                context.insert(StoredColor(
+                    id: color.id,
+                    name: color.name,
+                    hex: color.HEX,
+                    usedInPalette: color.usedInPalette,
+                    isFavorite: color.isFavorite,
+                    sortIndex: index
+                ))
+            }
+        }
+        for duplicate in duplicates { context.delete(duplicate) }
+        for orphan in byID.values { context.delete(orphan) }
+        if context.hasChanges { try? context.save() }
     }
 
     private func persistPalettes(_ list: [PaletteViewModel]) {
         guard let context = container?.mainContext else { return }
-        try? context.delete(model: StoredPalette.self)
-        for (index, palette) in list.enumerated() {
-            context.insert(StoredPalette(
-                id: palette.id,
-                name: palette.name,
-                hexCodes: palette.hexCodes,
-                colorNames: palette.colorNames,
-                sortIndex: index
-            ))
+        let existing = (try? context.fetch(FetchDescriptor<StoredPalette>())) ?? []
+        var byID: [UUID: StoredPalette] = [:]
+        var duplicates: [StoredPalette] = []
+        for item in existing {
+            if byID[item.id] != nil { duplicates.append(item) } else { byID[item.id] = item }
         }
-        try? context.save()
+
+        for (index, palette) in list.enumerated() {
+            if let stored = byID.removeValue(forKey: palette.id) {
+                if stored.name != palette.name { stored.name = palette.name }
+                if stored.hexCodes != palette.hexCodes { stored.hexCodes = palette.hexCodes }
+                if stored.colorNames != palette.colorNames { stored.colorNames = palette.colorNames }
+                if stored.isFavorite != palette.isFavorite { stored.isFavorite = palette.isFavorite }
+                if stored.sortIndex != index { stored.sortIndex = index }
+            } else {
+                context.insert(StoredPalette(
+                    id: palette.id,
+                    name: palette.name,
+                    hexCodes: palette.hexCodes,
+                    colorNames: palette.colorNames,
+                    isFavorite: palette.isFavorite,
+                    sortIndex: index
+                ))
+            }
+        }
+        for duplicate in duplicates { context.delete(duplicate) }
+        for orphan in byID.values { context.delete(orphan) }
+        if context.hasChanges { try? context.save() }
+    }
+
+    // MARK: - Favorites
+
+    /// Stars every id in `ids`; if they are all already starred, clears them
+    /// instead (matching the toggle behaviour of Mail's flag button).
+    func setColorsFavorite(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let allFavorite = colors.filter { ids.contains($0.id) }.allSatisfy(\.isFavorite)
+        for i in colors.indices where ids.contains(colors[i].id) {
+            colors[i].isFavorite = !allFavorite
+        }
+    }
+
+    func setPalettesFavorite(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let allFavorite = palettes.filter { ids.contains($0.id) }.allSatisfy(\.isFavorite)
+        for i in palettes.indices where ids.contains(palettes[i].id) {
+            palettes[i].isFavorite = !allFavorite
+        }
     }
 
     // MARK: - Sample Data (first launch only)

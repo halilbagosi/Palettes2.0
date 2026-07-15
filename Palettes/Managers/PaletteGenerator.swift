@@ -10,6 +10,7 @@ import FoundationModels
 
 // MARK: - Guided generation output types
 
+@available(iOS 26.0, *)
 @Generable
 struct GeneratedColor {
     @Guide(description: "A 6-digit RGB hex color code with a leading #, for example #4A90D9")
@@ -19,6 +20,7 @@ struct GeneratedColor {
     var name: String
 }
 
+@available(iOS 26.0, *)
 @Generable
 struct GeneratedPalette {
     @Guide(description: "A short, evocative two or three word name for the palette")
@@ -31,6 +33,7 @@ struct GeneratedPalette {
 // MARK: - Generator
 
 /// Generates complementary color palettes on-device using Foundation Models.
+@available(iOS 26.0, *)
 enum PaletteGenerator {
 
     struct BaseColor {

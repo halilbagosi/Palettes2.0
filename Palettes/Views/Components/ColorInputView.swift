@@ -159,7 +159,7 @@ struct ColorInputView: View {
                     .font(.headline)
                     .padding(10)
             }
-            .buttonStyle(.glassProminent)
+            .glassButton(prominent: true)
             .tint(.accentColor)
             .padding(.horizontal)
             .padding(.top, 16)
@@ -182,7 +182,7 @@ struct ColorInputView: View {
                             .font(.subheadline.weight(.medium))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
+                            .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
                     }
                     .buttonStyle(.plain)
                     .tint(.primary)
@@ -193,7 +193,7 @@ struct ColorInputView: View {
                         .font(.subheadline.weight(.medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
+                        .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
                 }
                 .tint(.primary)
             }
@@ -243,7 +243,7 @@ struct ColorInputView: View {
                 )
             }
             .padding(14)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
+            .liquidGlass(.regular, in: .rect(cornerRadius: 20))
             .padding(.horizontal)
 
             EditableValuesView(color: adjustedColor) { newColor in
@@ -261,7 +261,7 @@ struct ColorInputView: View {
             TextField("Color Name", text: $scanName)
                 .font(.system(size: 18, weight: .medium))
                 .padding()
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
                 .padding(.horizontal)
 
             Button {
@@ -271,7 +271,7 @@ struct ColorInputView: View {
                     .font(.headline)
                     .padding(10)
             }
-            .buttonStyle(.glassProminent)
+            .glassButton(prominent: true)
             .tint(.accentColor)
             .padding(.horizontal)
         }
@@ -281,7 +281,7 @@ struct ColorInputView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(.clear)
-                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                .liquidGlass(.regular, in: .rect(cornerRadius: 20))
 
             if let image = selectedImage {
                 Image(uiImage: image)
@@ -380,7 +380,7 @@ struct ColorInputView: View {
             }
         }
         .padding(10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
         .opacity(alreadyIn ? 0.55 : 1)
         .contentShape(Rectangle())
         .onTapGesture {

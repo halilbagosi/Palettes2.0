@@ -97,7 +97,14 @@ struct PaletteDetailView: View {
                     } label: {
                         Label("Edit Palette", systemImage: "pencil")
                     }
-                    
+
+                    Button {
+                        toggleFavorite()
+                    } label: {
+                        Label(livePalette.isFavorite ? "Remove Favorite" : "Favorite",
+                              systemImage: livePalette.isFavorite ? "star.slash" : "star")
+                    }
+
                     Button {
                         let hexes = livePalette.hexCodes.joined(separator: ", ")
                         copyToClipboard(hexes, label: "Copied HEX")
@@ -127,7 +134,23 @@ struct PaletteDetailView: View {
                     } label: {
                         Label("Export as CSS", systemImage: "curlybraces.square")
                     }
-                    
+
+                    Button {
+                        let colorVMs = livePalette.colors.indices.map { colorViewModel(at: $0, from: livePalette) }
+                        if let image = PaletteImageRenderer.renderImage(for: livePalette, colors: colorVMs) {
+                            presentShare(items: [image])
+                        }
+                    } label: {
+                        Label("Export as PNG", systemImage: "photo")
+                    }
+
+                    Button {
+                        let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
+                        presentShare(items: [textToShare])
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+
                     Divider()
                     
                     Button(role: .destructive) {
@@ -143,7 +166,7 @@ struct PaletteDetailView: View {
         .sheet(isPresented: $isEditingPalette) {
             PaletteEditSheet(paletteName: livePalette.name, palette: palette)
                 .environmentObject(appData)
-                .presentationSizing(.form)
+                .formPresentationSizing()
         }
         .alert("Delete Palette", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -155,6 +178,28 @@ struct PaletteDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete \"\(livePalette.name)\"?")
+        }
+    }
+
+    // MARK: - Actions
+
+    private func toggleFavorite() {
+        if let idx = paletteIndex {
+            appData.palettes[idx].isFavorite.toggle()
+        }
+    }
+
+    private func presentShare(items: [Any]) {
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+            activityVC.popoverPresentationController?.sourceView = topVC.view
+            activityVC.popoverPresentationController?.sourceRect = CGRect(x: topVC.view.bounds.maxX - 50, y: 0, width: 1, height: 1)
+            topVC.present(activityVC, animated: true)
         }
     }
 

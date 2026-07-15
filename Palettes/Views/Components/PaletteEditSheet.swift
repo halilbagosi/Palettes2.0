@@ -94,7 +94,7 @@ struct PaletteEditSheet: View {
                         Image(systemName: "plus")
                             .fontWeight(.semibold)
                     }
-                    .buttonStyle(.glassProminent)
+                    .glassButton(prominent: true)
                     .tint(.accentColor)
                 }
             }

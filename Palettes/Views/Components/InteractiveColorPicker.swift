@@ -44,7 +44,7 @@ struct InteractiveColorPicker: View {
             TextField("Color Name", text: $internalName)
                 .font(.system(size: 18, weight: .medium))
                 .padding()
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
                 .padding(.horizontal)
 
             // The Color Wheel
@@ -104,7 +104,7 @@ struct InteractiveColorPicker: View {
                     }
                 }
                 .padding(12)
-                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .liquidGlass(.regular, in: .rect(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(hexError ? Color.red : Color.clear, lineWidth: 1.5)
@@ -165,7 +165,7 @@ struct InteractiveColorPicker: View {
                 }
         }
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
     }
 
     private func syncComponentsToColor() {
