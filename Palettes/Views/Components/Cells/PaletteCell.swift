@@ -28,14 +28,14 @@ struct PaletteCell: View {
             }
 
             // Floating glass layer: name pill + copy + view pills
-            GlassEffectContainer(spacing: 10) {
+            GlassContainer(spacing: 10) {
                 HStack(spacing: 10) {
                     Text(paletteName)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
-                        .glassEffect(.regular, in: .capsule)
+                        .liquidGlass(.regular, in: .capsule)
 
                     Spacer(minLength: 0)
 
@@ -67,7 +67,7 @@ struct PaletteCell: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .liquidGlass(.interactive, in: .capsule)
     }
 
     private func copyButton(_ action: @escaping () -> Void) -> some View {
@@ -78,7 +78,7 @@ struct PaletteCell: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .liquidGlass(.interactive, in: .circle)
         .accessibilityLabel("Copy HEX")
     }
 }

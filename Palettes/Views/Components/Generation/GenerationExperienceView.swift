@@ -78,7 +78,7 @@ struct GenerationResultView: View {
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])
-                .presentationSizing(.form)
+                .formPresentationSizing()
             }
         }
         // The generator can return mismatched array lengths; keep names and
@@ -194,7 +194,7 @@ struct GenerationResultView: View {
             .accessibilityLabel("Remove color")
         }
         .padding(10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
     }
 
     private func removeColor(at index: Int) {
@@ -234,7 +234,7 @@ struct GenerationResultView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .liquidGlass(.interactive, in: .capsule)
         .animation(.spring(response: 0.3), value: changeText.isEmpty)
         .animation(.spring(response: 0.3), value: changeFocused)
     }
@@ -250,7 +250,7 @@ struct GenerationResultView: View {
     // MARK: - Actions
 
     private var actionBar: some View {
-        GlassEffectContainer(spacing: 16) {
+        GlassContainer(spacing: 16) {
             HStack(spacing: 16) {
                 Button {
                     onRegenerate()
@@ -260,7 +260,7 @@ struct GenerationResultView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.glass)
+                .glassButton()
 
                 Button {
                     onSave()
@@ -270,7 +270,7 @@ struct GenerationResultView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.glassProminent)
+                .glassButton(prominent: true)
             }
         }
     }

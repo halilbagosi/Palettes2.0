@@ -66,7 +66,7 @@ struct HueChip: View {
                     Capsule().fill(Color.accentColor)
                 }
             }
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .liquidGlass(.interactive, in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -106,7 +106,7 @@ struct RecentSearchesRow: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .liquidGlass(.interactive, in: .capsule)
                         }
                         .buttonStyle(.plain)
                     }
@@ -145,7 +145,7 @@ struct SearchEmptyLibraryView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
             }
-            .buttonStyle(.glassProminent)
+            .glassButton(prominent: true)
             .tint(.accentColor)
         }
         .frame(maxWidth: .infinity)

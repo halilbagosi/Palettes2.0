@@ -50,7 +50,7 @@ struct ToastOverlay: ViewModifier {
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)
-                    .glassEffect(.regular, in: .capsule)
+                    .liquidGlass(.regular, in: .capsule)
                     .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))

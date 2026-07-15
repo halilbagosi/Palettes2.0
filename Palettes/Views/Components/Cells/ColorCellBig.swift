@@ -41,11 +41,11 @@ struct ColorCellBig: View {
             .lineLimit(1)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .glassEffect(.regular, in: .capsule)
+            .liquidGlass(.regular, in: .capsule)
     }
 
     private var bottomBar: some View {
-        GlassEffectContainer(spacing: 10) {
+        GlassContainer(spacing: 10) {
             HStack(spacing: 10) {
                 hexPill
 
@@ -66,7 +66,7 @@ struct ColorCellBig: View {
             .lineLimit(1)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .glassEffect(.regular, in: .capsule)
+            .liquidGlass(.regular, in: .capsule)
     }
 
     private func viewPalettesButton(_ action: @escaping () -> Void) -> some View {
@@ -80,7 +80,7 @@ struct ColorCellBig: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .liquidGlass(.interactive, in: .capsule)
     }
 
     private var copyButton: some View {
@@ -93,7 +93,7 @@ struct ColorCellBig: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .liquidGlass(.interactive, in: .circle)
         .accessibilityLabel("Copy HEX")
     }
 }

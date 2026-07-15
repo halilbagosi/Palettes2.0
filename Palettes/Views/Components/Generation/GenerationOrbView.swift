@@ -47,7 +47,7 @@ struct GenerationOrbView: View {
                 // Clear glass shell — refracts whatever sits behind the orb
                 Circle()
                     .fill(.clear)
-                    .glassEffect(.clear, in: .circle)
+                    .liquidGlass(.clear, in: .circle)
                     .frame(width: diameter, height: diameter)
 
                 // Drawn above the liquid so it stays readable as colors arrive
@@ -56,8 +56,8 @@ struct GenerationOrbView: View {
             .frame(width: diameter, height: diameter)
         }
         .scaleEffect(
-            x: 1 + abs(squish.width) * malleability - abs(squish.height) * 0.12,
-            y: 1 + abs(squish.height) * malleability - abs(squish.width) * 0.12,
+            x: 1 + abs(squish.width) * malleability - abs(squish.height) * 0.06,
+            y: 1 + abs(squish.height) * malleability - abs(squish.width) * 0.06,
             anchor: stretchAnchor
         )
         .offset(effectiveOffset)
@@ -124,7 +124,7 @@ struct GenerationOrbView: View {
             ShaderLibrary.lensWarp(
                 .float2(Float(diameter / 2 + effectiveOffset.width), Float(diameter / 2 + effectiveOffset.height)),
                 .float(Float(diameter * 0.5)),
-                .float(Float(reduceMotion ? 0 : 0.55 * pullStrength))
+                .float(Float(reduceMotion ? 0 : 0.38 * pullStrength))
             ),
             maxSampleOffset: CGSize(width: 70, height: 70)
         )
@@ -134,14 +134,14 @@ struct GenerationOrbView: View {
     // MARK: - Deformation
 
     /// How far the orb leans/stretches toward the finger.
-    private let malleability: CGFloat = 0.35
+    private let malleability: CGFloat = 0.18
 
     /// Normalized stretch amount from the current drag, capped so the orb
     /// deforms gently rather than tearing apart.
     private var squish: CGSize {
         CGSize(
-            width: max(-1, min(1, dragOffset.width / 220)),
-            height: max(-1, min(1, dragOffset.height / 220))
+            width: max(-1, min(1, dragOffset.width / 300)),
+            height: max(-1, min(1, dragOffset.height / 300))
         )
     }
 

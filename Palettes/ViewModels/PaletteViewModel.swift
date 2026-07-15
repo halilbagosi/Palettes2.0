@@ -14,6 +14,7 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
     var colors: [Color]
     var hexCodes: [String] = []
     var colorNames: [String] = []
+    var isFavorite: Bool = false
 
     static func == (lhs: PaletteViewModel, rhs: PaletteViewModel) -> Bool {
         lhs.id == rhs.id

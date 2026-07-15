@@ -164,14 +164,14 @@ struct ColorDetailView: View {
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])
-                .presentationSizing(.form)
+                .formPresentationSizing()
             }
         }
         .sheet(isPresented: $isCreatingPalette) {
             NewPaletteView(preselectedColor: liveColor)
                 .environmentObject(appData)
                 .presentationDetents([.large])
-                .presentationSizing(.form)
+                .formPresentationSizing()
         }
         .alert("Delete Color", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -212,7 +212,7 @@ struct ColorDetailView: View {
             .accessibilityLabel("Copy \(label)")
         }
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
     }
 
     private var emptyPalettesSection: some View {
@@ -232,20 +232,22 @@ struct ColorDetailView: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .liquidGlass(.interactive, in: .capsule)
 
-                Button {
-                    appData.pendingGenerateColorID = liveColor.id
-                    appData.activeTab = .generate
-                } label: {
-                    Label("Generate Palette", systemImage: "sparkles")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .contentShape(Capsule())
+                if #available(iOS 26.0, *) {
+                    Button {
+                        appData.pendingGenerateColorID = liveColor.id
+                        appData.activeTab = .generate
+                    } label: {
+                        Label("Generate Palette", systemImage: "sparkles")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlass(.interactive, in: .capsule)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
             }
         }
         .frame(maxWidth: .infinity)

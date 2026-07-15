@@ -72,7 +72,7 @@ struct ColorEditView: View {
                             .font(.system(size: 24, weight: .bold))
                             .multilineTextAlignment(.center)
                             .padding(.vertical, 8)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                            .liquidGlass(.regular, in: .rect(cornerRadius: 12))
                     }
                     .padding(.horizontal)
                     
@@ -137,7 +137,7 @@ struct ColorEditView: View {
                             )
                         }
                         .padding(14)
-                        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                        .liquidGlass(.regular, in: .rect(cornerRadius: 20))
                         .padding(.horizontal)
                     }
                     
@@ -172,7 +172,7 @@ struct ColorEditView: View {
                                     .autocorrectionDisabled()
                             }
                             .padding(12)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                            .liquidGlass(.regular, in: .rect(cornerRadius: 12))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(hexError ? Color.red : Color.clear, lineWidth: 1.5)
@@ -211,7 +211,7 @@ struct ColorEditView: View {
                     Button("Save") {
                         handleSaveTapped()
                     }
-                    .buttonStyle(.glassProminent)
+                    .glassButton(prominent: true)
                     .fontWeight(.semibold)
                 }
             }
@@ -267,7 +267,7 @@ struct ColorEditView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
     }
     
     // MARK: - Logic

@@ -32,7 +32,7 @@ struct NewPaletteView: View {
                     TextField("Palette Name", text: $paletteName)
                         .font(.system(size: 18, weight: .medium))
                         .padding()
-                        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
                         .padding(.horizontal)
                         .padding(.top, 16)
 
@@ -86,7 +86,7 @@ struct NewPaletteView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { createPalette() }
-                        .buttonStyle(.glassProminent)
+                        .glassButton(prominent: true)
                         .fontWeight(.semibold)
                         .disabled(!canCreate)
                 }
@@ -138,7 +138,7 @@ struct NewPaletteView: View {
                     Spacer()
                 }
                 .frame(height: 70)
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
                 .padding(.horizontal)
                 .padding(.top, 12)
                 // Vanish instantly when the first color arrives — a fading
@@ -223,7 +223,7 @@ struct NewPaletteView: View {
             .accessibilityLabel("Remove color")
         }
         .padding(10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
     }
 
     private func colorNameBinding(for index: Int) -> Binding<String> {
