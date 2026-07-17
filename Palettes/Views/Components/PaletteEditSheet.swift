@@ -118,14 +118,14 @@ struct PaletteEditSheet: View {
             )) { wrapper in
                 if let paletteIdx = paletteIndex {
                     ColorEditView(
-                        colorName: $appData.palettes[paletteIdx].colorNames[wrapper.id],
-                        hexCode: $appData.palettes[paletteIdx].hexCodes[wrapper.id],
-                        colorValue: $appData.palettes[paletteIdx].colors[wrapper.id],
+                        colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
+                        hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
+                        colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
                         promptOnNameMatch: true,
                         onSaveWithAction: { isOverwrite in
-                            let updatedHex = appData.palettes[paletteIdx].hexCodes[wrapper.id]
-                            let updatedName = appData.palettes[paletteIdx].colorNames[wrapper.id]
-                            let updatedColor = appData.palettes[paletteIdx].colors[wrapper.id]
+                            let updatedHex = appData.palettes[paletteIdx].paletteColors[wrapper.id].hex
+                            let updatedName = appData.palettes[paletteIdx].paletteColors[wrapper.id].name
+                            let updatedColor = appData.palettes[paletteIdx].paletteColors[wrapper.id].color
                             
                             if isOverwrite {
                                 if let existingIndex = appData.colors.firstIndex(where: { $0.name == updatedName }) {
@@ -151,11 +151,7 @@ struct PaletteEditSheet: View {
 
     private func removeColors(at offsets: IndexSet) {
         guard let idx = paletteIndex else { return }
-        appData.palettes[idx].colors.remove(atOffsets: offsets)
-        let hexValid = offsets.filter { $0 < appData.palettes[idx].hexCodes.count }
-        appData.palettes[idx].hexCodes.remove(atOffsets: IndexSet(hexValid))
-        let nameValid = offsets.filter { $0 < appData.palettes[idx].colorNames.count }
-        appData.palettes[idx].colorNames.remove(atOffsets: IndexSet(nameValid))
+        appData.palettes[idx].paletteColors.remove(atOffsets: offsets)
     }
 
     private func colorViewModel(at index: Int, from pal: PaletteViewModel) -> ColorViewModel {

@@ -276,15 +276,13 @@ struct ColorDetailView: View {
         let color = liveColor
         withAnimation(.spring()) {
             for i in appData.palettes.indices {
-                if let colorIndex = appData.palettes[i].hexCodes.firstIndex(where: {
-                    $0.caseInsensitiveCompare(color.HEX) == .orderedSame
+                if let colorIndex = appData.palettes[i].paletteColors.firstIndex(where: {
+                    $0.hex.caseInsensitiveCompare(color.HEX) == .orderedSame
                 }) {
-                    appData.palettes[i].colors.remove(at: colorIndex)
-                    appData.palettes[i].hexCodes.remove(at: colorIndex)
-                    appData.palettes[i].colorNames.remove(at: colorIndex)
+                    appData.palettes[i].paletteColors.remove(at: colorIndex)
                 }
             }
-            appData.palettes.removeAll { $0.colors.isEmpty }
+            appData.palettes.removeAll { $0.paletteColors.isEmpty }
             appData.colors.removeAll { $0.id == color.id }
         }
         dismiss()
