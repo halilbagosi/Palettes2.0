@@ -223,23 +223,46 @@ class AppData: ObservableObject {
         if context.hasChanges { try? context.save() }
     }
 
+    // MARK: - Duplicate checks
+
+    /// Returns an existing palette containing the same colors (hex codes,
+    /// order- and case-insensitive), if any.
+    func existingPalette(matching hexes: [String]) -> PaletteViewModel? {
+        let normalized = Set(hexes.map { $0.lowercased() })
+        guard !normalized.isEmpty else { return nil }
+        return palettes.first { Set($0.hexCodes.map { $0.lowercased() }) == normalized }
+    }
+
+    /// Returns the library color with this hex, if any.
+    func existingColor(hex: String) -> ColorViewModel? {
+        colors.first { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
+    }
+
+    /// Returns the palette with this name (case-insensitive), if any.
+    func existingPalette(named name: String) -> PaletteViewModel? {
+        palettes.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    /// Returns the library color with this name (case-insensitive), if any.
+    func existingColor(named name: String) -> ColorViewModel? {
+        colors.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
     // MARK: - Favorites
 
-    /// Stars every id in `ids`; if they are all already starred, clears them
-    /// instead (matching the toggle behaviour of Mail's flag button).
-    func setColorsFavorite(_ ids: Set<UUID>) {
+    /// Sets every id in `ids` to `favorite`. The direction is decided by the
+    /// caller (from the first-selected item's current state).
+    func setColorsFavorite(_ ids: Set<UUID>, favorite: Bool) {
         guard !ids.isEmpty else { return }
-        let allFavorite = colors.filter { ids.contains($0.id) }.allSatisfy(\.isFavorite)
         for i in colors.indices where ids.contains(colors[i].id) {
-            colors[i].isFavorite = !allFavorite
+            colors[i].isFavorite = favorite
         }
     }
 
-    func setPalettesFavorite(_ ids: Set<UUID>) {
+    func setPalettesFavorite(_ ids: Set<UUID>, favorite: Bool) {
         guard !ids.isEmpty else { return }
-        let allFavorite = palettes.filter { ids.contains($0.id) }.allSatisfy(\.isFavorite)
         for i in palettes.indices where ids.contains(palettes[i].id) {
-            palettes[i].isFavorite = !allFavorite
+            palettes[i].isFavorite = favorite
         }
     }
 

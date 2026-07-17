@@ -13,15 +13,15 @@ without `xcodebuild` do the file work and report verification as pending.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Test baseline: PalettesTests target + shared scheme + first suites | P1 | M | — | TODO |
-| 002 | Persistence hardening: dropped edits, orphan deletion, swallowed saves | P1 | M | 001 | TODO |
-| 003 | Replace palette parallel arrays with `PaletteColor` struct | P1 | M–L | 001 (land after 002) | TODO |
-| 004 | Release APNs environment for CloudKit sync | P2 | S | — | TODO |
-| 005 | Hex parser: accept 3/4/8-digit input | P2 | S | 001 | TODO |
-| 008 | DX & hygiene: CI, lint, CLAUDE.md, xcuserdata, README | P2 | M | 001 (test job only) | TODO |
-| 009 | Coolors-style palette export (code/URL/SVG, then ASE/PDF) | P2 | L | 001; adapt if 003 landed | TODO |
-| 006 | Cache ColorNamer Lab table | P3 | S | 001 | TODO |
-| 007 | Generation error handling (cancellation vs failure) | P3 | S | — (tests need 001) | TODO |
+| 001 | Test baseline: PalettesTests target + shared scheme + first suites | P1 | M | — | DONE (26 tests; xcodebuild run pending Xcode machine; worktree-agent-a255c877f77349356 @ c17e55e) |
+| 002 | Persistence hardening: dropped edits, orphan deletion, swallowed saves | P1 | M | 001 | DONE (worktree-agent-ab1c9c556bf772222 @ a2d1016; xcodebuild pending) |
+| 003 | Replace palette parallel arrays with `PaletteColor` struct | P1 | M–L | 001 (land after 002) | DONE (worktree-agent-a4e6263a7fdd5a78e @ 29c9595; xcodebuild pending) |
+| 004 | Release APNs environment for CloudKit sync | P2 | S | — | DONE (docs branch: signing is Automatic; see worktree-agent-afc11761f283195d3) |
+| 005 | Hex parser: accept 3/4/8-digit input | P2 | S | 001 | DONE (worktree-agent-a3275f7e2ab9abd8f @ bc61000; xcodebuild pending) |
+| 008 | DX & hygiene: CI, lint, CLAUDE.md, xcuserdata, README | P2 | M | 001 (test job only) | DONE (worktree-agent-a2a2f6730fb3c7b43 @ 0560eda) |
+| 009 | Coolors-style palette export (code/URL/SVG, then ASE/PDF) | P2 | L | 001; adapt if 003 landed | DONE (both phases; worktree-agent-a032e1cf140d53a21 @ d56eaec; xcodebuild pending) |
+| 006 | Cache ColorNamer Lab table | P3 | S | 001 | DONE (worktree-agent-a0e618002875b070e @ 322c991; xcodebuild pending) |
+| 007 | Generation error handling (cancellation vs failure) | P3 | S | — (tests need 001) | DONE (compile check pending Xcode machine; worktree-agent-a147a0d71621e02df) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

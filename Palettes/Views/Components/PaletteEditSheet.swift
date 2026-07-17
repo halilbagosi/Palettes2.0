@@ -81,6 +81,8 @@ struct PaletteEditSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // Sheets cover the app-root toast overlay, so host one here too.
+            .toastOverlay()
             .navigationTitle("Edit Palette")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -151,11 +153,38 @@ struct PaletteEditSheet: View {
 
     private func removeColors(at offsets: IndexSet) {
         guard let idx = paletteIndex else { return }
+        let paletteID = palette.id
+        let pal = appData.palettes[idx]
+        // Capture each removed entry (ascending indices) so Undo can reinsert
+        // them at their original spots.
+        let removed: [(index: Int, color: Color, hex: String?, name: String?)] = offsets.sorted().map { i in
+            (i,
+             pal.colors[i],
+             i < pal.hexCodes.count ? pal.hexCodes[i] : nil,
+             i < pal.colorNames.count ? pal.colorNames[i] : nil)
+        }
         appData.palettes[idx].colors.remove(atOffsets: offsets)
         let hexValid = offsets.filter { $0 < appData.palettes[idx].hexCodes.count }
         appData.palettes[idx].hexCodes.remove(atOffsets: IndexSet(hexValid))
         let nameValid = offsets.filter { $0 < appData.palettes[idx].colorNames.count }
         appData.palettes[idx].colorNames.remove(atOffsets: IndexSet(nameValid))
+
+        let count = removed.count
+        ToastManager.shared.show(count == 1 ? "Color removed" : "\(count) colors removed", icon: "trash.fill") { [weak appData] in
+            guard let appData,
+                  let idx = appData.palettes.firstIndex(where: { $0.id == paletteID }) else { return }
+            withAnimation(.spring()) {
+                for entry in removed {
+                    appData.palettes[idx].colors.insert(entry.color, at: min(entry.index, appData.palettes[idx].colors.count))
+                    if let hex = entry.hex {
+                        appData.palettes[idx].hexCodes.insert(hex, at: min(entry.index, appData.palettes[idx].hexCodes.count))
+                    }
+                    if let name = entry.name {
+                        appData.palettes[idx].colorNames.insert(name, at: min(entry.index, appData.palettes[idx].colorNames.count))
+                    }
+                }
+            }
+        }
     }
 
     private func colorViewModel(at index: Int, from pal: PaletteViewModel) -> ColorViewModel {

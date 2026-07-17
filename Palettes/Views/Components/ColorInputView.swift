@@ -19,6 +19,16 @@ enum ScanExtraction {
     case palette(count: Int)
 }
 
+/// Lets a host drive the add action from its own UI (e.g. a toolbar Create
+/// button) instead of the inline bottom button. The view keeps `canAdd`
+/// current and points `submit` at the active source's add action.
+@MainActor
+@Observable
+final class ColorInputController {
+    var canAdd = false
+    @ObservationIgnored var submit: () -> Void = {}
+}
+
 /// Shared color input surface used by the palette create/add sheets.
 /// Hosts own the draft; this view resolves colors and reports them via `onAdd`
 /// (single colors) and `onScanPalette` (multi-color image extraction).
@@ -33,6 +43,12 @@ struct ColorInputView: View {
     var addButtonTitle: String = "Add Color"
     var onAdd: (ColorInputEntry) -> Void
     var onScanPalette: (([ColorInputEntry]) -> Void)? = nil
+    var showsAddButton: Bool = true
+    var controller: ColorInputController? = nil
+
+    // isSourceTypeAvailable(.camera) probes capture hardware and is slow;
+    // calling it during body evaluation makes every keystroke pay for it.
+    private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
     @EnvironmentObject var appData: AppData
 
@@ -108,9 +124,14 @@ struct ColorInputView: View {
                 source = initialSource ?? sources.first ?? .pick
                 didSetInitialSource = true
             }
+            controller?.submit = { submitCurrentSource() }
+            controller?.canAdd = canAddCurrentSource
         }
         .onChange(of: source) { _, newValue in
             if newValue == .scan { showTrueToneAlert = true }
+        }
+        .onChange(of: canAddCurrentSource) { _, newValue in
+            controller?.canAdd = newValue
         }
         .onChange(of: currentHEX) { _, _ in
             if source == .pick { autoFillPickName() }
@@ -152,18 +173,20 @@ struct ColorInputView: View {
                 hexError: $hexError
             )
 
-            Button {
-                addFromPick()
-            } label: {
-                Label(addButtonTitle, systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .padding(10)
+            if showsAddButton {
+                Button {
+                    addFromPick()
+                } label: {
+                    Label(addButtonTitle, systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .padding(10)
+                }
+                .glassButton(prominent: true)
+                .tint(.accentColor)
+                .padding(.horizontal)
+                .padding(.top, 16)
+                .disabled(currentHEX.count != 6 || hexError)
             }
-            .glassButton(prominent: true)
-            .tint(.accentColor)
-            .padding(.horizontal)
-            .padding(.top, 16)
-            .disabled(currentHEX.count != 6 || hexError)
         }
     }
 
@@ -174,7 +197,7 @@ struct ColorInputView: View {
             photoArea
 
             HStack(spacing: 12) {
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                if Self.cameraAvailable {
                     Button {
                         showCamera = true
                     } label: {
@@ -219,6 +242,12 @@ struct ColorInputView: View {
                 .animation(.easeOut(duration: 0.15), value: saturationValue)
                 .animation(.easeOut(duration: 0.15), value: brightnessValue)
 
+            TextField("Color Name", text: $scanName)
+                .font(.system(size: 18, weight: .medium))
+                .padding()
+                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+                .padding(.horizontal)
+
             VStack(spacing: 18) {
                 AdjustmentSlider(
                     title: "Temperature",
@@ -258,22 +287,18 @@ struct ColorInputView: View {
             }
             .padding(.horizontal)
 
-            TextField("Color Name", text: $scanName)
-                .font(.system(size: 18, weight: .medium))
-                .padding()
-                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+            if showsAddButton {
+                Button {
+                    addFromScan()
+                } label: {
+                    Label(addButtonTitle, systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .padding(10)
+                }
+                .glassButton(prominent: true)
+                .tint(.accentColor)
                 .padding(.horizontal)
-
-            Button {
-                addFromScan()
-            } label: {
-                Label(addButtonTitle, systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .padding(10)
             }
-            .glassButton(prominent: true)
-            .tint(.accentColor)
-            .padding(.horizontal)
         }
     }
 
@@ -392,6 +417,24 @@ struct ColorInputView: View {
     }
 
     // MARK: - Actions
+
+    /// Whether the active source has a valid draft to add. Mirrors the
+    /// inline buttons' enabled states for hosts using a toolbar button.
+    private var canAddCurrentSource: Bool {
+        switch source {
+        case .pick: return currentHEX.count == 6 && !hexError
+        case .scan: return hasExtractedColor
+        case .library: return false   // rows add directly on tap
+        }
+    }
+
+    private func submitCurrentSource() {
+        switch source {
+        case .pick: addFromPick()
+        case .scan: addFromScan()
+        case .library: break
+        }
+    }
 
     private func addFromPick() {
         let raw = currentHEX.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
