@@ -23,8 +23,14 @@ struct SaveColorIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<ColorEntity> & ProvidesDialog & ShowsSnippetView {
-        let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = trimmed.hasPrefix("#") ? trimmed.uppercased() : "#" + trimmed.uppercased()
+        var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasPrefix("#") { cleaned.removeFirst() }
+        // Expand shorthand hex (#ABC / #ABCD) to full form, mirroring Color(hex:),
+        // so stored HEX values are always 6 or 8 digits like the rest of the app.
+        if cleaned.count == 3 || cleaned.count == 4 {
+            cleaned = cleaned.map { "\($0)\($0)" }.joined()
+        }
+        let normalized = "#" + cleaned.uppercased()
         guard Color(hex: normalized) != nil else {
             throw PalettesIntentError.invalidHex(hex)
         }
