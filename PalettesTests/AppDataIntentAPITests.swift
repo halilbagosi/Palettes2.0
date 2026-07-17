@@ -1,5 +1,6 @@
 import Testing
 import SwiftUI
+import SwiftData
 @testable import Palettes
 
 @MainActor
@@ -23,5 +24,38 @@ struct AppDataIntentAPITests {
         #expect(data.colors.last?.id == created.id)
         #expect(created.HEX == "#DC143C")
         #expect(created.usedInPalette == false)
+    }
+
+    /// Headless Siri/Shortcuts invocations can have the process suspended
+    /// right after `perform()` returns, before the 300 ms debounced sink
+    /// would fire. `addPalette`/`addColor` must persist synchronously so the
+    /// record exists in the store immediately, with no debounce wait.
+    @Test func addPalettePersistsSynchronously() throws {
+        let data = AppData(inMemory: true)
+        let colors = [PaletteColor(color: .blue, hex: "#0000FF", name: "Blue")]
+        let created = data.addPalette(name: "Instant Blues", paletteColors: colors)
+
+        let context = try #require(data.testContext)
+        let createdID = created.id
+        let descriptor = FetchDescriptor<StoredPalette>(
+            predicate: #Predicate { $0.id == createdID }
+        )
+        let stored = try context.fetch(descriptor)
+        #expect(stored.count == 1)
+        #expect(stored.first?.name == "Instant Blues")
+    }
+
+    @Test func addColorPersistsSynchronously() throws {
+        let data = AppData(inMemory: true)
+        let created = data.addColor(name: "Instant Crimson", hex: "#DC143C")
+
+        let context = try #require(data.testContext)
+        let createdID = created.id
+        let descriptor = FetchDescriptor<StoredColor>(
+            predicate: #Predicate { $0.id == createdID }
+        )
+        let stored = try context.fetch(descriptor)
+        #expect(stored.count == 1)
+        #expect(stored.first?.hex == "#DC143C")
     }
 }

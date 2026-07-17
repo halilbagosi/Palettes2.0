@@ -349,15 +349,28 @@ class AppData: ObservableObject {
 
     // MARK: - Intent API
 
-    /// Appends a palette; the debounced sink persists it.
+    /// Appends a palette and persists it synchronously before returning.
+    ///
+    /// Intents (Siri/Shortcuts) can have the process suspended immediately
+    /// after `perform()` returns, before the normal 300 ms debounced sink
+    /// would fire, which would let the "Saved" result lie. Persisting here
+    /// directly is safe: `persistPalettes` upserts by id and is a no-op if
+    /// the debounced sink later fires and finds nothing changed
+    /// (`context.hasChanges` guard).
     @discardableResult
     func addPalette(name: String, paletteColors: [PaletteColor]) -> PaletteViewModel {
         let palette = PaletteViewModel(name: name, paletteColors: paletteColors)
         palettes.append(palette)
+        persistPalettes(palettes)
         return palette
     }
 
-    /// Appends a standalone color; the debounced sink persists it.
+    /// Appends a standalone color and persists it synchronously before returning.
+    ///
+    /// Same headless-intent durability concern as `addPalette`: without a
+    /// synchronous persist here, a suspended-after-`perform()` process could
+    /// report success without ever writing to the store. `persistColors` is
+    /// idempotent (upsert by id), so the later debounced write is harmless.
     @discardableResult
     func addColor(name: String, hex: String) -> ColorViewModel {
         let color = ColorViewModel(
@@ -367,6 +380,7 @@ class AppData: ObservableObject {
             usedInPalette: false
         )
         colors.append(color)
+        persistColors(colors)
         return color
     }
 
