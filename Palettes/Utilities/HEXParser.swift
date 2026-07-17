@@ -437,6 +437,9 @@ enum ColorNamer {
         ("Hot Magenta",        255,  29, 206),
     ]
 
+    private static let namedColorsLab: [(name: String, lab: (L: Double, a: Double, b: Double))] =
+        namedColors.map { ($0.name, sRGBtoLab(r: $0.r / 255.0, g: $0.g / 255.0, b: $0.b / 255.0)) }
+
     // ── Public API ──
 
     static func name(forHex hex: String) -> String {
@@ -456,9 +459,8 @@ enum ColorNamer {
         var bestName = "Unknown"
         var bestDelta = Double.greatestFiniteMagnitude
 
-        for entry in namedColors {
-            let entryLab = sRGBtoLab(r: entry.r / 255.0, g: entry.g / 255.0, b: entry.b / 255.0)
-            let delta = ciede2000(lab, entryLab)
+        for entry in namedColorsLab {
+            let delta = ciede2000(lab, entry.lab)
             if delta < bestDelta {
                 bestDelta = delta
                 bestName = entry.name
