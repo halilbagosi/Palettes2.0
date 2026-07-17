@@ -50,6 +50,14 @@ enum ColorAdjustment {
         Color(red: r / 255.0, green: g / 255.0, blue: b / 255.0)
     }
 
+    /// Derives a "#RRGGBB" hex string from a SwiftUI Color via its RGB components.
+    static func hexString(from color: Color) -> String {
+        let uiColor = UIColor(color)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02X%02X%02X", Int(round(r * 255)), Int(round(g * 255)), Int(round(b * 255)))
+    }
+
     /// Formats a 0…1 slider value as a signed offset label, e.g. "+20 warm" / "Neutral".
     static func offsetLabel(_ value: Double, positive: String? = nil, negative: String? = nil) -> String {
         let offset = Int(round((value - 0.5) * 100))

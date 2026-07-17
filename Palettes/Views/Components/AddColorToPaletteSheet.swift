@@ -57,9 +57,9 @@ struct AddColorToPaletteSheet: View {
         }
 
         withAnimation(.spring(response: 0.3)) {
-            appData.palettes[idx].colors.append(entry.color)
-            appData.palettes[idx].hexCodes.append(entry.hex)
-            appData.palettes[idx].colorNames.append(name)
+            appData.palettes[idx].paletteColors.append(
+                PaletteColor(color: entry.color, hex: entry.hex, name: name)
+            )
 
             let alreadyExists = appData.colors.contains {
                 $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame
