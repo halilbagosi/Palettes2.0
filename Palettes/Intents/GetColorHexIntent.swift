@@ -4,6 +4,7 @@
 //
 
 import AppIntents
+import SwiftUI
 
 @available(iOS 26.0, *)
 struct GetColorHexIntent: AppIntent {
