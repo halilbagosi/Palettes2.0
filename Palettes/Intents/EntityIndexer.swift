@@ -6,6 +6,7 @@
 //  semantically resolve palettes and colors by name.
 //
 
+import AppIntents
 import CoreSpotlight
 import Foundation
 
