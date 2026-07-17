@@ -1,6 +1,6 @@
 # 🎨 Palettes 2.0
 
-A premium color palette manager and generator designed for iOS 27+. **Palettes 2.0** leverages on-device Apple Intelligence (Foundation Models) and custom Metal shaders to deliver a stunning, interactive, and modern palette-creation experience.
+A premium color palette manager and generator, built for iOS 17+ and designed to shine with the latest Liquid Glass visuals on iOS 26/27. **Palettes 2.0** leverages on-device Apple Intelligence (Foundation Models) and custom Metal shaders to deliver a stunning, interactive, and modern palette-creation experience.
 
 ---
 
@@ -59,9 +59,9 @@ Palettes/
 
 ## 🛠️ System Requirements
 
-- **iOS Target**: iOS 27.0+
-- **IDE**: Xcode 17.0+ (with iOS 27 SDK)
-- **Apple Intelligence Support**: Requires a compatible Apple Silicon device (iPhone 15 Pro+, iPad with M-series chips, or Apple Silicon Mac running the Simulator) with Apple Intelligence enabled and language models downloaded.
+- **iOS Target**: iOS 17.0+ (minimum deployment target)
+- **IDE**: Xcode 17.0+ (with the latest iOS SDK)
+- **On-Device AI Generation**: Requires iOS 26.0+ on a compatible Apple Silicon device (iPhone 15 Pro+, iPad with M-series chips, or Apple Silicon Mac running the Simulator) with Apple Intelligence enabled and language models downloaded. On earlier iOS versions the app runs normally with AI generation unavailable.
 
 ---
 
@@ -76,9 +76,17 @@ Palettes/
    ```bash
    open Palettes.xcodeproj
    ```
-3. Set the build target to an iOS 27.0 Simulator or a connected developer-enabled device.
+3. Set the build target to an iOS 17.0+ Simulator or a connected developer-enabled device (iOS 26+ for on-device AI generation).
 4. Clean and run the project:
    - Use shortcut `⌘R` or click the **Play** button in Xcode.
+
+---
+
+## ☁️ Sync & Privacy
+
+- **iCloud Sync**: Palettes and colors sync across your devices via your private CloudKit database (container `iCloud.com.halilbagosi.Palettes`). Only you can access this data — it is never shared with any third party.
+- **Local Fallback**: If iCloud is unavailable, the app falls back to a purely local on-device store, and if that is also unavailable, to a session-only in-memory library.
+- **On-Device AI**: Palette generation runs entirely on-device via Apple's Foundation Models — no palette data, images, or prompts are sent to any external server.
 
 ---
 
