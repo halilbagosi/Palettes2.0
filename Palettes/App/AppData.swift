@@ -83,6 +83,26 @@ class AppData: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Keep Spotlight's copy of the library current so Siri can find it.
+        // (No dropFirst() — the initial load should also be indexed.)
+        $palettes.combineLatest($colors)
+            .debounce(for: .seconds(2), scheduler: RunLoop.main)
+            .sink { palettes, colors in
+                // `PaletteEntity.init`/`ColorEntity.init` are @MainActor; the
+                // sink closure itself isn't isolated, so hop explicitly
+                // (matching the persistence sinks above) rather than relying
+                // on RunLoop.main scheduling to satisfy the compiler.
+                Task { @MainActor in
+                    if #available(iOS 26.0, *) {
+                        EntityIndexer.reindex(
+                            palettes: palettes.map(PaletteEntity.init),
+                            colors: colors.map(ColorEntity.init)
+                        )
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
         // Mark edits dirty immediately (not debounced) so a reload that
         // lands mid-debounce knows there's unpersisted work to flush/retry.
         $colors
