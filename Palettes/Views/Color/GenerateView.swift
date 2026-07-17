@@ -533,6 +533,8 @@ struct GenerateView: View {
                 // Let the last drop settle before revealing the result
                 try? await Task.sleep(for: .milliseconds(900))
                 withAnimation(.smooth(duration: 0.7)) { phase = .result }
+            } catch is CancellationError {
+                withAnimation(.smooth(duration: 0.5)) { phase = .form }
             } catch {
                 ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
                 withAnimation(.smooth(duration: 0.5)) { phase = .form }
