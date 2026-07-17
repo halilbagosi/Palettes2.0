@@ -199,10 +199,21 @@ struct GenerationResultView: View {
 
     private func removeColor(at index: Int) {
         guard colors.count > 2, index < colors.count else { return }
+        let removedColor = colors[index]
+        let removedHex = index < hexCodes.count ? hexCodes[index] : ""
+        let removedName = index < colorNames.count ? colorNames[index] : "Color \(index + 1)"
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             colors.remove(at: index)
             if index < hexCodes.count { hexCodes.remove(at: index) }
             if index < colorNames.count { colorNames.remove(at: index) }
+        }
+        ToastManager.shared.show("Color removed", icon: "trash.fill") {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                let at = min(index, colors.count)
+                colors.insert(removedColor, at: at)
+                hexCodes.insert(removedHex, at: min(index, hexCodes.count))
+                colorNames.insert(removedName, at: min(index, colorNames.count))
+            }
         }
     }
 

@@ -32,7 +32,9 @@ struct ColorCellBig: View {
             .compositingGroup()
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
             .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .onTapGesture { onCardTap?() }
+            // Only claim taps when a handler exists — an unconditional tap
+            // gesture swallows taps meant for an enclosing NavigationLink.
+            .modifier(OptionalTapModifier(action: onCardTap))
     }
 
     private var namePill: some View {
@@ -95,6 +97,19 @@ struct ColorCellBig: View {
         .buttonStyle(.plain)
         .liquidGlass(.interactive, in: .circle)
         .accessibilityLabel("Copy HEX")
+    }
+}
+
+/// Attaches a tap gesture only when an action is provided.
+private struct OptionalTapModifier: ViewModifier {
+    let action: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.onTapGesture(perform: action)
+        } else {
+            content
+        }
     }
 }
 

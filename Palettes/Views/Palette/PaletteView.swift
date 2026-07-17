@@ -10,6 +10,9 @@ struct PaletteView: View {
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
+    /// Selection order — the first-selected item decides whether the star
+    /// button favorites or unfavorites the whole selection.
+    @State private var selectionOrder: [UUID] = []
     @State private var showBulkDeleteAlert = false
     @AppStorage("palettesLayout") private var layoutRaw = ListLayout.normal.rawValue
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
@@ -312,9 +315,13 @@ struct PaletteView: View {
                 }
                 SelectionBottomBar(
                     count: selectedIDs.count,
+                    favoriteFilled: firstSelectedIsFavorite,
                     onDelete: { showBulkDeleteAlert = true },
                     onShare: { shareSelectedPalettes(); exitSelection() },
-                    onFavorite: { appData.setPalettesFavorite(selectedIDs); exitSelection() }
+                    onFavorite: {
+                        appData.setPalettesFavorite(selectedIDs, favorite: !firstSelectedIsFavorite)
+                        exitSelection()
+                    }
                 )
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -346,11 +353,18 @@ struct PaletteView: View {
 
     // MARK: - Actions
 
+    private var firstSelectedIsFavorite: Bool {
+        guard let firstID = selectionOrder.first(where: { selectedIDs.contains($0) }) else { return false }
+        return appData.palettes.first(where: { $0.id == firstID })?.isFavorite ?? false
+    }
+
     private func toggleSelection(_ id: UUID) {
         if selectedIDs.contains(id) {
             selectedIDs.remove(id)
+            selectionOrder.removeAll { $0 == id }
         } else {
             selectedIDs.insert(id)
+            selectionOrder.append(id)
         }
     }
 
@@ -358,7 +372,9 @@ struct PaletteView: View {
         let visibleIDs = Set(displayedPalettes.map(\.id))
         if visibleIDs.isSubset(of: selectedIDs) {
             selectedIDs.subtract(visibleIDs)
+            selectionOrder.removeAll { visibleIDs.contains($0) }
         } else {
+            selectionOrder.append(contentsOf: displayedPalettes.map(\.id).filter { !selectedIDs.contains($0) })
             selectedIDs.formUnion(visibleIDs)
         }
     }
@@ -367,6 +383,7 @@ struct PaletteView: View {
         withAnimation {
             isSelecting = false
             selectedIDs = []
+            selectionOrder = []
         }
     }
 

@@ -32,6 +32,9 @@ struct GenerateView: View {
     @State private var resultHexes: [String] = []
     @State private var resultColorNames: [String] = []
     @State private var pendingRefinement = ""
+    @State private var showDuplicateAlert = false
+    @State private var showNameDuplicateAlert = false
+    @State private var duplicateOfName = ""
 
     private let sizeOptions = [2, 4, 6, 8, 10, 12]
     private let formOrbDiameter: CGFloat = 150
@@ -108,6 +111,22 @@ struct GenerateView: View {
     // MARK: - Stage (form / generating / result)
 
     private var stage: some View {
+        stageContent
+            .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
+                Button("Save Anyway") { performSave() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A palette with these colors already exists as \"\(duplicateOfName)\".")
+            }
+            .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
+                Button("Save Anyway") { performSave() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A palette named \"\(duplicateOfName)\" already exists.")
+            }
+    }
+
+    private var stageContent: some View {
         ZStack {
             formContent
                 .opacity(phase == .form ? 1 : 0)
@@ -544,6 +563,21 @@ struct GenerateView: View {
 
     private func saveResult() {
         guard resultColors.count >= 2 else { return }
+        if let existing = appData.existingPalette(matching: resultHexes) {
+            duplicateOfName = existing.name
+            showDuplicateAlert = true
+            return
+        }
+        let trimmed = resultName.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty, let existing = appData.existingPalette(named: trimmed) {
+            duplicateOfName = existing.name
+            showNameDuplicateAlert = true
+            return
+        }
+        performSave()
+    }
+
+    private func performSave() {
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
         appData.palettes.append(PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,

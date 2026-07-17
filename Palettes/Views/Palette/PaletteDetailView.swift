@@ -75,6 +75,16 @@ struct PaletteDetailView: View {
                             color: colorVM.color,
                             isUsedInPalette: true
                         )
+                        .contextMenu { colorContextMenu(colorVM) } preview: {
+                            ColorMorphCard(
+                                colorName: colorVM.name,
+                                hexCode: colorVM.HEX,
+                                color: colorVM.color,
+                                isCompact: false
+                            )
+                            .frame(width: 360, height: 180)
+                            .padding(4)
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -189,6 +199,53 @@ struct PaletteDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete \"\(livePalette.name)\"?")
+        }
+    }
+
+    // MARK: - Color context menu
+
+    /// Same actions as the Colors tab's card menu, minus edit/delete — those
+    /// belong to the library; here the card may be a transient palette color.
+    @ViewBuilder
+    private func colorContextMenu(_ color: ColorViewModel) -> some View {
+        if appData.colors.contains(where: { $0.id == color.id }) {
+            Button {
+                toggleColorFavorite(color)
+            } label: {
+                Label(color.isFavorite ? "Remove Favorite" : "Favorite",
+                      systemImage: color.isFavorite ? "star.slash" : "star")
+            }
+        }
+
+        Button {
+            copyToClipboard(color.HEX, label: "Copied HEX")
+        } label: {
+            Label("Copy as HEX", systemImage: "number")
+        }
+
+        Button {
+            copyToClipboard(color.color.rgbString, label: "Copied RGB")
+        } label: {
+            Label("Copy as RGB", systemImage: "paintpalette")
+        }
+
+        Button {
+            let cssName = color.name.lowercased().replacingOccurrences(of: " ", with: "-")
+            copyToClipboard("--\(cssName): \(color.HEX);", label: "Copied CSS")
+        } label: {
+            Label("Export for CSS", systemImage: "curlybraces.square")
+        }
+
+        Button {
+            presentShare(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func toggleColorFavorite(_ color: ColorViewModel) {
+        if let idx = appData.colors.firstIndex(where: { $0.id == color.id }) {
+            appData.colors[idx].isFavorite.toggle()
         }
     }
 

@@ -9,25 +9,38 @@ class ToastManager: ObservableObject {
     @Published var message: String = ""
     @Published var icon: String = "checkmark.circle.fill"
     @Published var isShowing: Bool = false
-    
+    @Published var undoAction: (() -> Void)?
+
     private var hideWork: DispatchWorkItem?
-    
-    func show(_ message: String, icon: String = "doc.on.doc.fill") {
+
+    func show(_ message: String, icon: String = "doc.on.doc.fill", undo: (() -> Void)? = nil) {
         hideWork?.cancel()
         self.message = message
         self.icon = icon
-        
+        self.undoAction = undo
+
         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
             isShowing = true
         }
-        
+
         let work = DispatchWorkItem { [weak self] in
             withAnimation(.easeOut(duration: 0.3)) {
                 self?.isShowing = false
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
+        // Undoable toasts linger longer so there's time to react.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (undo == nil ? 1.8 : 4.0), execute: work)
+    }
+
+    func performUndo() {
+        let action = undoAction
+        undoAction = nil
+        hideWork?.cancel()
+        withAnimation(.easeOut(duration: 0.25)) {
+            isShowing = false
+        }
+        action?()
     }
 }
 
@@ -47,6 +60,15 @@ struct ToastOverlay: ViewModifier {
                         Text(manager.message)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.primary)
+
+                        if manager.undoAction != nil {
+                            Button("Undo") {
+                                manager.performUndo()
+                            }
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.tint)
+                            .padding(.leading, 4)
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)

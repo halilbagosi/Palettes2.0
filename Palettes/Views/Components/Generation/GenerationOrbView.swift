@@ -4,6 +4,61 @@
 //
 
 import SwiftUI
+import Combine
+
+#if DEBUG
+/// Live-tunable orb deformation parameters, shared by every orb instance.
+/// Triple-tap an orb to open the tuning panel.
+@MainActor
+final class OrbDebugSettings: ObservableObject {
+    static let shared = OrbDebugSettings()
+
+    @Published var malleability: CGFloat = 0.38
+    /// How much the orb thins on the axis perpendicular to the stretch.
+    @Published var crossThin: CGFloat = 0.10
+    /// Inner-content refraction intensity.
+    @Published var warpStrength: CGFloat = 0.38
+    /// 0 = stretch from center, 1 = anchored fully on the side opposite the drag.
+    @Published var anchorStrength: CGFloat = 1.0
+    /// Residual whole-orb translation per point of drag (0 = fixed in place).
+    @Published var translation: CGFloat = 0.0
+}
+
+private struct OrbDebugPanel: View {
+    @ObservedObject var settings: OrbDebugSettings
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Stretch") {
+                    row("Malleability", $settings.malleability, 0...0.8)
+                    row("Cross-axis thin", $settings.crossThin, 0...0.3)
+                    row("Warp strength", $settings.warpStrength, 0...1)
+                }
+                Section("Anchoring") {
+                    row("Anchor strength", $settings.anchorStrength, 0...1)
+                    row("Translation", $settings.translation, 0...0.3)
+                }
+            }
+            .navigationTitle("Orb Debug")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func row(_ label: String, _ value: Binding<CGFloat>, _ range: ClosedRange<CGFloat>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                Spacer()
+                Text(String(format: "%.2f", value.wrappedValue))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            Slider(value: value, in: range)
+        }
+    }
+}
+#endif
 
 /// An embeddable clear liquid glass orb. Colors materialize inside it as soft
 /// drops of liquid that drift and mingle; an optional prompt, photo, and
@@ -20,6 +75,11 @@ struct GenerationOrbView: View {
 
     @State private var arrivalTimes: [Date] = []
     @State private var dragOffset: CGSize = .zero
+
+    #if DEBUG
+    @ObservedObject private var debug = OrbDebugSettings.shared
+    @State private var showDebugPanel = false
+    #endif
 
     private let startDate = Date()
 
@@ -56,12 +116,19 @@ struct GenerationOrbView: View {
             .frame(width: diameter, height: diameter)
         }
         .scaleEffect(
-            x: 1 + abs(squish.width) * malleability - abs(squish.height) * 0.06,
-            y: 1 + abs(squish.height) * malleability - abs(squish.width) * 0.06,
+            x: 1 + abs(squish.width) * malleability - abs(squish.height) * crossThin,
+            y: 1 + abs(squish.height) * malleability - abs(squish.width) * crossThin,
             anchor: stretchAnchor
         )
-        .offset(effectiveOffset)
+        .offset(x: dragOffset.width * translation, y: dragOffset.height * translation)
         .contentShape(Circle())
+        #if DEBUG
+        .onTapGesture(count: 3) { showDebugPanel = true }
+        .sheet(isPresented: $showDebugPanel) {
+            OrbDebugPanel(settings: debug)
+                .presentationDetents([.medium])
+        }
+        #endif
         .gesture(
             DragGesture()
                 .onChanged { value in
@@ -122,9 +189,9 @@ struct GenerationOrbView: View {
         // The inner elements refract through the glass as the orb is pulled.
         .distortionEffect(
             ShaderLibrary.lensWarp(
-                .float2(Float(diameter / 2 + effectiveOffset.width), Float(diameter / 2 + effectiveOffset.height)),
+                .float2(Float(diameter / 2 + warpShift.width), Float(diameter / 2 + warpShift.height)),
                 .float(Float(diameter * 0.5)),
-                .float(Float(reduceMotion ? 0 : 0.38 * pullStrength))
+                .float(Float(reduceMotion ? 0 : warpStrength * pullStrength))
             ),
             maxSampleOffset: CGSize(width: 70, height: 70)
         )
@@ -133,8 +200,22 @@ struct GenerationOrbView: View {
 
     // MARK: - Deformation
 
-    /// How far the orb leans/stretches toward the finger.
-    private let malleability: CGFloat = 0.18
+    // In DEBUG builds these read from the live-tunable OrbDebugSettings;
+    // release builds use the fixed values.
+    #if DEBUG
+    private var malleability: CGFloat { debug.malleability }
+    private var crossThin: CGFloat { debug.crossThin }
+    private var warpStrength: CGFloat { debug.warpStrength }
+    private var anchorStrength: CGFloat { debug.anchorStrength }
+    private var translation: CGFloat { debug.translation }
+    #else
+    /// How far the orb stretches toward the finger.
+    private let malleability: CGFloat = 0.38
+    private let crossThin: CGFloat = 0.10
+    private let warpStrength: CGFloat = 0.38
+    private let anchorStrength: CGFloat = 1.0
+    private let translation: CGFloat = 0.0
+    #endif
 
     /// Normalized stretch amount from the current drag, capped so the orb
     /// deforms gently rather than tearing apart.
@@ -145,12 +226,12 @@ struct GenerationOrbView: View {
         )
     }
 
-    /// Slight rubber-band lean. Most of the pull is expressed as an anchored
-    /// stretch (the far side stays put); only a small residual translation
-    /// moves the whole orb.
-    private var effectiveOffset: CGSize {
-        CGSize(width: dragOffset.width * malleability * 0.25,
-               height: dragOffset.height * malleability * 0.25)
+    /// The orb itself never translates — the pull is expressed entirely as a
+    /// stretch anchored on the far side. This small shift only feeds the inner
+    /// refraction and liquid slosh so they still react to the drag.
+    private var warpShift: CGSize {
+        CGSize(width: dragOffset.width * 0.06,
+               height: dragOffset.height * 0.06)
     }
 
     /// How hard the orb is being pulled right now, 0…1 — drives inner refraction.
@@ -162,8 +243,8 @@ struct GenerationOrbView: View {
     /// toward the finger while the far side stays in place.
     private var stretchAnchor: UnitPoint {
         UnitPoint(
-            x: 0.5 - Double(squish.width) * 0.5,
-            y: 0.5 - Double(squish.height) * 0.5
+            x: 0.5 - Double(squish.width) * 0.5 * Double(anchorStrength),
+            y: 0.5 - Double(squish.height) * 0.5 * Double(anchorStrength)
         )
     }
 
@@ -193,7 +274,7 @@ struct GenerationOrbView: View {
         .blur(radius: diameter * 0.07)
         .saturation(1.2)
         // Slosh: the liquid lags slightly behind the glass while stretching
-        .offset(x: effectiveOffset.width * -0.15, y: effectiveOffset.height * -0.15)
+        .offset(x: warpShift.width * -0.15, y: warpShift.height * -0.15)
         .frame(width: diameter, height: diameter)
     }
 

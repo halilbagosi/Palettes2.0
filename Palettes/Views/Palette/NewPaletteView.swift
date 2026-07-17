@@ -13,6 +13,10 @@ struct NewPaletteView: View {
 
     @State private var editColorIndex: Int?
 
+    @State private var showDuplicateAlert = false
+    @State private var showNameDuplicateAlert = false
+    @State private var duplicateOfName = ""
+
     struct ColorBindingWrapper: Identifiable {
         let id: Int // Index
     }
@@ -27,6 +31,23 @@ struct NewPaletteView: View {
 
     var body: some View {
         NavigationStack {
+            scrollContent
+                .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
+                    Button("Save Anyway") { performCreate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("A palette with these colors already exists as \"\(duplicateOfName)\".")
+                }
+                .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
+                    Button("Save Anyway") { performCreate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("A palette named \"\(duplicateOfName)\" already exists.")
+                }
+        }
+    }
+
+    private var scrollContent: some View {
             ScrollView {
                 VStack(spacing: 0) {
                     TextField("Palette Name", text: $paletteName)
@@ -117,7 +138,6 @@ struct NewPaletteView: View {
                     appendToDraft(ColorInputEntry(name: color.name, hex: color.HEX, color: color.color))
                 }
             }
-        }
     }
 
     // MARK: - Palette Preview
@@ -288,6 +308,21 @@ struct NewPaletteView: View {
         let name = paletteName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, !paletteColors.isEmpty else { return }
 
+        if let existing = appData.existingPalette(matching: paletteHexCodes) {
+            duplicateOfName = existing.name
+            showDuplicateAlert = true
+            return
+        }
+        if let existing = appData.existingPalette(named: name) {
+            duplicateOfName = existing.name
+            showNameDuplicateAlert = true
+            return
+        }
+        performCreate()
+    }
+
+    private func performCreate() {
+        let name = paletteName.trimmingCharacters(in: .whitespaces)
         let newPalette = PaletteViewModel(
             name: name,
             colors: paletteColors,

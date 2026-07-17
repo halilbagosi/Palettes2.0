@@ -11,6 +11,9 @@ import SwiftUI
 
 struct SelectionBottomBar: ToolbarContent {
     let count: Int
+    /// Filled star = the first-selected item is already a favorite, so tapping
+    /// will unfavorite; outline = tapping will favorite.
+    var favoriteFilled: Bool = false
     let onDelete: () -> Void
     let onShare: () -> Void
     let onFavorite: () -> Void
@@ -33,7 +36,7 @@ struct SelectionBottomBar: ToolbarContent {
             Spacer()
 
             Button(action: onFavorite) {
-                Image(systemName: "star")
+                Image(systemName: favoriteFilled ? "star.fill" : "star")
             }
             .disabled(count == 0)
         }

@@ -81,6 +81,8 @@ struct PaletteEditSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // Sheets cover the app-root toast overlay, so host one here too.
+            .toastOverlay()
             .navigationTitle("Edit Palette")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -151,7 +153,24 @@ struct PaletteEditSheet: View {
 
     private func removeColors(at offsets: IndexSet) {
         guard let idx = paletteIndex else { return }
+        let paletteID = palette.id
+        // Capture each removed entry (ascending indices) so Undo can reinsert
+        // them at their original spots.
+        let removed: [(index: Int, entry: PaletteColor)] = offsets.sorted().map { i in
+            (i, appData.palettes[idx].paletteColors[i])
+        }
         appData.palettes[idx].paletteColors.remove(atOffsets: offsets)
+
+        let count = removed.count
+        ToastManager.shared.show(count == 1 ? "Color removed" : "\(count) colors removed", icon: "trash.fill") { [weak appData] in
+            guard let appData,
+                  let idx = appData.palettes.firstIndex(where: { $0.id == paletteID }) else { return }
+            withAnimation(.spring()) {
+                for (index, entry) in removed {
+                    appData.palettes[idx].paletteColors.insert(entry, at: min(index, appData.palettes[idx].paletteColors.count))
+                }
+            }
+        }
     }
 
     private func colorViewModel(at index: Int, from pal: PaletteViewModel) -> ColorViewModel {

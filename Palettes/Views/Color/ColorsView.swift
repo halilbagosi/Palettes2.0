@@ -17,6 +17,9 @@ struct ColorsView: View {
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
+    /// Selection order — the first-selected item decides whether the star
+    /// button favorites or unfavorites the whole selection.
+    @State private var selectionOrder: [UUID] = []
     @State private var showBulkDeleteAlert = false
     @AppStorage("colorsLayout") private var layoutRaw = ListLayout.normal.rawValue
     @AppStorage("colorsSort") private var sortRaw = LibrarySort.newestFirst.rawValue
@@ -305,9 +308,13 @@ struct ColorsView: View {
                 }
                 SelectionBottomBar(
                     count: selectedIDs.count,
+                    favoriteFilled: firstSelectedIsFavorite,
                     onDelete: { showBulkDeleteAlert = true },
                     onShare: { shareSelectedColors(); exitSelection() },
-                    onFavorite: { appData.setColorsFavorite(selectedIDs); exitSelection() }
+                    onFavorite: {
+                        appData.setColorsFavorite(selectedIDs, favorite: !firstSelectedIsFavorite)
+                        exitSelection()
+                    }
                 )
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -347,11 +354,18 @@ struct ColorsView: View {
 
     // MARK: - Actions
 
+    private var firstSelectedIsFavorite: Bool {
+        guard let firstID = selectionOrder.first(where: { selectedIDs.contains($0) }) else { return false }
+        return appData.colors.first(where: { $0.id == firstID })?.isFavorite ?? false
+    }
+
     private func toggleSelection(_ id: UUID) {
         if selectedIDs.contains(id) {
             selectedIDs.remove(id)
+            selectionOrder.removeAll { $0 == id }
         } else {
             selectedIDs.insert(id)
+            selectionOrder.append(id)
         }
     }
 
@@ -359,7 +373,9 @@ struct ColorsView: View {
         let visibleIDs = Set(displayedColors.map(\.id))
         if visibleIDs.isSubset(of: selectedIDs) {
             selectedIDs.subtract(visibleIDs)
+            selectionOrder.removeAll { visibleIDs.contains($0) }
         } else {
+            selectionOrder.append(contentsOf: displayedColors.map(\.id).filter { !selectedIDs.contains($0) })
             selectedIDs.formUnion(visibleIDs)
         }
     }
@@ -368,6 +384,7 @@ struct ColorsView: View {
         withAnimation {
             isSelecting = false
             selectedIDs = []
+            selectionOrder = []
         }
     }
 
