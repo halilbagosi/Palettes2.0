@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 
 enum PaletteExportFormat: String, CaseIterable, Identifiable {
-    case css, scss, swiftui, tailwind, json, plainHex, coolorsURL, svg
+    case css, scss, swiftui, tailwind, json, plainHex, coolorsURL, svg, ase, pdf
 
     var id: String { rawValue }
 
@@ -23,7 +23,14 @@ enum PaletteExportFormat: String, CaseIterable, Identifiable {
         case .plainHex: return "Plain HEX"
         case .coolorsURL: return "Coolors URL"
         case .svg: return "SVG"
+        case .ase: return "ASE (Adobe Swatch)"
+        case .pdf: return "PDF"
         }
+    }
+
+    /// True for binary formats that must be shared as a file rather than previewed as text.
+    var isBinary: Bool {
+        self == .ase || self == .pdf
     }
 }
 
@@ -41,6 +48,7 @@ enum PaletteExporter {
         case .plainHex: return plainHexString(palette)
         case .coolorsURL: return coolorsURLString(palette)
         case .svg: return svgString(palette)
+        case .ase, .pdf: return ""
         }
     }
 
@@ -234,5 +242,108 @@ enum PaletteExporter {
         }
         body += "</svg>"
         return body
+    }
+
+    // MARK: - Phase 2: ASE
+
+    /// Adobe Swatch Exchange binary encoding, big-endian.
+    ///
+    /// Layout: ASCII "ASEF"; UInt16 version major (1), UInt16 version minor (0);
+    /// UInt32 block count. Per color: UInt16 blockType 0x0001; UInt32 blockLength
+    /// (bytes after this field); UInt16 nameLength in UTF-16 code units including
+    /// the null terminator; name as UTF-16BE bytes + 0x0000 terminator; 4 ASCII
+    /// bytes "RGB " (trailing space); three big-endian Float32 (r,g,b in 0-1);
+    /// UInt16 colorType 0x0002 (normal).
+    static func aseData(_ palette: PaletteViewModel) -> Data {
+        let pairs = namesAndHexes(palette)
+        var data = Data()
+
+        func appendUInt16(_ value: UInt16) {
+            data.append(UInt8((value >> 8) & 0xFF))
+            data.append(UInt8(value & 0xFF))
+        }
+        func appendUInt32(_ value: UInt32) {
+            data.append(UInt8((value >> 24) & 0xFF))
+            data.append(UInt8((value >> 16) & 0xFF))
+            data.append(UInt8((value >> 8) & 0xFF))
+            data.append(UInt8(value & 0xFF))
+        }
+        func appendFloat32BE(_ value: Float) {
+            appendUInt32(value.bitPattern)
+        }
+
+        // Header
+        data.append(contentsOf: Array("ASEF".utf8))
+        appendUInt16(1) // version major
+        appendUInt16(0) // version minor
+        appendUInt32(UInt32(pairs.count)) // block count
+
+        for pair in pairs {
+            let nameUTF16: [UInt16] = Array(pair.name.utf16) + [0x0000]
+            let nameLength = UInt16(nameUTF16.count)
+
+            appendUInt16(0x0001) // block type: color entry
+            let blockLength = UInt32(2 + Int(nameLength) * 2 + 4 + 12 + 2)
+            appendUInt32(blockLength)
+            appendUInt16(nameLength)
+            for unit in nameUTF16 {
+                appendUInt16(unit)
+            }
+            data.append(contentsOf: Array("RGB ".utf8)) // 4 ASCII bytes, trailing space
+            let comps = hexComponents(pair.hex)
+            appendFloat32BE(Float(comps.r) / 255.0)
+            appendFloat32BE(Float(comps.g) / 255.0)
+            appendFloat32BE(Float(comps.b) / 255.0)
+            appendUInt16(0x0002) // color type: normal
+        }
+
+        return data
+    }
+
+    // MARK: - Phase 2: PDF
+
+    @MainActor
+    static func pdfData(_ palette: PaletteViewModel) -> Data {
+        let pairs = namesAndHexes(palette)
+        let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let renderer = UIGraphicsPDFRenderer(bounds: pageBounds)
+
+        return renderer.pdfData { context in
+            context.beginPage()
+
+            let titleFont = UIFont.boldSystemFont(ofSize: 24)
+            let nameFont = UIFont.systemFont(ofSize: 14)
+            let hexFont = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+            let titleAttrs: [NSAttributedString.Key: Any] = [.font: titleFont, .foregroundColor: UIColor.black]
+            let nameAttrs: [NSAttributedString.Key: Any] = [.font: nameFont, .foregroundColor: UIColor.black]
+            let hexAttrs: [NSAttributedString.Key: Any] = [.font: hexFont, .foregroundColor: UIColor.darkGray]
+
+            var y: CGFloat = 40
+            let title = palette.name as NSString
+            title.draw(at: CGPoint(x: 40, y: y), withAttributes: titleAttrs)
+            y += 50
+
+            for pair in pairs {
+                let comps = hexComponents(pair.hex)
+                let uiColor = UIColor(
+                    red: CGFloat(comps.r) / 255.0,
+                    green: CGFloat(comps.g) / 255.0,
+                    blue: CGFloat(comps.b) / 255.0,
+                    alpha: 1.0
+                )
+                let swatchRect = CGRect(x: 40, y: y, width: 60, height: 40)
+                uiColor.setFill()
+                context.fill(swatchRect)
+
+                let name = pair.name as NSString
+                name.draw(at: CGPoint(x: 112, y: y), withAttributes: nameAttrs)
+
+                let hex = pair.hex as NSString
+                hex.draw(at: CGPoint(x: 112, y: y + 20), withAttributes: hexAttrs)
+
+                y += 56
+            }
+        }
     }
 }

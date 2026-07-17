@@ -161,4 +161,48 @@ final class PaletteExporterTests: XCTestCase {
             "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"0\" height=\"140\" viewBox=\"0 0 0 140\"></svg>"
         )
     }
+
+    // MARK: - ASE
+
+    func testASEGoldenBytes() {
+        let palette = PaletteViewModel(
+            name: "Reds",
+            colors: [.red],
+            hexCodes: ["#FF0000"],
+            colorNames: ["Red"]
+        )
+
+        // "Red" = 3 chars + null terminator = nameLength 4 (UTF-16 code units).
+        // blockLength = 2 (nameLength field) + 4*2 (name UTF-16BE) + 4 ("RGB ") + 12 (3 floats) + 2 (colorType) = 28
+        let expected: [UInt8] = [
+            0x41, 0x53, 0x45, 0x46,             // "ASEF"
+            0x00, 0x01,                         // version major = 1
+            0x00, 0x00,                         // version minor = 0
+            0x00, 0x00, 0x00, 0x01,             // block count = 1
+            0x00, 0x01,                         // block type = 0x0001 (color entry)
+            0x00, 0x00, 0x00, 0x1C,             // block length = 28
+            0x00, 0x04,                         // name length = 4 (UTF-16 units incl. null)
+            0x00, 0x52,                         // 'R'
+            0x00, 0x65,                         // 'e'
+            0x00, 0x64,                         // 'd'
+            0x00, 0x00,                         // null terminator
+            0x52, 0x47, 0x42, 0x20,             // "RGB "
+            0x3F, 0x80, 0x00, 0x00,             // r = 1.0 (Float32 BE)
+            0x00, 0x00, 0x00, 0x00,             // g = 0.0
+            0x00, 0x00, 0x00, 0x00,             // b = 0.0
+            0x00, 0x02                          // color type = 0x0002 (normal)
+        ]
+
+        let data = PaletteExporter.aseData(palette)
+        XCTAssertEqual(Array(data), expected)
+    }
+
+    // MARK: - PDF
+
+    @MainActor
+    func testPDFDataIsValidPDF() {
+        let data = PaletteExporter.pdfData(makePalette())
+        XCTAssertFalse(data.isEmpty)
+        XCTAssertEqual(data.prefix(4), Data("%PDF".utf8))
+    }
 }

@@ -18,6 +18,14 @@ struct ExportPaletteSheet: View {
         PaletteExporter.export(palette, as: selectedFormat)
     }
 
+    private var binaryPreviewLabel: String {
+        switch selectedFormat {
+        case .ase: return "Binary format — share as file"
+        case .pdf: return "PDF document — share as file"
+        default: return ""
+        }
+    }
+
     private var slugifiedPaletteName: String {
         let lowered = palette.name.lowercased()
         var result = ""
@@ -43,11 +51,19 @@ struct ExportPaletteSheet: View {
                 .padding(.horizontal)
 
                 ScrollView {
-                    Text(output)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+                    if selectedFormat.isBinary {
+                        Text(binaryPreviewLabel)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    } else {
+                        Text(output)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
                 }
                 .background(Color.primary.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -62,6 +78,7 @@ struct ExportPaletteSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                     .glassButton()
+                    .disabled(selectedFormat.isBinary)
 
                     Button {
                         shareCurrentFormat()
@@ -88,7 +105,8 @@ struct ExportPaletteSheet: View {
     // MARK: - Share
 
     private func shareCurrentFormat() {
-        if selectedFormat == .svg {
+        switch selectedFormat {
+        case .svg:
             let fileURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent("\(slugifiedPaletteName).svg")
             do {
@@ -97,7 +115,25 @@ struct ExportPaletteSheet: View {
             } catch {
                 presentShare(items: [output])
             }
-        } else {
+        case .ase:
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(slugifiedPaletteName).ase")
+            do {
+                try PaletteExporter.aseData(palette).write(to: fileURL)
+                presentShare(items: [fileURL])
+            } catch {
+                // No text fallback for binary formats; nothing to share.
+            }
+        case .pdf:
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(slugifiedPaletteName).pdf")
+            do {
+                try PaletteExporter.pdfData(palette).write(to: fileURL)
+                presentShare(items: [fileURL])
+            } catch {
+                // No text fallback for binary formats; nothing to share.
+            }
+        default:
             presentShare(items: [output])
         }
     }
