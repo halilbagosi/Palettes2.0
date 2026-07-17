@@ -25,6 +25,18 @@ class AppData: ObservableObject {
     /// reload so the flag clears 600 ms after the most recent one.
     private var reloadResetTask: Task<Void, Never>?
 
+    /// True when `colors`/`palettes` have local edits that haven't been
+    /// successfully persisted yet (e.g. because a reload was in flight, or
+    /// the last save failed). Used to flush before reloads and retry after.
+    private var isDirtyColors = false
+    private var isDirtyPalettes = false
+
+    /// ids the store held as of the most recent load/persist, used to tell
+    /// "user deleted this" apart from "this arrived from CloudKit after our
+    /// snapshot was taken" when diffing on persist.
+    private var lastPersistedColorIDs: Set<UUID> = []
+    private var lastPersistedPaletteIDs: Set<UUID> = []
+
     init(inMemory: Bool = false) {
         if inMemory {
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -64,6 +76,24 @@ class AppData: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Mark edits dirty immediately (not debounced) so a reload that
+        // lands mid-debounce knows there's unpersisted work to flush/retry.
+        $colors
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self, !self.isReloading else { return }
+                self.isDirtyColors = true
+            }
+            .store(in: &cancellables)
+
+        $palettes
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self, !self.isReloading else { return }
+                self.isDirtyPalettes = true
+            }
+            .store(in: &cancellables)
+
         // Reload when CloudKit finishes importing changes from another
         // device, and on foregrounding as a safety net.
         NotificationCenter.default.publisher(for: NSPersistentCloudKitContainer.eventChangedNotification)
@@ -89,6 +119,10 @@ class AppData: ObservableObject {
     /// and clears 600 ms after the most recent reload.
     private func reloadFromStore() {
         guard container != nil else { return }
+        // Flush any pending local edits before we replace the in-memory
+        // arrays, so a reload can't clobber work that hasn't hit the store.
+        if isDirtyColors { persistColors(colors) }
+        if isDirtyPalettes { persistPalettes(palettes) }
         isReloading = true
         load()
         reloadResetTask?.cancel()
@@ -96,6 +130,10 @@ class AppData: ObservableObject {
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled else { return }
             self.isReloading = false
+            // Retry any edit whose debounced persist was guarded out while
+            // isReloading was true.
+            if self.isDirtyColors { self.persistColors(self.colors) }
+            if self.isDirtyPalettes { self.persistPalettes(self.palettes) }
         }
     }
 
@@ -112,6 +150,9 @@ class AppData: ObservableObject {
         let storedPalettes = (try? context.fetch(
             FetchDescriptor<StoredPalette>(sortBy: [SortDescriptor(\.sortIndex)])
         )) ?? []
+
+        lastPersistedColorIDs = Set(storedColors.map(\.id))
+        lastPersistedPaletteIDs = Set(storedPalettes.map(\.id))
 
         let didSeed = UserDefaults.standard.bool(forKey: "didSeedSampleData")
         if storedColors.isEmpty && storedPalettes.isEmpty && !didSeed {
@@ -187,8 +228,33 @@ class AppData: ObservableObject {
             }
         }
         for duplicate in duplicates { context.delete(duplicate) }
-        for orphan in byID.values { context.delete(orphan) }
-        if context.hasChanges { try? context.save() }
+
+        var sawFreshRemote = false
+        var keptFreshRemoteIDs: Set<UUID> = []
+        for (id, orphan) in byID {
+            if lastPersistedColorIDs.contains(id) {
+                context.delete(orphan)          // user-removed: we knew this record
+            } else {
+                sawFreshRemote = true           // arrived from CloudKit after our snapshot: keep
+                keptFreshRemoteIDs.insert(id)
+            }
+        }
+
+        guard context.hasChanges else {
+            isDirtyColors = false
+            return
+        }
+        do {
+            try context.save()
+            isDirtyColors = false
+            lastPersistedColorIDs = Set(list.map(\.id)).union(keptFreshRemoteIDs)
+            if sawFreshRemote {
+                reloadFromStore()
+            }
+        } catch {
+            ToastManager.shared.show("Couldn't save your changes.", icon: "exclamationmark.triangle.fill")
+            // dirty flag stays set so the next edit or reload retries the save
+        }
     }
 
     private func persistPalettes(_ list: [PaletteViewModel]) {
@@ -219,9 +285,40 @@ class AppData: ObservableObject {
             }
         }
         for duplicate in duplicates { context.delete(duplicate) }
-        for orphan in byID.values { context.delete(orphan) }
-        if context.hasChanges { try? context.save() }
+
+        var sawFreshRemote = false
+        var keptFreshRemoteIDs: Set<UUID> = []
+        for (id, orphan) in byID {
+            if lastPersistedPaletteIDs.contains(id) {
+                context.delete(orphan)          // user-removed: we knew this record
+            } else {
+                sawFreshRemote = true           // arrived from CloudKit after our snapshot: keep
+                keptFreshRemoteIDs.insert(id)
+            }
+        }
+
+        guard context.hasChanges else {
+            isDirtyPalettes = false
+            return
+        }
+        do {
+            try context.save()
+            isDirtyPalettes = false
+            lastPersistedPaletteIDs = Set(list.map(\.id)).union(keptFreshRemoteIDs)
+            if sawFreshRemote {
+                reloadFromStore()
+            }
+        } catch {
+            ToastManager.shared.show("Couldn't save your changes.", icon: "exclamationmark.triangle.fill")
+            // dirty flag stays set so the next edit or reload retries the save
+        }
     }
+
+    #if DEBUG
+    /// Test-only seam for directly manipulating the underlying store to
+    /// simulate out-of-band changes (e.g. a CloudKit import arriving).
+    internal var testContext: ModelContext? { container?.mainContext }
+    #endif
 
     // MARK: - Favorites
 
