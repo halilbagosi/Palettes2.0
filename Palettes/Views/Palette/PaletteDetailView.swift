@@ -17,6 +17,7 @@ struct PaletteDetailView: View {
     @EnvironmentObject var appData: AppData
     @State private var isEditingPalette = false
     @State private var showDeleteAlert = false
+    @State private var isExporting = false
     @Environment(\.dismiss) var dismiss
 
     private var paletteIndex: Int? {
@@ -151,6 +152,12 @@ struct PaletteDetailView: View {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
 
+                    Button {
+                        isExporting = true
+                    } label: {
+                        Label("Export…", systemImage: "square.and.arrow.up.on.square")
+                    }
+
                     Divider()
                     
                     Button(role: .destructive) {
@@ -167,6 +174,10 @@ struct PaletteDetailView: View {
             PaletteEditSheet(paletteName: livePalette.name, palette: palette)
                 .environmentObject(appData)
                 .formPresentationSizing()
+        }
+        .sheet(isPresented: $isExporting) {
+            ExportPaletteSheet(palette: livePalette)
+                .presentationDetents([.medium, .large])
         }
         .alert("Delete Palette", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {

@@ -6,6 +6,7 @@ struct PaletteView: View {
     @State private var path = NavigationPath()
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
+    @State private var paletteToExport: PaletteViewModel?
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
@@ -69,6 +70,10 @@ struct PaletteView: View {
                     PaletteEditSheet(paletteName: palette.name, palette: palette)
                         .environmentObject(appData)
                         .formPresentationSizing()
+                }
+                .sheet(item: $paletteToExport) { palette in
+                    ExportPaletteSheet(palette: palette)
+                        .presentationDetents([.medium, .large])
                 }
                 .alert("Delete Palette", isPresented: $showDeleteAlert, presenting: paletteToDelete) { palette in
                     Button("Delete", role: .destructive) {
@@ -265,6 +270,12 @@ struct PaletteView: View {
             presentShare(items: [textToShare])
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
+        }
+
+        Button {
+            paletteToExport = palette
+        } label: {
+            Label("Export…", systemImage: "square.and.arrow.up.on.square")
         }
 
         Button(role: .destructive) {
