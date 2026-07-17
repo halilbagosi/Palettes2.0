@@ -7,6 +7,7 @@ import Foundation
 import SwiftUI
 import UIKit
 import FoundationModels
+import os
 
 // MARK: - Guided generation output types
 
@@ -103,7 +104,11 @@ enum PaletteGenerator {
                 await MainActor.run { onPartialColors(snapshotColors) }
             }
             generated = try await stream.collect().content
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
+            Logger(subsystem: "com.halilbagosi.Palettes", category: "generation")
+                .error("Palette generation failed: \(String(describing: error), privacy: .public)")
             throw AppError.generationFailed
         }
 
