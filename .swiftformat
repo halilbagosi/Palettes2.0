@@ -1,0 +1,16 @@
+# Conservative SwiftFormat config for Palettes.
+# swiftformat was not available in this environment to lint/tune this list, so
+# rules likely to cause mass rewrites on first run are disabled up front.
+# CI (.github/workflows/ci.yml) is the first real enforcement point — re-tune
+# this list once `swiftformat --lint Palettes` has been run locally.
+
+--swiftversion 5
+--indent 4
+
+--disable redundantSelf
+--disable trailingCommas
+--disable wrapArguments
+--disable wrapMultilineStatementBraces
+--disable sortImports
+--disable blankLinesAroundMark
+--disable andOperator

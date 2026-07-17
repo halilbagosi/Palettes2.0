@@ -1,0 +1,42 @@
+# NOTE: This workflow requires the shared Xcode scheme for `Palettes` from
+# plan 001 (test target + shared scheme) to be committed. `xcodebuild -scheme`
+# only sees schemes marked "Shared" in Xcode (i.e. present under
+# Palettes.xcodeproj/xcshareddata/xcschemes/). Until that lands, the build
+# step below will fail with "scheme Palettes is not currently configured" —
+# that is expected and this workflow activates for real once plan 001 merges.
+name: CI
+
+on:
+  push:
+    branches: [dev, staging, main]
+  pull_request:
+    branches: [dev, staging, main]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build (Palettes scheme)
+        run: |
+          xcodebuild build \
+            -project Palettes.xcodeproj \
+            -scheme Palettes \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Enable once PalettesTests + shared scheme (plan 001) land.
+      # - name: Test (Palettes scheme)
+      #   run: |
+      #     xcodebuild test \
+      #       -project Palettes.xcodeproj \
+      #       -scheme Palettes \
+      #       -destination "platform=iOS Simulator,name=iPhone 16" \
+      #       CODE_SIGNING_ALLOWED=NO
