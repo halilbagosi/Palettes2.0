@@ -14,6 +14,13 @@ class AppData: ObservableObject {
     @Published var colors: [ColorViewModel] = []
     @Published var palettes: [PaletteViewModel] = []
 
+    /// Single app-wide instance shared by the UI and App Intents so both see
+    /// (and persist through) the same in-memory library.
+    static let shared = AppData()
+
+    /// Palette id an Open intent asked to show; PaletteView consumes it.
+    @Published var pendingOpenPaletteID: UUID?
+
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -319,6 +326,29 @@ class AppData: ObservableObject {
     /// simulate out-of-band changes (e.g. a CloudKit import arriving).
     internal var testContext: ModelContext? { container?.mainContext }
     #endif
+
+    // MARK: - Intent API
+
+    /// Appends a palette; the debounced sink persists it.
+    @discardableResult
+    func addPalette(name: String, paletteColors: [PaletteColor]) -> PaletteViewModel {
+        let palette = PaletteViewModel(name: name, paletteColors: paletteColors)
+        palettes.append(palette)
+        return palette
+    }
+
+    /// Appends a standalone color; the debounced sink persists it.
+    @discardableResult
+    func addColor(name: String, hex: String) -> ColorViewModel {
+        let color = ColorViewModel(
+            name: name,
+            color: Color(hex: hex) ?? .gray,
+            HEX: hex,
+            usedInPalette: false
+        )
+        colors.append(color)
+        return color
+    }
 
     // MARK: - Favorites
 
