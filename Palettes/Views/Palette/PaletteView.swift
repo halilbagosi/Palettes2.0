@@ -96,6 +96,11 @@ struct PaletteView: View {
                 } message: {
                     Text("Delete \(selectedIDs.count) palette\(selectedIDs.count == 1 ? "" : "s")? This cannot be undone.")
                 }
+                .onReceive(appData.$pendingOpenPaletteID) { id in
+                    guard let id, let palette = appData.palettes.first(where: { $0.id == id }) else { return }
+                    appData.pendingOpenPaletteID = nil
+                    path = NavigationPath([palette])
+                }
         }
     }
 

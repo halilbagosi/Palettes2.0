@@ -14,6 +14,13 @@ class AppData: ObservableObject {
     @Published var colors: [ColorViewModel] = []
     @Published var palettes: [PaletteViewModel] = []
 
+    /// Single app-wide instance shared by the UI and App Intents so both see
+    /// (and persist through) the same in-memory library.
+    static let shared = AppData()
+
+    /// Palette id an Open intent asked to show; PaletteView consumes it.
+    @Published var pendingOpenPaletteID: UUID?
+
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -73,6 +80,26 @@ class AppData: ObservableObject {
             .sink { [weak self] updated in
                 guard let self, !self.isReloading else { return }
                 Task { @MainActor in self.persistPalettes(updated) }
+            }
+            .store(in: &cancellables)
+
+        // Keep Spotlight's copy of the library current so Siri can find it.
+        // (No dropFirst() — the initial load should also be indexed.)
+        $palettes.combineLatest($colors)
+            .debounce(for: .seconds(2), scheduler: RunLoop.main)
+            .sink { palettes, colors in
+                // `PaletteEntity.init`/`ColorEntity.init` are @MainActor; the
+                // sink closure itself isn't isolated, so hop explicitly
+                // (matching the persistence sinks above) rather than relying
+                // on RunLoop.main scheduling to satisfy the compiler.
+                Task { @MainActor in
+                    if #available(iOS 26.0, *) {
+                        EntityIndexer.reindex(
+                            palettes: palettes.map(PaletteEntity.init),
+                            colors: colors.map(ColorEntity.init)
+                        )
+                    }
+                }
             }
             .store(in: &cancellables)
 
@@ -319,6 +346,43 @@ class AppData: ObservableObject {
     /// simulate out-of-band changes (e.g. a CloudKit import arriving).
     internal var testContext: ModelContext? { container?.mainContext }
     #endif
+
+    // MARK: - Intent API
+
+    /// Appends a palette and persists it synchronously before returning.
+    ///
+    /// Intents (Siri/Shortcuts) can have the process suspended immediately
+    /// after `perform()` returns, before the normal 300 ms debounced sink
+    /// would fire, which would let the "Saved" result lie. Persisting here
+    /// directly is safe: `persistPalettes` upserts by id and is a no-op if
+    /// the debounced sink later fires and finds nothing changed
+    /// (`context.hasChanges` guard).
+    @discardableResult
+    func addPalette(name: String, paletteColors: [PaletteColor]) -> PaletteViewModel {
+        let palette = PaletteViewModel(name: name, paletteColors: paletteColors)
+        palettes.append(palette)
+        persistPalettes(palettes)
+        return palette
+    }
+
+    /// Appends a standalone color and persists it synchronously before returning.
+    ///
+    /// Same headless-intent durability concern as `addPalette`: without a
+    /// synchronous persist here, a suspended-after-`perform()` process could
+    /// report success without ever writing to the store. `persistColors` is
+    /// idempotent (upsert by id), so the later debounced write is harmless.
+    @discardableResult
+    func addColor(name: String, hex: String) -> ColorViewModel {
+        let color = ColorViewModel(
+            name: name,
+            color: Color(hex: hex) ?? .gray,
+            HEX: hex,
+            usedInPalette: false
+        )
+        colors.append(color)
+        persistColors(colors)
+        return color
+    }
 
     // MARK: - Favorites
 

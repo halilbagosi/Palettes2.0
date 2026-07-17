@@ -9,7 +9,7 @@ import SwiftUI
 
 struct PaletteTabView: View {
 
-    @StateObject private var appData = AppData()
+    @ObservedObject private var appData = AppData.shared
 
     var body: some View {
         Group {

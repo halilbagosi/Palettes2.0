@@ -21,6 +21,12 @@ A premium color palette manager and generator, built for iOS 17+ and designed to
 - **Search & Filter**: Quickly search through existing colors and palettes to find the perfect shade.
 - **Export & Share**: Share custom palettes using native share sheets, or render color swatches as images on-device.
 
+### 🗣️ Siri & Shortcuts
+- **App Intents**: Six intents power Siri and the Shortcuts app — Generate Palette, Create Palette, Save Color, Open Palette, Find Palettes, and Get Color Hex.
+- **Siri Phrases**: Try "Generate a palette in Palettes," "Save a color in Palettes," "Open [palette name] in Palettes," or "What's the hex code of [color name] in Palettes."
+- **Shortcuts App**: All six actions appear under the Palettes app in Shortcuts for building custom automations and workflows.
+- **Spotlight Search**: Palettes and colors are indexed for Spotlight, so you can find and jump to them directly from system search.
+
 ### 💻 Multi-Device Ergonomics
 - **Adaptable Sidebar Layout**: Native iPadOS support that adapts seamlessly between compact and expanded navigation styles.
 - **Keyboard Shortcuts**: Native support for ⌘1 through ⌘4 keys to quickly switch between tabs on iPad hardware keyboards.
