@@ -11,16 +11,28 @@ extension Color {
     init?(hex: String) {
         var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("#") { cleaned.removeFirst() }
-        
-        guard cleaned.count == 6,
-              let number = UInt64(cleaned, radix: 16) else {
+
+        switch cleaned.count {
+        case 3, 4:
+            cleaned = cleaned.map { "\($0)\($0)" }.joined()
+        case 6, 8:
+            break
+        default:
             return nil
         }
-        
-        let r = Double((number >> 16) & 0xFF) / 255.0
-        let g = Double((number >> 8) & 0xFF) / 255.0
-        let b = Double(number & 0xFF) / 255.0
-        
+
+        guard let number = UInt64(cleaned, radix: 16) else {
+            return nil
+        }
+
+        // For 8-digit (RRGGBBAA) input, shift past the discarded alpha byte.
+        let shift: UInt64 = cleaned.count == 8 ? 8 : 0
+        let shifted = number >> shift
+
+        let r = Double((shifted >> 16) & 0xFF) / 255.0
+        let g = Double((shifted >> 8) & 0xFF) / 255.0
+        let b = Double(shifted & 0xFF) / 255.0
+
         self.init(red: r, green: g, blue: b)
     }
 }
