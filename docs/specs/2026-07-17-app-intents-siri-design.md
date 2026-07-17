@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-17
 **Branch:** `feature/app-intents` (off `dev`)
-**Status:** Approved by user; implementation plan to follow.
+**Status:** Implemented on feature/app-intents; awaiting on-device verification.
 
 ## Goal
 
