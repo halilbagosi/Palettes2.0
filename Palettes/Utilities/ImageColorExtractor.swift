@@ -71,6 +71,67 @@ enum ImageColorExtractor {
         return results
     }
 
+    /// Sample a color from a specific point in the image, averaging a small
+    /// neighborhood for stability against JPEG noise / grain.
+    ///
+    /// - Parameters:
+    ///   - point: normalized image coordinate, (0,0) = top-left, (1,1) = bottom-right.
+    ///            Out-of-range values clamp to the nearest edge pixel.
+    ///   - radius: half-size of the averaged square neighborhood in working pixels.
+    static func sampleColor(
+        from image: UIImage,
+        at point: CGPoint,
+        radius: Int = 2
+    ) -> (r: Double, g: Double, b: Double) {
+        // Render into an orientation-normalized, size-capped bitmap so the
+        // pixel buffer is top-left origin and bounded in memory.
+        let maxDim: CGFloat = 400
+        let srcSize = image.size
+        let longSide = max(srcSize.width, srcSize.height, 1)
+        let scale = min(1, maxDim / longSide)
+        let workW = max(1, Int((srcSize.width * scale).rounded()))
+        let workH = max(1, Int((srcSize.height * scale).rounded()))
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: workW, height: workH))
+        let normalized = renderer.image { _ in
+            image.draw(in: CGRect(x: 0, y: 0, width: workW, height: workH))
+        }
+        guard let cg = normalized.cgImage else { return (128, 128, 128) }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var raw = [UInt8](repeating: 0, count: workW * workH * 4)
+        guard let ctx = CGContext(
+            data: &raw,
+            width: workW,
+            height: workH,
+            bitsPerComponent: 8,
+            bytesPerRow: workW * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return (128, 128, 128) }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: workW, height: workH))
+
+        let cx = clamped(Int((point.x * Double(workW - 1)).rounded()), 0, workW - 1)
+        let cy = clamped(Int((point.y * Double(workH - 1)).rounded()), 0, workH - 1)
+
+        var rSum = 0.0, gSum = 0.0, bSum = 0.0, n = 0.0
+        for dy in -radius...radius {
+            for dx in -radius...radius {
+                let px = clamped(cx + dx, 0, workW - 1)
+                let py = clamped(cy + dy, 0, workH - 1)
+                let offset = (py * workW + px) * 4
+                let alpha = Double(raw[offset + 3])
+                guard alpha > 0 else { continue }
+                rSum += Double(raw[offset])
+                gSum += Double(raw[offset + 1])
+                bSum += Double(raw[offset + 2])
+                n += 1
+            }
+        }
+        guard n > 0 else { return (128, 128, 128) }
+        return (rSum / n, gSum / n, bSum / n)
+    }
+
     // MARK: - Helpers
 
     private static func clamped(_ value: Int, _ low: Int, _ high: Int) -> Int {
