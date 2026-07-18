@@ -10,11 +10,13 @@ import SwiftUI
 struct PhotoLoupeView: View {
     let image: UIImage
     var cornerRadius: CGFloat = 20
+    /// When true the image is always aspect-fit (whole image visible). Used by
+    /// the full-screen picker, where there is no enclosing scroll and the user
+    /// needs every region reachable at rest. When false the image is aspect-fill
+    /// at rest and animates to fit while dragging.
+    var alwaysFit: Bool = false
     let onSample: (_ rgb: (r: Double, g: Double, b: Double)) -> Void
     let onSampleEnd: () -> Void
-    /// Reports when a drag-to-sample begins (`true`) and ends (`false`) so a
-    /// host can suppress an enclosing ScrollView from stealing the gesture.
-    var onSamplingChanged: (Bool) -> Void = { _ in }
 
     @State private var touchPoint: CGPoint?
     @State private var isDragging = false
@@ -32,7 +34,7 @@ struct PhotoLoupeView: View {
             ZStack {
                 Image(uiImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: isDragging ? .fit : .fill)
+                    .aspectRatio(contentMode: (alwaysFit || isDragging) ? .fit : .fill)
                     .frame(width: geo.size.width, height: geo.size.height)
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                     .animation(.easeInOut(duration: 0.2), value: isDragging)
@@ -46,10 +48,7 @@ struct PhotoLoupeView: View {
                 }
             }
             .contentShape(Rectangle())
-            // High priority so the loupe wins gesture arbitration against an
-            // enclosing ScrollView's pan (the host also disables scrolling
-            // while sampling via onSamplingChanged).
-            .highPriorityGesture(dragGesture(in: geo.size))
+            .gesture(dragGesture(in: geo.size))
             .onAppear {
                 if sampler == nil {
                     sampler = ImageColorExtractor.PixelSampler(image: image)
@@ -127,10 +126,7 @@ struct PhotoLoupeView: View {
     private func dragGesture(in size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                if !isDragging {
-                    isDragging = true
-                    onSamplingChanged(true)
-                }
+                if !isDragging { isDragging = true }
                 touchPoint = value.location
                 let normalized = PhotoLoupeGeometry.normalizedPoint(
                     forViewPoint: value.location,
@@ -147,7 +143,6 @@ struct PhotoLoupeView: View {
             .onEnded { _ in
                 isDragging = false
                 touchPoint = nil
-                onSamplingChanged(false)
                 onSampleEnd()
             }
     }
