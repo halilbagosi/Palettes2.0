@@ -309,11 +309,34 @@ struct ColorInputView: View {
                 .liquidGlass(.regular, in: .rect(cornerRadius: 20))
 
             if let image = selectedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+                if case .dominant = scanExtraction {
+                    PhotoLoupeView(
+                        image: image,
+                        onSample: { rgb in
+                            baseR = rgb.r
+                            baseG = rgb.g
+                            baseB = rgb.b
+                            temperatureValue = 0.5
+                            saturationValue = 0.5
+                            brightnessValue = 0.5
+                            hasExtractedColor = true
+                        },
+                        onSampleEnd: {
+                            let hex = String(
+                                format: "%02X%02X%02X",
+                                Int(round(baseR)), Int(round(baseG)), Int(round(baseB))
+                            )
+                            scanName = autoName(forRawHex: hex)
+                        }
+                    )
                     .frame(height: 200)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                } else {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                }
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "photo.on.rectangle.angled")
