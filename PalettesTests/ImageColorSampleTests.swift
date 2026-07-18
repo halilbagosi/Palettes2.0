@@ -66,4 +66,24 @@ final class ImageColorSampleTests: XCTestCase {
         let c = ImageColorExtractor.sampleColor(from: img, at: CGPoint(x: -0.5, y: 1.9))
         XCTAssertEqual(c.r, 255, accuracy: 4)
     }
+
+    // MARK: - PixelSampler (reused across a drag)
+
+    func testPixelSamplerReusedForMultiplePointsMatchesOneOff() throws {
+        let img = splitImage(left: .red, right: .blue)
+        let sampler = try XCTUnwrap(ImageColorExtractor.PixelSampler(image: img))
+
+        // A single rasterization answers many queries, matching the one-off API.
+        let left = sampler.color(at: CGPoint(x: 0.2, y: 0.5))
+        let right = sampler.color(at: CGPoint(x: 0.8, y: 0.5))
+        XCTAssertEqual(left.r, 255, accuracy: 6)
+        XCTAssertEqual(left.b, 0, accuracy: 6)
+        XCTAssertEqual(right.b, 255, accuracy: 6)
+        XCTAssertEqual(right.r, 0, accuracy: 6)
+
+        let oneOff = ImageColorExtractor.sampleColor(from: img, at: CGPoint(x: 0.2, y: 0.5))
+        XCTAssertEqual(left.r, oneOff.r, accuracy: 0.001)
+        XCTAssertEqual(left.g, oneOff.g, accuracy: 0.001)
+        XCTAssertEqual(left.b, oneOff.b, accuracy: 0.001)
+    }
 }

@@ -17,6 +17,10 @@ struct PhotoLoupeView: View {
     @State private var isDragging = false
     @State private var loupeColor: Color = .gray
 
+    // Rasterized once per image so drag sampling doesn't re-render the photo
+    // on every touch-move frame.
+    @State private var sampler: ImageColorExtractor.PixelSampler?
+
     private let loupeDiameter: CGFloat = 110
     private let loupeZoom: CGFloat = 2.5
 
@@ -40,6 +44,14 @@ struct PhotoLoupeView: View {
             }
             .contentShape(Rectangle())
             .gesture(dragGesture(in: geo.size))
+            .onAppear {
+                if sampler == nil {
+                    sampler = ImageColorExtractor.PixelSampler(image: image)
+                }
+            }
+            .onChange(of: ObjectIdentifier(image)) { _, _ in
+                sampler = ImageColorExtractor.PixelSampler(image: image)
+            }
         }
     }
 
@@ -116,7 +128,8 @@ struct PhotoLoupeView: View {
                     viewSize: size,
                     imageSize: image.size
                 )
-                let rgb = ImageColorExtractor.sampleColor(from: image, at: normalized, radius: 2)
+                let rgb = sampler?.color(at: normalized, radius: 2)
+                    ?? ImageColorExtractor.sampleColor(from: image, at: normalized, radius: 2)
                 loupeColor = Color(
                     red: rgb.r / 255, green: rgb.g / 255, blue: rgb.b / 255
                 )
