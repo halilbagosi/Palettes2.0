@@ -45,6 +45,9 @@ struct ColorInputView: View {
     var onScanPalette: (([ColorInputEntry]) -> Void)? = nil
     var showsAddButton: Bool = true
     var controller: ColorInputController? = nil
+    /// Forwarded from the photo loupe: `true` while the user is dragging to
+    /// sample a color, so a host can disable its enclosing ScrollView.
+    var onSamplingChanged: ((Bool) -> Void)? = nil
 
     // isSourceTypeAvailable(.camera) probes capture hardware and is slow;
     // calling it during body evaluation makes every keystroke pay for it.
@@ -327,7 +330,8 @@ struct ColorInputView: View {
                                 Int(round(baseR)), Int(round(baseG)), Int(round(baseB))
                             )
                             scanName = autoName(forRawHex: hex)
-                        }
+                        },
+                        onSamplingChanged: { onSamplingChanged?($0) }
                     )
                     .frame(height: 200)
                 } else {
