@@ -12,6 +12,9 @@ struct PhotoLoupeView: View {
     var cornerRadius: CGFloat = 20
     let onSample: (_ rgb: (r: Double, g: Double, b: Double)) -> Void
     let onSampleEnd: () -> Void
+    /// Reports when a drag-to-sample begins (`true`) and ends (`false`) so a
+    /// host can suppress an enclosing ScrollView from stealing the gesture.
+    var onSamplingChanged: (Bool) -> Void = { _ in }
 
     @State private var touchPoint: CGPoint?
     @State private var isDragging = false
@@ -43,7 +46,10 @@ struct PhotoLoupeView: View {
                 }
             }
             .contentShape(Rectangle())
-            .gesture(dragGesture(in: geo.size))
+            // High priority so the loupe wins gesture arbitration against an
+            // enclosing ScrollView's pan (the host also disables scrolling
+            // while sampling via onSamplingChanged).
+            .highPriorityGesture(dragGesture(in: geo.size))
             .onAppear {
                 if sampler == nil {
                     sampler = ImageColorExtractor.PixelSampler(image: image)
@@ -121,7 +127,10 @@ struct PhotoLoupeView: View {
     private func dragGesture(in size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                if !isDragging { isDragging = true }
+                if !isDragging {
+                    isDragging = true
+                    onSamplingChanged(true)
+                }
                 touchPoint = value.location
                 let normalized = PhotoLoupeGeometry.normalizedPoint(
                     forViewPoint: value.location,
@@ -138,6 +147,7 @@ struct PhotoLoupeView: View {
             .onEnded { _ in
                 isDragging = false
                 touchPoint = nil
+                onSamplingChanged(false)
                 onSampleEnd()
             }
     }
