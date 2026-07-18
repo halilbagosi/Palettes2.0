@@ -71,6 +71,98 @@ enum ImageColorExtractor {
         return results
     }
 
+    /// A reusable sampler that rasterizes an image once into an
+    /// orientation-normalized, size-capped RGBA buffer, then answers many point
+    /// queries cheaply. Build one per image and reuse it across a drag gesture
+    /// instead of re-rendering the image on every touch move.
+    struct PixelSampler {
+        private let raw: [UInt8]
+        private let width: Int
+        private let height: Int
+
+        /// Rasterizes `image` into a working buffer no larger than `maxDim` on
+        /// its long side, top-left origin. Returns nil if it cannot be rendered.
+        init?(image: UIImage, maxDim: CGFloat = 400) {
+            let srcSize = image.size
+            let longSide = max(srcSize.width, srcSize.height, 1)
+            let scale = min(1, maxDim / longSide)
+            let w = max(1, Int((srcSize.width * scale).rounded()))
+            let h = max(1, Int((srcSize.height * scale).rounded()))
+
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: w, height: h))
+            let normalized = renderer.image { _ in
+                image.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
+            }
+            guard let cg = normalized.cgImage else { return nil }
+
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            var buffer = [UInt8](repeating: 0, count: w * h * 4)
+            guard let ctx = CGContext(
+                data: &buffer,
+                width: w,
+                height: h,
+                bitsPerComponent: 8,
+                bytesPerRow: w * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return nil }
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+
+            self.raw = buffer
+            self.width = w
+            self.height = h
+        }
+
+        /// Sample a color at a normalized point, averaging a small neighborhood
+        /// for stability against JPEG noise / grain.
+        ///
+        /// - Parameters:
+        ///   - point: normalized image coordinate, (0,0) = top-left, (1,1) = bottom-right.
+        ///            Out-of-range values clamp to the nearest edge pixel.
+        ///   - radius: half-size of the averaged square neighborhood in working pixels.
+        func color(at point: CGPoint, radius: Int = 2) -> (r: Double, g: Double, b: Double) {
+            let cx = ImageColorExtractor.clamped(Int((point.x * Double(width - 1)).rounded()), 0, width - 1)
+            let cy = ImageColorExtractor.clamped(Int((point.y * Double(height - 1)).rounded()), 0, height - 1)
+
+            var rSum = 0.0, gSum = 0.0, bSum = 0.0, n = 0.0
+            for dy in -radius...radius {
+                for dx in -radius...radius {
+                    let px = ImageColorExtractor.clamped(cx + dx, 0, width - 1)
+                    let py = ImageColorExtractor.clamped(cy + dy, 0, height - 1)
+                    let offset = (py * width + px) * 4
+                    let alpha = Double(raw[offset + 3])
+                    guard alpha > 0 else { continue }
+                    rSum += Double(raw[offset])
+                    gSum += Double(raw[offset + 1])
+                    bSum += Double(raw[offset + 2])
+                    n += 1
+                }
+            }
+            guard n > 0 else { return (128, 128, 128) }
+            return (rSum / n, gSum / n, bSum / n)
+        }
+    }
+
+    /// Sample a color from a specific point in the image, averaging a small
+    /// neighborhood for stability against JPEG noise / grain.
+    ///
+    /// Convenience for one-off samples. For repeated sampling of the same image
+    /// (e.g. a drag gesture) build a `PixelSampler` once and reuse it, rather
+    /// than paying the per-call rasterization cost here.
+    ///
+    /// - Parameters:
+    ///   - point: normalized image coordinate, (0,0) = top-left, (1,1) = bottom-right.
+    ///            Out-of-range values clamp to the nearest edge pixel.
+    ///   - radius: half-size of the averaged square neighborhood in working pixels.
+    static func sampleColor(
+        from image: UIImage,
+        at point: CGPoint,
+        radius: Int = 2
+    ) -> (r: Double, g: Double, b: Double) {
+        guard let sampler = PixelSampler(image: image) else { return (128, 128, 128) }
+        return sampler.color(at: point, radius: radius)
+    }
+
     // MARK: - Helpers
 
     private static func clamped(_ value: Int, _ low: Int, _ high: Int) -> Int {
