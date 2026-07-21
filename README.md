@@ -1,107 +1,116 @@
-# 🎨 Palettes 2.0
+# 🎨 Palettes
 
-A premium color palette manager and generator, built for iOS 17+ and designed to shine with the latest Liquid Glass visuals on iOS 26/27. **Palettes 2.0** leverages on-device Apple Intelligence (Foundation Models) and custom Metal shaders to deliver a stunning, interactive, and modern palette-creation experience.
+**A premium color palette manager and generator for iPhone and iPad.**
 
----
+Craft, organize, and export color palettes with on-device Apple Intelligence, a liquid-glass generation experience, and a precision photo eyedropper — all synced privately through iCloud.
 
-## 🌟 Key Features
-
-### 🧠 On-Device AI Palette Generation
-- **Apple Intelligence Integration**: Uses Apple’s local language models (`SystemLanguageModel` and `LanguageModelSession`) to generate custom color palettes directly on-device.
-- **Multi-Input Synthesis**: Generate palettes based on a text-based "vibe" description, a selection of base colors, or colors extracted from camera captures and images.
-- **Intelligent Color Parsing**: Validates color spaces and automatically formats results with customized names and precise HEX codes.
-
-### 🔮 Liquid Glass Generation Experience
-- **Metal-Shader Backdrop**: Features a custom Metal fragment shader (`PaletteShaders.metal`) that generates a domain-warped, interactive pastel sine field.
-- **Iridescent Glass Orb**: Employs iOS 27 `.glassEffect` materials combined with a rotating, chromatic prism-edged rim that responds to timeline updates during AI generation.
-- **Seamless Stage Transitions**: Immersive full-screen generation overlay with fluid transition states when moving between inputs, loading states, and generated results.
-
-### 🗂️ Color & Palette Management
-- **Interactive Editing**: Modify individual colors, adjust HSL/RGB values via custom sliders, and parse HEX inputs seamlessly.
-- **Search & Filter**: Quickly search through existing colors and palettes to find the perfect shade.
-- **Export & Share**: Share custom palettes using native share sheets, or render color swatches as images on-device.
-
-### 🗣️ Siri & Shortcuts
-- **App Intents**: Six intents power Siri and the Shortcuts app — Generate Palette, Create Palette, Save Color, Open Palette, Find Palettes, and Get Color Hex.
-- **Siri Phrases**: Try "Generate a palette in Palettes," "Save a color in Palettes," "Open [palette name] in Palettes," or "What's the hex code of [color name] in Palettes."
-- **Shortcuts App**: All six actions appear under the Palettes app in Shortcuts for building custom automations and workflows.
-- **Spotlight Search**: Palettes and colors are indexed for Spotlight, so you can find and jump to them directly from system search.
-
-### 💻 Multi-Device Ergonomics
-- **Adaptable Sidebar Layout**: Native iPadOS support that adapts seamlessly between compact and expanded navigation styles.
-- **Keyboard Shortcuts**: Native support for ⌘1 through ⌘4 keys to quickly switch between tabs on iPad hardware keyboards.
+![Platform](https://img.shields.io/badge/platform-iOS%2017%2B-blue)
+![Swift](https://img.shields.io/badge/Swift-5-orange)
+![UI](https://img.shields.io/badge/UI-SwiftUI-green)
+![AI](https://img.shields.io/badge/AI-on--device-purple)
+![Sync](https://img.shields.io/badge/sync-iCloud-lightgrey)
 
 ---
 
-## 🏗️ Architecture & Project Structure
+## Features
 
-The app is built using clean **MVVM** patterns paired with unidirectional state flow driven by SwiftUI:
+### 🧠 AI palette generation — fully on-device
+- Generate palettes from a text **vibe** ("Sunset in Tokyo"), from base colors you've saved, or both — powered by Apple's Foundation Models (`LanguageModelSession`), so nothing ever leaves your device.
+- Your chosen base colors are **locked**: they appear in the result exactly as picked, and the AI fills in complementary colors around them.
+- Every color arrives with an evocative name and a precise hex code; palettes are always filled to your selected size.
+
+### 🔮 Liquid-glass generation experience
+- A custom **Metal shader** renders a domain-warped, interactive pastel backdrop during generation.
+- An iridescent **glass orb** with a chromatic prism rim streams each color live as the model produces it.
+- Fluid, interruptible transitions between input, loading, and reveal stages.
+
+### 📷 Photo eyedropper
+- Pick colors from any photo with a **full-screen loupe eyedropper** — drag anywhere, sample with pixel accuracy, and preview the color in a liquid-glass swatch before saving.
+- Automatic extraction of dominant colors from camera captures and imported images.
+
+### 🎛️ Color & palette management
+- Edit colors with **HSL / RGB sliders** or direct hex input (3, 4, 6, and 8-digit formats supported).
+- Organize with favorites, search, and flexible library layouts on iPhone and iPad.
+- Rename, reorder, and refine palettes at any time.
+
+### 📤 Export anywhere
+Export palettes in developer- and designer-ready formats:
+`CSS variables` · `SCSS` · `Tailwind config` · `JSON` · `SwiftUI` · `SVG swatches` · `Coolors URL` · plain hex — or render palettes as shareable images.
+
+### 🗣️ Siri, Shortcuts & Spotlight
+- Six App Intents: Generate Palette, Create Palette, Save Color, Open Palette, Find Palettes, and Get Color Hex.
+- Try *"Generate a palette in Palettes"* or *"What's the hex code of Deep Teal in Palettes?"*
+- Palettes and colors are indexed in Spotlight for instant system-wide search.
+
+### 💻 Built for iPhone *and* iPad
+- Adaptive sidebar navigation on iPadOS.
+- Hardware keyboard shortcuts (⌘1–⌘4) for tab switching.
+
+---
+
+## Screenshots
+
+> Coming soon.
+
+---
+
+## Requirements
+
+| | |
+|---|---|
+| **iOS** | 17.0+ (AI generation requires iOS 26+ with Apple Intelligence) |
+| **Xcode** | 17.0+ with the latest iOS SDK |
+| **AI hardware** | iPhone 15 Pro or later, M-series iPad, or Apple Silicon Mac (Simulator) |
+
+On devices without Apple Intelligence, everything except AI generation works normally.
+
+---
+
+## Getting started
+
+```bash
+git clone https://github.com/halilbagosi/Palettes.git
+cd Palettes
+open Palettes.xcodeproj
+```
+
+Select an iOS 17+ simulator or device and hit **⌘R**. For on-device AI generation, run on an iOS 26+ device with Apple Intelligence enabled and models downloaded.
+
+### Running tests
+
+```bash
+xcodebuild test -project Palettes.xcodeproj -scheme Palettes \
+  -destination "platform=iOS Simulator,name=<simulator>"
+```
+
+Unit tests cover palette exports, hex parsing, color adjustment and naming, view-model invariants, persistence, App Intents, and photo-loupe geometry.
+
+---
+
+## Architecture
+
+Clean **MVVM** with unidirectional state flow in SwiftUI. `AppData` is the single source of truth: it publishes value-type view models and owns all persistence through a debounced SwiftData write-back.
 
 ```
 Palettes/
-├── App/
-│   ├── MyApp.swift               # Application Entrypoint
-│   └── AppData.swift             # Global state (ObservableObject) managing palettes/colors
-├── ViewModels/
-│   ├── ColorViewModel.swift      # State and behaviors for single colors
-│   └── PaletteViewModel.swift    # State and behaviors for color palettes
+├── App/            # Entry point, AppData (global state), SwiftData persistent store
+├── ViewModels/     # Value-type models for colors and palettes
 ├── Views/
-│   ├── Main/                     # PaletteTabView, SearchView
-│   ├── Palette/                  # PaletteView, PaletteDetailView, NewPaletteView
-│   ├── Color/                    # ColorsView, ColorEditView, GenerateView
-│   └── Components/               # Reusable swatches, sliders, sheets, and:
-│       └── Generation/           # LiquidGradientView, GenerationOrbView, GenerationExperienceView
-├── Managers/
-│   ├── PaletteGenerator.swift    # On-device Foundation Model session wrapper
-│   ├── PaletteImageRenderer.swift# Image export generation logic
-│   └── ToastManager.swift        # Global UI notification toasts overlay
-└── Utilities/
-    ├── PaletteShaders.metal      # GPU-accelerated liquid gradient shader
-    ├── ImageColorExtractor.swift # Image pixel color extraction engine
-    └── HEXParser.swift           # Hexadecimal string decoder
+│   ├── Main/       # Tab navigation, search
+│   ├── Palette/    # Palette list, detail, creation
+│   ├── Color/      # Color list, editing, AI generation
+│   └── Components/ # Swatches, sliders, photo color picker, generation orb
+├── Managers/       # PaletteGenerator (AI), PaletteExporter, image rendering, toasts
+├── Intents/        # App Intents + Spotlight entity indexing
+├── Compatibility/  # iOS 26+ API shims (Liquid Glass, Apple Intelligence)
+├── Extensions/     # Color utilities, hue categories
+└── Utilities/      # Metal shaders, image color extraction, hex parsing
 ```
 
 ---
 
-## 🛠️ System Requirements
+## Sync & privacy
 
-- **iOS Target**: iOS 17.0+ (minimum deployment target)
-- **IDE**: Xcode 17.0+ (with the latest iOS SDK)
-- **On-Device AI Generation**: Requires iOS 26.0+ on a compatible Apple Silicon device (iPhone 15 Pro+, iPad with M-series chips, or Apple Silicon Mac running the Simulator) with Apple Intelligence enabled and language models downloaded. On earlier iOS versions the app runs normally with AI generation unavailable.
-
----
-
-## 🚀 Setup & Installation
-
-1. Clone the repository to your Mac:
-   ```bash
-   git clone https://github.com/halilbagosi/Palettes.git
-   cd Palettes
-   ```
-2. Open `Palettes.xcodeproj` in **Xcode**:
-   ```bash
-   open Palettes.xcodeproj
-   ```
-3. Set the build target to an iOS 17.0+ Simulator or a connected developer-enabled device (iOS 26+ for on-device AI generation).
-4. Clean and run the project:
-   - Use shortcut `⌘R` or click the **Play** button in Xcode.
-
----
-
-## ☁️ Sync & Privacy
-
-- **iCloud Sync**: Palettes and colors sync across your devices via your private CloudKit database (container `iCloud.com.halilbagosi.Palettes`). Only you can access this data — it is never shared with any third party.
-- **Local Fallback**: If iCloud is unavailable, the app falls back to a purely local on-device store, and if that is also unavailable, to a session-only in-memory library.
-- **On-Device AI**: Palette generation runs entirely on-device via Apple's Foundation Models — no palette data, images, or prompts are sent to any external server.
-
----
-
-## 🧪 Testing and Verification
-
-- The project compiles without dynamic device-sniffing hooks. All mock language session configurations default to local models if hardware gates pass.
-- Metal shaders compile automatically into the app’s default library during compilation.
-- **Manual Verification Checklist**:
-  1. Open the **Generate** tab.
-  2. Enter a vibe (e.g., *"Sunset in Tokyo"*), choose a base color, or upload an image.
-  3. Hit **Generate** to watch the GPU-accelerated liquid glass transition.
-  4. Edit, regenerate, or save the resulting palette to check local data persistence.
+- **Private iCloud sync** via CloudKit (`iCloud.com.halilbagosi.Palettes`) — your palettes are visible only to you.
+- **Graceful fallback** to a local on-device store (or in-memory library) when iCloud is unavailable.
+- **No servers, no tracking**: AI generation, color extraction, and rendering all happen on-device.
