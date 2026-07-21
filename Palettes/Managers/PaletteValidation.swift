@@ -44,12 +44,19 @@ enum PaletteValidation {
             if span < minBrightnessSpan {
                 // Flag the non-locked color closest to the mean brightness —
                 // the most redundant midtone — so a repair slot can bring in
-                // a light or dark color and widen the spread.
-                let mean = brightnesses.reduce(0, +) / Double(brightnesses.count)
-                if let midtoneIndex = (lockedCount..<n).min(by: {
-                    abs(brightnesses[$0] - mean) < abs(brightnesses[$1] - mean)
-                }) {
-                    bad.insert(midtoneIndex)
+                // a light or dark color and widen the spread. Never flag
+                // index 0 when nothing is locked: with lockedCount == 0 the
+                // candidate range would otherwise include every index, and a
+                // flat/dark palette could have all of them flagged, leaving
+                // no anchor color to rebuild from.
+                let candidateStart = lockedCount == 0 ? 1 : lockedCount
+                if candidateStart < n {
+                    let mean = brightnesses.reduce(0, +) / Double(brightnesses.count)
+                    if let midtoneIndex = (candidateStart..<n).min(by: {
+                        abs(brightnesses[$0] - mean) < abs(brightnesses[$1] - mean)
+                    }) {
+                        bad.insert(midtoneIndex)
+                    }
                 }
             }
         }

@@ -633,6 +633,7 @@ struct GenerateView: View {
             baseColors: baseColors,
             size: paletteSize,
             vibe: combinedVibe,
+            scheme: .auto,
             onPartialColors: onColors
         )
     }

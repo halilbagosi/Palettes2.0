@@ -173,25 +173,19 @@ enum PaletteGenerator {
         // Post-validation: drop colors that are too similar to a neighbor, or
         // that leave the palette without enough brightness spread, then
         // repair using a harmony plan so replacements stay in-family rather
-        // than drifting to arbitrary golden-ratio hues.
-        let bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: locked.count)
-        for index in bad.sorted(by: >) {
-            let removedHex = hexCodes[index]
-            colors.remove(at: index)
-            hexCodes.remove(at: index)
-            colorNames.remove(at: index)
-            seenHexes.remove(removedHex)
-        }
-
-        // The no-vibe plan (if one exists) keeps repairs on the originally
-        // planned targets; otherwise seed a fresh plan from the model's own
-        // surviving colors so repairs stay in the vibe's family.
-        let repairPlan = noVibePlan ?? ColorHarmony.plan(baseHexes: hexCodes, size: targetCount, scheme: .auto, seed: seed)
-
-        // The on-device model can return fewer colors than requested (or lose
-        // some to post-validation); guarantee the palette reaches the
-        // selected size with distinct, harmony-plan-guided colors.
-        fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seenHexes, target: targetCount, plan: repairPlan)
+        // than drifting to arbitrary golden-ratio hues. Bounded to at most
+        // two passes total — the palette is accepted as-is if violations
+        // remain after the cap rather than throwing.
+        repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            seen: &seenHexes,
+            lockedCount: locked.count,
+            targetCount: targetCount,
+            fallbackPlan: noVibePlan,
+            planSeed: seed
+        )
 
         guard colors.count >= 2 else { throw AppError.generationFailed }
 
@@ -233,6 +227,54 @@ enum PaletteGenerator {
         return result
     }
 
+    // MARK: - Post-validation repair
+
+    /// Removes colors that violate `PaletteValidation`'s distinctness/brightness
+    /// rules and refills to `targetCount`, re-checking after each pass.
+    /// Bounded to at most two passes total (initial repair + one re-check) —
+    /// never an unbounded loop — so a palette that can't fully satisfy every
+    /// rule is still returned rather than looped on forever or thrown away.
+    ///
+    /// Deliberately unconditional (not nested under `#if targetEnvironment
+    /// (simulator)`) so it can be exercised directly in unit tests, which
+    /// always run against the simulator and would otherwise never compile
+    /// this code path.
+    static func repairViolations(
+        colors: inout [Color],
+        hexCodes: inout [String],
+        colorNames: inout [String],
+        seen: inout Set<String>,
+        lockedCount: Int,
+        targetCount: Int,
+        fallbackPlan: HarmonyPlan?,
+        planSeed: UInt64
+    ) {
+        var bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
+        var repairPass = 0
+        while !bad.isEmpty && repairPass < 2 {
+            for index in bad.sorted(by: >) {
+                let removedHex = hexCodes[index]
+                colors.remove(at: index)
+                hexCodes.remove(at: index)
+                colorNames.remove(at: index)
+                seen.remove(removedHex)
+            }
+
+            // The caller's plan (if one exists) keeps repairs on the
+            // originally planned targets; otherwise seed a fresh plan from
+            // the surviving colors so repairs stay in the same family. Only
+            // computed when there's actually a repair or shortfall to fill.
+            let repairPlan: HarmonyPlan? = (colors.count < targetCount)
+                ? (fallbackPlan ?? ColorHarmony.plan(baseHexes: hexCodes, size: targetCount, scheme: .auto, seed: planSeed))
+                : nil
+
+            fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seen, target: targetCount, plan: repairPlan)
+
+            repairPass += 1
+            bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
+        }
+    }
+
     // MARK: - Count guarantee
 
     /// Ensures the palette reaches `target` colors. Prefers consuming unused
@@ -250,7 +292,7 @@ enum PaletteGenerator {
         target: Int,
         plan: HarmonyPlan? = nil
     ) {
-        guard target > colors.count, !colors.isEmpty else { return }
+        guard target > colors.count else { return }
 
         if let plan {
             for slot in plan.slots where colors.count < target {
@@ -264,6 +306,12 @@ enum PaletteGenerator {
 
         guard target > colors.count else { return }
         let seeds = colors
+        // The golden-ratio rotation below seeds new hues off of existing
+        // colors; with no plan (or an exhausted one) and a still-empty
+        // palette, there's nothing to rotate from, so bail rather than
+        // spin the safety counter forever (it only increments inside the
+        // `for seed in seeds` loop, which never runs when seeds is empty).
+        guard !seeds.isEmpty else { return }
         var step = 1
         var safety = 0
         while colors.count < target && safety < target * 24 {
