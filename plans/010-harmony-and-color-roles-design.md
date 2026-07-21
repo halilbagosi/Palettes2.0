@@ -92,16 +92,24 @@ struct ColorRole: Hashable {
 
 The harmony plan carries suggested roles; the generated `PaletteViewModel` arrives pre-tagged: first base color → Primary, second base → Secondary, main complement slot → Accent, light neutral → Background, dark neutral → Text. Sizes too small for all roles assign in that priority order. Users can retag freely afterwards.
 
-## 8. Testing
+## 8. Tag-based search & filtering
+
+In `SearchView`, following the existing hue-category filter pattern:
+
+- **Text search:** the query also matches role names — searching "primary" or a custom tag name surfaces palettes containing a color tagged with it (case-insensitive, in `filteredPalettes`).
+- **Browse filtering:** alongside the existing hue chips, a row of **tag chips** (built-in roles that are in use, plus in-use custom tags; multi-select like hues). Selected tags narrow the palette browse list to palettes containing at least one color with a selected tag. Colors themselves are untagged (roles live on palette colors), so tag chips apply to the palettes section only.
+- Chips only appear when at least one tagged color exists in the library, keeping the UI clean for users who don't use tags.
+
+## 9. Testing
 
 - `ColorHarmonyTests`: scheme math (complement is ~180° from base, split ±150°/±210°, etc.), auto-pick heuristics per branch above, determinism for a fixed seed, neutral-slot placement at size ≥ 5.
 - `PaletteViewModel` / persistence round-trip tests for `colorRoles` (including legacy records with missing arrays).
 - `PaletteExporterTests`: tagged variable names per format, collision handling, untagged fallback.
+- Search matching tests: query-by-role-name and tag-chip filtering over palettes (extract the pure matching logic if needed for testability).
 - Generator fallback test: `fillToTarget` with a plan produces slot-matching colors.
 
-## 9. Out of scope
+## 10. Out of scope
 
 - Multiple tags per color.
 - Persisting the scheme override between sessions.
-- Tag-based search/filtering.
 - Reworking the vibe-driven generation flow beyond prompt improvements.
