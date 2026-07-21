@@ -54,8 +54,10 @@ enum PaletteExporter {
 
     // MARK: - Helpers
 
-    /// Safely zips names with hexes; pads missing names with the hex sans `#`.
-    private static func namesAndHexes(_ palette: PaletteViewModel) -> [(name: String, hex: String)] {
+    /// Safely zips slug sources with hexes; pads missing names with the hex sans `#`.
+    /// The slug source is the color's role name when tagged (role slugs drive
+    /// export variable names), otherwise the color's own name.
+    private static func slugSourcesAndHexes(_ palette: PaletteViewModel) -> [(slugSource: String, hex: String)] {
         let count = palette.hexCodes.count
         var result: [(String, String)] = []
         result.reserveCapacity(count)
@@ -67,7 +69,9 @@ enum PaletteExporter {
             } else {
                 name = String(hex.hasPrefix("#") ? hex.dropFirst() : Substring(hex))
             }
-            result.append((name, hex))
+            let role = i < palette.paletteColors.count ? palette.paletteColors[i].role : nil
+            let source = role ?? name
+            result.append((source, hex))
         }
         return result
     }
@@ -153,8 +157,8 @@ enum PaletteExporter {
     // MARK: - Format generators
 
     private static func cssString(_ palette: PaletteViewModel) -> String {
-        let pairs = namesAndHexes(palette)
-        let slugs = uniqueSlugs(for: pairs.map { $0.name })
+        let pairs = slugSourcesAndHexes(palette)
+        let slugs = uniqueSlugs(for: pairs.map { $0.slugSource })
         var lines = [":root {"]
         for (index, pair) in pairs.enumerated() {
             lines.append("  --\(slugs[index]): \(pair.hex);")
@@ -164,8 +168,8 @@ enum PaletteExporter {
     }
 
     private static func scssString(_ palette: PaletteViewModel) -> String {
-        let pairs = namesAndHexes(palette)
-        let slugs = uniqueSlugs(for: pairs.map { $0.name })
+        let pairs = slugSourcesAndHexes(palette)
+        let slugs = uniqueSlugs(for: pairs.map { $0.slugSource })
         var lines: [String] = []
         for (index, pair) in pairs.enumerated() {
             lines.append("$\(slugs[index]): \(pair.hex);")
@@ -174,8 +178,8 @@ enum PaletteExporter {
     }
 
     private static func swiftUIString(_ palette: PaletteViewModel) -> String {
-        let pairs = namesAndHexes(palette)
-        let slugs = uniqueSlugs(for: pairs.map { $0.name })
+        let pairs = slugSourcesAndHexes(palette)
+        let slugs = uniqueSlugs(for: pairs.map { $0.slugSource })
         var lines = ["extension Color {"]
         for (index, pair) in pairs.enumerated() {
             let propName = camelCase(slugs[index])
@@ -190,8 +194,8 @@ enum PaletteExporter {
     }
 
     private static func tailwindString(_ palette: PaletteViewModel) -> String {
-        let pairs = namesAndHexes(palette)
-        let slugs = uniqueSlugs(for: pairs.map { $0.name })
+        let pairs = slugSourcesAndHexes(palette)
+        let slugs = uniqueSlugs(for: pairs.map { $0.slugSource })
         var lines = ["colors: {"]
         for (index, pair) in pairs.enumerated() {
             lines.append("  '\(slugs[index])': '\(pair.hex)',")
@@ -201,12 +205,12 @@ enum PaletteExporter {
     }
 
     private static func jsonString(_ palette: PaletteViewModel) -> String {
-        let pairs = namesAndHexes(palette)
+        let pairs = slugSourcesAndHexes(palette)
         if pairs.isEmpty { return "[]" }
         var lines = ["["]
         for (index, pair) in pairs.enumerated() {
             let comma = index == pairs.count - 1 ? "" : ","
-            lines.append("  { \"name\": \"\(jsonEscape(pair.name))\", \"hex\": \"\(pair.hex)\" }\(comma)")
+            lines.append("  { \"name\": \"\(jsonEscape(pair.slugSource))\", \"hex\": \"\(pair.hex)\" }\(comma)")
         }
         lines.append("]")
         return lines.joined(separator: "\n")
@@ -226,7 +230,7 @@ enum PaletteExporter {
     }
 
     private static func svgString(_ palette: PaletteViewModel) -> String {
-        let pairs = namesAndHexes(palette)
+        let pairs = slugSourcesAndHexes(palette)
         let n = pairs.count
         let width = 100 * n
         if n == 0 {
@@ -237,7 +241,7 @@ enum PaletteExporter {
             let x = i * 100
             let textX = x + 50
             body += "<rect x=\"\(x)\" y=\"0\" width=\"100\" height=\"100\" fill=\"\(pair.hex)\"/>"
-            body += "<text x=\"\(textX)\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">\(xmlEscape(pair.name))</text>"
+            body += "<text x=\"\(textX)\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">\(xmlEscape(pair.slugSource))</text>"
             body += "<text x=\"\(textX)\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">\(pair.hex)</text>"
         }
         body += "</svg>"
@@ -255,7 +259,7 @@ enum PaletteExporter {
     /// bytes "RGB " (trailing space); three big-endian Float32 (r,g,b in 0-1);
     /// UInt16 colorType 0x0002 (normal).
     static func aseData(_ palette: PaletteViewModel) -> Data {
-        let pairs = namesAndHexes(palette)
+        let pairs = slugSourcesAndHexes(palette)
         var data = Data()
 
         func appendUInt16(_ value: UInt16) {
@@ -279,7 +283,7 @@ enum PaletteExporter {
         appendUInt32(UInt32(pairs.count)) // block count
 
         for pair in pairs {
-            let nameUTF16: [UInt16] = Array(pair.name.utf16) + [0x0000]
+            let nameUTF16: [UInt16] = Array(pair.slugSource.utf16) + [0x0000]
             let nameLength = UInt16(nameUTF16.count)
 
             appendUInt16(0x0001) // block type: color entry
@@ -304,7 +308,7 @@ enum PaletteExporter {
 
     @MainActor
     static func pdfData(_ palette: PaletteViewModel) -> Data {
-        let pairs = namesAndHexes(palette)
+        let pairs = slugSourcesAndHexes(palette)
         let pageBounds = CGRect(x: 0, y: 0, width: 612, height: 792)
         let renderer = UIGraphicsPDFRenderer(bounds: pageBounds)
 
@@ -336,7 +340,7 @@ enum PaletteExporter {
                 uiColor.setFill()
                 context.fill(swatchRect)
 
-                let name = pair.name as NSString
+                let name = pair.slugSource as NSString
                 name.draw(at: CGPoint(x: 112, y: y), withAttributes: nameAttrs)
 
                 let hex = pair.hex as NSString

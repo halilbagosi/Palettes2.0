@@ -132,6 +132,103 @@ final class PaletteExporterTests: XCTestCase {
         XCTAssertTrue(output.contains("--sea-2: #FF0000;"))
     }
 
+    // MARK: - Role-driven export names
+
+    private func makeRolePalette() -> PaletteViewModel {
+        PaletteViewModel(
+            name: "Roled",
+            colors: [.blue, .orange],
+            hexCodes: ["#0077BE", "#C2B280"],
+            colorNames: ["Ocean", "Sand"],
+            colorRoles: ["Primary", ""]
+        )
+    }
+
+    func testRoleDrivenCSS() {
+        let expected = """
+        :root {
+          --primary: #0077BE;
+          --sand: #C2B280;
+        }
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .css), expected)
+    }
+
+    func testRoleDrivenSCSS() {
+        let expected = """
+        $primary: #0077BE;
+        $sand: #C2B280;
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .scss), expected)
+    }
+
+    func testRoleDrivenTailwind() {
+        let expected = """
+        colors: {
+          'primary': '#0077BE',
+          'sand': '#C2B280',
+        }
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .tailwind), expected)
+    }
+
+    func testRoleDrivenSwiftUI() {
+        let expected = """
+        extension Color {
+            static let primary = Color(red: 0.000, green: 0.467, blue: 0.745) // #0077BE
+            static let sand = Color(red: 0.761, green: 0.698, blue: 0.502) // #C2B280
+        }
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .swiftui), expected)
+    }
+
+    func testRoleDrivenJSON() {
+        let expected = """
+        [
+          { "name": "Primary", "hex": "#0077BE" },
+          { "name": "Sand", "hex": "#C2B280" }
+        ]
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .json), expected)
+    }
+
+    func testRoleNameSlugCollision() {
+        // A color tagged with role "Primary" alongside a different color
+        // literally *named* "Primary" (untagged) must collide and dedup.
+        let palette = PaletteViewModel(
+            name: "RoleCollision",
+            colors: [.blue, .red],
+            hexCodes: ["#0000FF", "#FF0000"],
+            colorNames: ["Ocean", "Primary"],
+            colorRoles: ["Primary", ""]
+        )
+        let output = PaletteExporter.export(palette, as: .css)
+        XCTAssertTrue(output.contains("--primary: #0000FF;"))
+        XCTAssertTrue(output.contains("--primary-2: #FF0000;"))
+    }
+
+    // MARK: - Untagged-format regression (role must not affect these)
+
+    func testRolePresentDoesNotAffectPlainHexSVGOrCoolors() {
+        // Using the original (role-free) test palette, plainHex/SVG/Coolors
+        // output must remain byte-identical to pre-change behavior.
+        let palette = makePalette()
+        XCTAssertEqual(PaletteExporter.export(palette, as: .plainHex), "#1B4D1B\n#99FA99\n#333333")
+        XCTAssertEqual(PaletteExporter.export(palette, as: .coolorsURL), "https://coolors.co/1b4d1b-99fa99-333333")
+        let svgExpected = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"140\" viewBox=\"0 0 300 140\">"
+        + "<rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" fill=\"#1B4D1B\"/>"
+        + "<text x=\"50\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">Forest Green</text>"
+        + "<text x=\"50\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">#1B4D1B</text>"
+        + "<rect x=\"100\" y=\"0\" width=\"100\" height=\"100\" fill=\"#99FA99\"/>"
+        + "<text x=\"150\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">Pastel Mint</text>"
+        + "<text x=\"150\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">#99FA99</text>"
+        + "<rect x=\"200\" y=\"0\" width=\"100\" height=\"100\" fill=\"#333333\"/>"
+        + "<text x=\"250\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">Charcoal</text>"
+        + "<text x=\"250\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">#333333</text>"
+        + "</svg>"
+        XCTAssertEqual(PaletteExporter.export(palette, as: .svg), svgExpected)
+    }
+
     // MARK: - XML escape
 
     func testXMLEscapeInSVG() {
