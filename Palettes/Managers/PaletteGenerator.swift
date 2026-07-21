@@ -100,6 +100,17 @@ enum PaletteGenerator {
             ? ColorHarmony.plan(baseHexes: locked.map(\.hex), size: size, scheme: scheme, seed: seed)
             : nil
 
+        // Role source for the locked/base colors. `roleForBases` (the source
+        // of `roleForBase`) depends only on the base count, not on scheme or
+        // vibe, so it's safe to compute a plan purely for role-tagging
+        // purposes even when `noVibePlan` above is nil (e.g. a vibe was
+        // given alongside base colors). With no base colors at all there's
+        // no anchor for "Primary"/"Secondary" to attach to, so roles stay
+        // empty in that case — matching the "pure vibe, no bases" rule.
+        let rolePlan: HarmonyPlan? = locked.isEmpty
+            ? nil
+            : (noVibePlan ?? ColorHarmony.plan(baseHexes: locked.map(\.hex), size: size, scheme: scheme, seed: seed))
+
         var prompt: String
         if locked.isEmpty {
             prompt = "Create a color palette of exactly \(size) colors. Every color must be visually distinct — never repeat or nearly repeat a hex value."
@@ -156,6 +167,9 @@ enum PaletteGenerator {
         var colors = locked.map { $0.color }
         var hexCodes = locked.map { $0.hex }
         var colorNames = locked.map { $0.name }
+        // Locked/base colors take their role from `rolePlan.roleForBase`;
+        // with no base colors, `rolePlan` is nil and this stays empty.
+        var colorRoles: [String] = rolePlan?.roleForBase.map { $0 ?? "" } ?? Array(repeating: "", count: locked.count)
         var seenHexes = Set(hexCodes)
 
         for item in generated.colors {
@@ -164,10 +178,23 @@ enum PaletteGenerator {
             if !hex.hasPrefix("#") { hex = "#" + hex }
             guard seenHexes.insert(hex).inserted else { continue }
             guard let color = Color(hex: hex) else { continue }
+            // Only `noVibePlan` (not the broader `rolePlan`) carries a
+            // positional guarantee: its slot hexes were shown to the model
+            // in the prompt as explicit refinement targets, so the model's
+            // Nth added color corresponds to that plan's Nth slot. When
+            // there's no `noVibePlan` (a vibe was given, or there's nothing
+            // to refine), the model generated freely and there's no slot to
+            // attribute a role to.
+            let slotIndex = colors.count - locked.count
+            let role: String? = {
+                guard let slots = noVibePlan?.slots, slotIndex >= 0, slotIndex < slots.count else { return nil }
+                return slots[slotIndex].role
+            }()
             colors.append(color)
             hexCodes.append(hex)
             let trimmed = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
             colorNames.append(trimmed.isEmpty ? ColorNamer.name(forHex: hex) : trimmed)
+            colorRoles.append(role ?? "")
         }
 
         // Post-validation: drop colors that are too similar to a neighbor, or
@@ -180,6 +207,7 @@ enum PaletteGenerator {
             colors: &colors,
             hexCodes: &hexCodes,
             colorNames: &colorNames,
+            roles: &colorRoles,
             seen: &seenHexes,
             lockedCount: locked.count,
             targetCount: targetCount,
@@ -200,7 +228,8 @@ enum PaletteGenerator {
             name: paletteName.isEmpty ? "Generated Palette" : paletteName,
             colors: colors,
             hexCodes: hexCodes,
-            colorNames: colorNames
+            colorNames: colorNames,
+            colorRoles: colorRoles
         )
         #endif
     }
@@ -251,6 +280,7 @@ enum PaletteGenerator {
         colors: inout [Color],
         hexCodes: inout [String],
         colorNames: inout [String],
+        roles: inout [String],
         seen: inout Set<String>,
         lockedCount: Int,
         targetCount: Int,
@@ -260,12 +290,15 @@ enum PaletteGenerator {
         var bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
         for _ in 0..<2 {
             // Remove flagged colors, if any — on a pass with no violations
-            // this is a no-op, but the fill below still must run.
+            // this is a no-op, but the fill below still must run. `roles`
+            // must be removed in lockstep with the other three parallel
+            // arrays or index alignment breaks for every color after it.
             for index in bad.sorted(by: >) {
                 let removedHex = hexCodes[index]
                 colors.remove(at: index)
                 hexCodes.remove(at: index)
                 colorNames.remove(at: index)
+                roles.remove(at: index)
                 seen.remove(removedHex)
             }
 
@@ -279,7 +312,7 @@ enum PaletteGenerator {
 
             // Unconditional: must run even when `bad` was empty, so a
             // shortfall with no violations still gets padded to target.
-            fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seen, target: targetCount, plan: repairPlan)
+            fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, roles: &roles, seen: &seen, target: targetCount, plan: repairPlan)
 
             bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
             if bad.isEmpty { break }
@@ -299,6 +332,7 @@ enum PaletteGenerator {
         colors: inout [Color],
         hexCodes: inout [String],
         colorNames: inout [String],
+        roles: inout [String],
         seen: inout Set<String>,
         target: Int,
         plan: HarmonyPlan? = nil
@@ -306,12 +340,16 @@ enum PaletteGenerator {
         guard target > colors.count else { return }
 
         if let plan {
+            // Colors filled from a plan slot inherit that slot's role
+            // (consumption order == slot order), keeping `roles` aligned
+            // with `colors`/`hexCodes`/`colorNames`.
             for slot in plan.slots where colors.count < target {
                 let hex = slot.hex
                 guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
                 colors.append(color)
                 hexCodes.append(hex)
                 colorNames.append(ColorNamer.name(forHex: hex))
+                roles.append(slot.role ?? "")
             }
         }
 
@@ -343,6 +381,9 @@ enum PaletteGenerator {
                 colors.append(color)
                 hexCodes.append(hex)
                 colorNames.append(ColorNamer.name(forHex: hex))
+                // No slot to inherit a role from — this is a last-resort
+                // synthetic fill, so it stays untagged.
+                roles.append("")
             }
             step += 1
         }
@@ -387,9 +428,24 @@ enum PaletteGenerator {
         }
         let plan = ColorHarmony.plan(baseHexes: planBaseHexes, size: planSize, scheme: scheme, seed: seed)
 
+        // Locked colors take their role from the plan's `roleForBase` (valid
+        // 1:1 against `locked` here since `planBaseHexes == locked.map(\.hex)`
+        // whenever `locked` is non-empty). With no locked colors, the plan's
+        // base is a synthetic stand-in, not a real user choice, so roles stay
+        // empty regardless of what the plan-fill below tags its slots with.
+        var colorRoles: [String] = locked.isEmpty ? [] : plan.roleForBase.map { $0 ?? "" }
+
         // Guarantee the palette reaches the target size, preferring the
         // harmony plan's slots before falling back to hue rotation.
-        fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seen, target: targetCount, plan: plan)
+        fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, roles: &colorRoles, seen: &seen, target: targetCount, plan: plan)
+
+        if locked.isEmpty {
+            // Suppress roles picked up from the synthetic-base plan's slots
+            // (e.g. "Accent"/"Background"/"Text") — those slots produced real
+            // color *values* to fill with, but with no genuine base color
+            // there's no anchor to justify a semantic role tag.
+            colorRoles = Array(repeating: "", count: colorRoles.count)
+        }
 
         // Stream: locked colors appear immediately, then each new one plops in.
         if let onPartialColors {
@@ -407,7 +463,8 @@ enum PaletteGenerator {
             name: "Simulator Palette",
             colors: colors,
             hexCodes: hexCodes,
-            colorNames: colorNames
+            colorNames: colorNames,
+            colorRoles: colorRoles
         )
     }
     #endif
