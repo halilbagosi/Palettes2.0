@@ -486,7 +486,7 @@ enum ColorNamer {
 
     // ── sRGB → XYZ → CIELAB conversion ────────────────────────────────
 
-    private static func sRGBtoLab(r: Double, g: Double, b: Double) -> (L: Double, a: Double, b: Double) {
+    static func sRGBtoLab(r: Double, g: Double, b: Double) -> (L: Double, a: Double, b: Double) {
         // Linearize sRGB
         func linearize(_ c: Double) -> Double {
             c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
@@ -512,6 +512,40 @@ enum ColorNamer {
         let a = 500.0 * (fx - fy)
         let bVal = 200.0 * (fy - fz)
         return (L, a, bVal)
+    }
+
+    /// Chroma magnitude in CIELAB: sqrt(a² + b²).
+    static func labChroma(_ lab: (L: Double, a: Double, b: Double)) -> Double {
+        (lab.a * lab.a + lab.b * lab.b).squareRoot()
+    }
+
+    /// Inverse of `sRGBtoLab`: CIELAB → XYZ → linear sRGB → sRGB (D65), clamped to 0...1.
+    static func labToSRGB(_ lab: (L: Double, a: Double, b: Double)) -> (r: Double, g: Double, b: Double) {
+        let fy = (lab.L + 16.0) / 116.0
+        let fx = fy + lab.a / 500.0
+        let fz = fy - lab.b / 200.0
+
+        func fInv(_ t: Double) -> Double {
+            let t3 = t * t * t
+            return t3 > 0.008856 ? t3 : (116.0 * t - 16.0) / 903.3
+        }
+
+        // XYZ (D65 illuminant)
+        let x = fInv(fx) * 0.95047
+        let y = lab.L > 903.3 * 0.008856 ? fy * fy * fy : lab.L / 903.3
+        let z = fInv(fz) * 1.08883
+
+        let rLin = x * 3.2404542 + y * -1.5371385 + z * -0.4985314
+        let gLin = x * -0.9692660 + y * 1.8760108 + z * 0.0415560
+        let bLin = x * 0.0556434 + y * -0.2040259 + z * 1.0572252
+
+        func gammaEncode(_ c: Double) -> Double {
+            let clamped = max(0.0, c)
+            let v = clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * pow(clamped, 1.0 / 2.4) - 0.055
+            return min(1.0, max(0.0, v))
+        }
+
+        return (gammaEncode(rLin), gammaEncode(gLin), gammaEncode(bLin))
     }
 
     // ── CIEDE2000 ΔE implementation ───────────────────────────────────
