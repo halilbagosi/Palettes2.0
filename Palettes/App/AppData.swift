@@ -14,6 +14,11 @@ class AppData: ObservableObject {
     @Published var colors: [ColorViewModel] = []
     @Published var palettes: [PaletteViewModel] = []
 
+    /// App-wide custom tag library (ordered, deduped), in addition to
+    /// `ColorRole.defaults`. Mutate only through `addCustomTag`/
+    /// `renameCustomTag`/`deleteCustomTag` so uniqueness invariants hold.
+    @Published var customTags: [String] = []
+
     /// Single app-wide instance shared by the UI and App Intents so both see
     /// (and persist through) the same in-memory library.
     static let shared = AppData()
@@ -37,6 +42,7 @@ class AppData: ObservableObject {
     /// the last save failed). Used to flush before reloads and retry after.
     private var isDirtyColors = false
     private var isDirtyPalettes = false
+    private var isDirtyTags = false
 
     /// ids the store held as of the most recent load/persist, used to tell
     /// "user deleted this" apart from "this arrived from CloudKit after our
@@ -44,20 +50,26 @@ class AppData: ObservableObject {
     private var lastPersistedColorIDs: Set<UUID> = []
     private var lastPersistedPaletteIDs: Set<UUID> = []
 
+    /// Lowercased tag names the store held as of the most recent load/persist
+    /// (tags have no published identity beyond their name, since uniqueness
+    /// is enforced case-insensitively). Same "user deleted" vs. "fresh
+    /// remote" diffing role as the ID sets above.
+    private var lastPersistedTagNames: Set<String> = []
+
     init(inMemory: Bool = false) {
         if inMemory {
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: config)
+            container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: config)
         } else {
             // Prefer iCloud-synced storage; fall back to a purely local store
             // (e.g. entitlement missing or iCloud unavailable), then to a
             // session-only experience rather than crashing.
             let cloud = ModelConfiguration(cloudKitDatabase: .automatic)
-            if let cloudContainer = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: cloud) {
+            if let cloudContainer = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: cloud) {
                 container = cloudContainer
             } else {
                 let local = ModelConfiguration(cloudKitDatabase: .none)
-                container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, configurations: local)
+                container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: local)
             }
         }
 
@@ -80,6 +92,15 @@ class AppData: ObservableObject {
             .sink { [weak self] updated in
                 guard let self, !self.isReloading else { return }
                 Task { @MainActor in self.persistPalettes(updated) }
+            }
+            .store(in: &cancellables)
+
+        $customTags
+            .dropFirst()
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { [weak self] updated in
+                guard let self, !self.isReloading else { return }
+                Task { @MainActor in self.persistTags(updated) }
             }
             .store(in: &cancellables)
 
@@ -121,6 +142,14 @@ class AppData: ObservableObject {
             }
             .store(in: &cancellables)
 
+        $customTags
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self, !self.isReloading else { return }
+                self.isDirtyTags = true
+            }
+            .store(in: &cancellables)
+
         // Reload when CloudKit finishes importing changes from another
         // device, and on foregrounding as a safety net.
         NotificationCenter.default.publisher(for: NSPersistentCloudKitContainer.eventChangedNotification)
@@ -150,6 +179,7 @@ class AppData: ObservableObject {
         // arrays, so a reload can't clobber work that hasn't hit the store.
         if isDirtyColors { persistColors(colors) }
         if isDirtyPalettes { persistPalettes(palettes) }
+        if isDirtyTags { persistTags(customTags) }
         isReloading = true
         load()
         reloadResetTask?.cancel()
@@ -161,6 +191,7 @@ class AppData: ObservableObject {
             // isReloading was true.
             if self.isDirtyColors { self.persistColors(self.colors) }
             if self.isDirtyPalettes { self.persistPalettes(self.palettes) }
+            if self.isDirtyTags { self.persistTags(self.customTags) }
         }
     }
 
@@ -177,9 +208,18 @@ class AppData: ObservableObject {
         let storedPalettes = (try? context.fetch(
             FetchDescriptor<StoredPalette>(sortBy: [SortDescriptor(\.sortIndex)])
         )) ?? []
+        let storedTags = (try? context.fetch(
+            FetchDescriptor<StoredTag>(sortBy: [SortDescriptor(\.sortIndex)])
+        )) ?? []
 
         lastPersistedColorIDs = Set(storedColors.map(\.id))
         lastPersistedPaletteIDs = Set(storedPalettes.map(\.id))
+        lastPersistedTagNames = Set(storedTags.map { $0.name.lowercased() })
+
+        // Independent of the colors/palettes seeding below: no sample tags
+        // are seeded, so an empty store just yields an empty tag library.
+        var seenTagNames = Set<String>()
+        customTags = storedTags.filter { seenTagNames.insert($0.name.lowercased()).inserted }.map(\.name)
 
         let didSeed = UserDefaults.standard.bool(forKey: "didSeedSampleData")
         if storedColors.isEmpty && storedPalettes.isEmpty && !didSeed {
@@ -344,6 +384,60 @@ class AppData: ObservableObject {
         }
     }
 
+    /// Upserts by (lowercased) name instead of rewriting the table, mirroring
+    /// `persistColors`/`persistPalettes`. Tags have no published identity
+    /// beyond their name, so name is the natural upsert key here: uniqueness
+    /// is already enforced case-insensitively by `addCustomTag`/
+    /// `renameCustomTag`.
+    private func persistTags(_ list: [String]) {
+        guard let context = container?.mainContext else { return }
+        let existing = (try? context.fetch(FetchDescriptor<StoredTag>())) ?? []
+        var byName: [String: StoredTag] = [:]
+        var duplicates: [StoredTag] = []
+        for item in existing {
+            let key = item.name.lowercased()
+            if byName[key] != nil { duplicates.append(item) } else { byName[key] = item }
+        }
+
+        for (index, name) in list.enumerated() {
+            let key = name.lowercased()
+            if let stored = byName.removeValue(forKey: key) {
+                if stored.name != name { stored.name = name }
+                if stored.sortIndex != index { stored.sortIndex = index }
+            } else {
+                context.insert(StoredTag(id: UUID(), name: name, sortIndex: index))
+            }
+        }
+        for duplicate in duplicates { context.delete(duplicate) }
+
+        var sawFreshRemote = false
+        var keptFreshRemoteNames: Set<String> = []
+        for (key, orphan) in byName {
+            if lastPersistedTagNames.contains(key) {
+                context.delete(orphan)          // user-removed: we knew this record
+            } else {
+                sawFreshRemote = true           // arrived from CloudKit after our snapshot: keep
+                keptFreshRemoteNames.insert(key)
+            }
+        }
+
+        guard context.hasChanges else {
+            isDirtyTags = false
+            return
+        }
+        do {
+            try context.save()
+            isDirtyTags = false
+            lastPersistedTagNames = Set(list.map { $0.lowercased() }).union(keptFreshRemoteNames)
+            if sawFreshRemote {
+                reloadFromStore()
+            }
+        } catch {
+            ToastManager.shared.show("Couldn't save your changes.", icon: "exclamationmark.triangle.fill")
+            // dirty flag stays set so the next edit or reload retries the save
+        }
+    }
+
     #if DEBUG
     /// Test-only seam for directly manipulating the underlying store to
     /// simulate out-of-band changes (e.g. a CloudKit import arriving).
@@ -427,6 +521,76 @@ class AppData: ObservableObject {
         guard !ids.isEmpty else { return }
         for i in palettes.indices where ids.contains(palettes[i].id) {
             palettes[i].isFavorite = favorite
+        }
+    }
+
+    // MARK: - Custom Tags
+
+    /// Adds a new app-wide custom tag. Returns `false` (no-op) if `name` is
+    /// empty/whitespace-only, or case-insensitively collides with one of
+    /// `ColorRole.defaults` or an existing custom tag.
+    @discardableResult
+    func addCustomTag(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard !isReservedOrExistingTag(trimmed) else { return false }
+        customTags.append(trimmed)
+        return true
+    }
+
+    /// Renames a custom tag and rewrites `role` on every palette color using
+    /// it. No-op if `old` isn't a known custom tag, `new` is empty, or `new`
+    /// case-insensitively collides with a default role or a *different*
+    /// existing custom tag.
+    func renameCustomTag(_ old: String, to new: String) {
+        guard let index = customTags.firstIndex(where: { $0.caseInsensitiveCompare(old) == .orderedSame }) else { return }
+        let trimmed = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard !isReservedOrExistingTag(trimmed, excludingCustomTag: old) else { return }
+
+        let previousName = customTags[index]
+        customTags[index] = trimmed
+        rewritePaletteColorRoles(from: previousName, to: trimmed)
+    }
+
+    /// Deletes a custom tag and clears the `role` (to `nil`) on every
+    /// palette color that used it. No-op if `name` isn't a known custom tag.
+    func deleteCustomTag(_ name: String) {
+        guard let index = customTags.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return }
+        let removedName = customTags[index]
+        customTags.remove(at: index)
+        rewritePaletteColorRoles(from: removedName, to: nil)
+    }
+
+    /// True if `name` case-insensitively matches a built-in default role or
+    /// an existing custom tag (other than `excluded`, so a rename can keep
+    /// its own slot when only its case changes).
+    private func isReservedOrExistingTag(_ name: String, excludingCustomTag excluded: String? = nil) -> Bool {
+        if ColorRole.defaults.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            return true
+        }
+        return customTags.contains { tag in
+            if let excluded, tag.caseInsensitiveCompare(excluded) == .orderedSame { return false }
+            return tag.caseInsensitiveCompare(name) == .orderedSame
+        }
+    }
+
+    /// Rewrites (or clears, if `new` is `nil`) the `role` on every palette
+    /// color currently tagged `old` (case-insensitive match). `paletteColors`
+    /// is a value-type array, so each mutated palette is reassigned in place
+    /// — that reassignment is what fires `$palettes`' existing dirty-marking
+    /// and debounced-persist sinks.
+    private func rewritePaletteColorRoles(from old: String, to new: String?) {
+        for i in palettes.indices {
+            var paletteColors = palettes[i].paletteColors
+            var changed = false
+            for j in paletteColors.indices where paletteColors[j].role?.caseInsensitiveCompare(old) == .orderedSame {
+                paletteColors[j].role = new
+                changed = true
+            }
+            if changed {
+                palettes[i].paletteColors = paletteColors
+            }
         }
     }
 
