@@ -118,4 +118,53 @@ final class AppDataPersistenceTests: XCTestCase {
         XCTAssertFalse(appData.colors.contains { $0.id == doomed.id },
                        "Deleted color reappeared after reload")
     }
+
+    /// Round trip: a palette whose second color has a role must survive a
+    /// save + reload-from-store cycle (same container, fresh read).
+    func testColorRoleRoundTripsThroughPersistence() async throws {
+        let appData = AppData(inMemory: true)
+        let initialCount = appData.palettes.count
+
+        let paletteColors = [
+            PaletteColor(color: .red, hex: "#FF0000", name: "Red", role: nil),
+            PaletteColor(color: .blue, hex: "#0000FF", name: "Blue", role: "Accent"),
+        ]
+        let palette = PaletteViewModel(name: "Role Round Trip", paletteColors: paletteColors)
+        appData.palettes.append(palette)
+        try await Task.sleep(for: .seconds(1.5))
+
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        try await Task.sleep(for: .seconds(1.5))
+
+        XCTAssertEqual(appData.palettes.count, initialCount + 1)
+        let reloaded = try XCTUnwrap(appData.palettes.first { $0.id == palette.id })
+        XCTAssertEqual(reloaded.paletteColors[1].role, "Accent")
+        XCTAssertNil(reloaded.paletteColors[0].role)
+    }
+
+    /// Legacy records (inserted before `colorRoles` existed) have an empty
+    /// `colorRoles` array; hydration must map that to all-nil roles rather
+    /// than crashing or misaligning indices.
+    func testLegacyStoredPaletteWithoutColorRolesHydratesToNilRoles() async throws {
+        let appData = AppData(inMemory: true)
+        let context = try XCTUnwrap(appData.testContext)
+
+        let legacyID = UUID()
+        context.insert(StoredPalette(
+            id: legacyID,
+            name: "Legacy Palette",
+            hexCodes: ["#111111", "#222222"],
+            colorNames: ["One", "Two"],
+            sortIndex: 999
+        ))
+        try context.save()
+
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        try await Task.sleep(for: .seconds(1.5))
+
+        let reloaded = try XCTUnwrap(appData.palettes.first { $0.id == legacyID })
+        XCTAssertEqual(reloaded.paletteColors.count, 2)
+        XCTAssertNil(reloaded.paletteColors[0].role)
+        XCTAssertNil(reloaded.paletteColors[1].role)
+    }
 }

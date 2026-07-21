@@ -215,6 +215,7 @@ class AppData: ObservableObject {
                     colors: stored.hexCodes.map { Color(hex: $0) ?? .gray },
                     hexCodes: stored.hexCodes,
                     colorNames: stored.colorNames,
+                    colorRoles: stored.colorRoles,
                     isFavorite: stored.isFavorite
                 )
             }
@@ -298,6 +299,7 @@ class AppData: ObservableObject {
                 if stored.name != palette.name { stored.name = palette.name }
                 if stored.hexCodes != palette.hexCodes { stored.hexCodes = palette.hexCodes }
                 if stored.colorNames != palette.colorNames { stored.colorNames = palette.colorNames }
+                if stored.colorRoles != palette.colorRoles { stored.colorRoles = palette.colorRoles }
                 if stored.isFavorite != palette.isFavorite { stored.isFavorite = palette.isFavorite }
                 if stored.sortIndex != index { stored.sortIndex = index }
             } else {
@@ -306,6 +308,7 @@ class AppData: ObservableObject {
                     name: palette.name,
                     hexCodes: palette.hexCodes,
                     colorNames: palette.colorNames,
+                    colorRoles: palette.colorRoles,
                     isFavorite: palette.isFavorite,
                     sortIndex: index
                 ))
