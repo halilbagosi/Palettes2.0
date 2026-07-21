@@ -231,9 +231,17 @@ enum PaletteGenerator {
 
     /// Removes colors that violate `PaletteValidation`'s distinctness/brightness
     /// rules and refills to `targetCount`, re-checking after each pass.
-    /// Bounded to at most two passes total (initial repair + one re-check) —
-    /// never an unbounded loop — so a palette that can't fully satisfy every
-    /// rule is still returned rather than looped on forever or thrown away.
+    /// Bounded to at most two passes total — never an unbounded loop — so a
+    /// palette that can't fully satisfy every rule is still returned rather
+    /// than looped on forever or thrown away.
+    ///
+    /// The fill step is unconditional on every pass (not gated on whether
+    /// there were violations to remove): the ordinary case where the model
+    /// simply returns fewer colors than requested, with zero validation
+    /// violations, still needs `fillToTarget` to run or the "always reach
+    /// the requested size" guarantee silently breaks. Only the *re-check*
+    /// (whether to run a second pass) is conditional on violations
+    /// remaining.
     ///
     /// Deliberately unconditional (not nested under `#if targetEnvironment
     /// (simulator)`) so it can be exercised directly in unit tests, which
@@ -250,8 +258,9 @@ enum PaletteGenerator {
         planSeed: UInt64
     ) {
         var bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
-        var repairPass = 0
-        while !bad.isEmpty && repairPass < 2 {
+        for _ in 0..<2 {
+            // Remove flagged colors, if any — on a pass with no violations
+            // this is a no-op, but the fill below still must run.
             for index in bad.sorted(by: >) {
                 let removedHex = hexCodes[index]
                 colors.remove(at: index)
@@ -263,15 +272,17 @@ enum PaletteGenerator {
             // The caller's plan (if one exists) keeps repairs on the
             // originally planned targets; otherwise seed a fresh plan from
             // the surviving colors so repairs stay in the same family. Only
-            // computed when there's actually a repair or shortfall to fill.
+            // computed when there's actually a shortfall to fill.
             let repairPlan: HarmonyPlan? = (colors.count < targetCount)
                 ? (fallbackPlan ?? ColorHarmony.plan(baseHexes: hexCodes, size: targetCount, scheme: .auto, seed: planSeed))
                 : nil
 
+            // Unconditional: must run even when `bad` was empty, so a
+            // shortfall with no violations still gets padded to target.
             fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seen, target: targetCount, plan: repairPlan)
 
-            repairPass += 1
             bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
+            if bad.isEmpty { break }
         }
     }
 
