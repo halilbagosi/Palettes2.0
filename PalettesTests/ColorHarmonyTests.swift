@@ -128,6 +128,23 @@ final class ColorHarmonyTests: XCTestCase {
         XCTAssertTrue(hasText, "expected a Text-role neutral dark slot")
     }
 
+    func testAutoSingleSaturatedBaseSizeFiveStillReservesNeutralSlots() {
+        // Boundary case: size == 5 with one base means slotCount (size -
+        // baseCount) is only 4, but the spec's "size >= 5" neutral-reservation
+        // heuristic must still key off the raw requested size, not slotCount.
+        let plan = ColorHarmony.plan(baseHexes: ["#3366CC"], size: 5, scheme: .auto, seed: 1)
+        XCTAssertEqual(plan.resolvedScheme, .splitComplementary)
+        let hasBackground = plan.slots.contains { slot in
+            let c = hsb(of: slot.hex)
+            return slot.role == "Background" && c.s <= 0.08 && c.b >= 0.94
+        }
+        let hasText = plan.slots.contains { slot in
+            slot.role == "Text" && hsb(of: slot.hex).b <= 0.22
+        }
+        XCTAssertTrue(hasBackground, "expected a Background-role neutral light slot at size 5")
+        XCTAssertTrue(hasText, "expected a Text-role neutral dark slot at size 5")
+    }
+
     // MARK: - Roles
 
     func testRoleForBaseAssignsPrimarySecondary() {

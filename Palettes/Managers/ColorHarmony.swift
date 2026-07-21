@@ -164,14 +164,17 @@ enum ColorHarmony {
 
     // MARK: - Target hue offsets (degrees) per scheme
 
+    /// Takes a resolved (never `.auto`) scheme; `plan()` always resolves
+    /// `.auto` before calling this.
     private static func targetOffsets(for scheme: HarmonyScheme) -> [CGFloat] {
         switch scheme {
-        case .complementary: return [180]
+        case .auto, .complementary: return [180]
         case .splitComplementary: return [150, 210]
+        // Tightened from the design doc's ±20/±40 so ±6° hue jitter can never
+        // push a slot past the spec's 40° analogous bound.
         case .analogous: return [-15, 15, -33, 33]
         case .triadic: return [120, 240]
         case .monochromatic: return [0]
-        case .auto: return [180] // never resolved to auto directly
         }
     }
 
@@ -207,12 +210,13 @@ enum ColorHarmony {
 
         let baseHueDeg = base.hue * 360
         let offsets = targetOffsets(for: resolved)
-        let reserveNeutrals = resolved == .splitComplementary && slotCount >= 5 && bases.count == 1
+        // Gate on the raw requested `size` (matching resolveScheme's own
+        // `size >= 5` check), not `slotCount`, so a single saturated base at
+        // size 5 (slotCount 4) still reserves its Background/Text neutrals.
+        let reserveNeutrals = resolved == .splitComplementary && size >= 5 && bases.count == 1 && slotCount >= 2
 
         var slots: [HarmonySlot] = []
         var accentAssigned = false
-        var backgroundAssigned = false
-        var textAssigned = false
 
         let neutralSlotCount = reserveNeutrals ? 2 : 0
         let harmonicSlotCount = slotCount - neutralSlotCount
@@ -269,7 +273,6 @@ enum ColorHarmony {
                 let saturation = min(0.08, max(0.02, 0.05 + satJitter))
                 let brightness = min(0.97, max(0.94, 0.96 + briJitter))
                 slots.append(HarmonySlot(hue: hue01, saturation: saturation, brightness: brightness, role: "Background"))
-                backgroundAssigned = true
             }
             // Text: same hue, low-ish sat, low brightness.
             do {
@@ -280,11 +283,8 @@ enum ColorHarmony {
                 let saturation = min(0.20, max(0.05, 0.12 + satJitter))
                 let brightness = min(0.22, max(0.08, 0.15 + briJitter))
                 slots.append(HarmonySlot(hue: hue01, saturation: saturation, brightness: brightness, role: "Text"))
-                textAssigned = true
             }
         }
-        _ = backgroundAssigned
-        _ = textAssigned
 
         // Near-neutral base + monochromatic → one slot becomes a saturated accent.
         if resolved == .monochromatic, base.saturation < 0.12, let accentIndex = slots.indices.first(where: { slots[$0].role == nil }) {
