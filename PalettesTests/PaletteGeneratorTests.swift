@@ -277,4 +277,43 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertEqual(hexCodes[0], "#3060A0")
         XCTAssertEqual(colorRoles[0], "Primary")
     }
+
+    /// Regression test for a review finding: with no locked/base colors at
+    /// all (`lockedCount: 0`, `fallbackPlan: nil`), a shortfall still routes
+    /// through `repairViolations`'s ad-hoc-plan branch at a target size that
+    /// triggers `ColorHarmony.plan`'s `reserveNeutrals` gate (single
+    /// surviving saturated color, size >= 5). That ad-hoc plan's slots carry
+    /// real roles (Accent/Background/Text), and `fillToTarget` appended them
+    /// verbatim — mislabeling colors in what should be an all-nil,
+    /// anchor-less palette. `mockGenerate` already guarded this correctly by
+    /// zeroing roles when `locked.isEmpty`; `repairViolations` must enforce
+    /// the same invariant so the device `generate()` path (which routes
+    /// through `repairViolations`, not `mockGenerate`) can't leak roles too.
+    @available(iOS 26.0, *)
+    func testRepairViolationsWithNoLockedColorsSuppressesRolesEvenWhenPlanFillTriggersNeutrals() {
+        var colors = [Color(hex: "#3060A0")!]
+        var hexCodes = ["#3060A0"]
+        var colorNames = ["Ocean Blue"]
+        var colorRoles = [""]
+        var seen = Set(hexCodes)
+
+        PaletteGenerator.repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &colorRoles,
+            seen: &seen,
+            lockedCount: 0,
+            targetCount: 6,
+            fallbackPlan: nil,
+            planSeed: 55
+        )
+
+        XCTAssertEqual(colors.count, 6, "fill guarantee must still hold")
+        XCTAssertEqual(colorRoles.count, 6)
+        XCTAssertTrue(
+            colorRoles.allSatisfy { $0.isEmpty },
+            "with no locked colors there is no real anchor for a role — expected all-empty roles, got \(colorRoles)"
+        )
+    }
 }

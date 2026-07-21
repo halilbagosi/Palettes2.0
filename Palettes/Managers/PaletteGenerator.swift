@@ -317,6 +317,18 @@ enum PaletteGenerator {
             bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
             if bad.isEmpty { break }
         }
+
+        // With no locked/base colors, there is no real anchor for a semantic
+        // role to attach to. A shortfall here still routes through an ad-hoc
+        // `ColorHarmony.plan` seeded from the surviving (anchor-less) colors
+        // themselves, and that plan's slots do carry real roles (Accent when
+        // saturated, Background/Text once `reserveNeutrals` fires at size >=
+        // 5) — `fillToTarget` appends them verbatim. Suppress them here so
+        // "pure vibe, no bases" always yields all-nil roles, matching the
+        // guarantee `mockGenerate` already enforces for its own no-base case.
+        if lockedCount == 0 {
+            roles = Array(repeating: "", count: roles.count)
+        }
     }
 
     // MARK: - Count guarantee
