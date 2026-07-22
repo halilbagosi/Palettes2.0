@@ -676,19 +676,37 @@ struct GenerateView: View {
             .filter { selectedColorIDs.contains($0.id) }
             .map { PaletteGenerator.BaseColor(hex: $0.HEX, name: $0.name) }
 
-        if let image = selectedImage {
-            let extracted = try ImageColorExtractor.extractColors(from: image, count: 4)
-            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
-        }
-
         let combinedVibe = [vibeDescription, pendingRefinement]
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: ". ")
+        let hasVibe = !combinedVibe.isEmpty
+
+        if let image = selectedImage {
+            // Pull enough colors straight from the image to fill the whole
+            // palette (not a fixed handful), so an image-based palette is
+            // built FROM the image rather than seeded with a few colors and
+            // padded out with synthesized harmony colors.
+            let needed = max(1, paletteSize - baseColors.count)
+            let extracted = try ImageColorExtractor.extractColors(from: image, count: needed)
+            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
+        }
+
+        // Without a vibe, an image (or hand-picked colors + image) must yield
+        // ONLY the colors actually supplied — never invented ones. Clamping
+        // the target to what we have makes the generator lock them verbatim
+        // and synthesize nothing; an image with few distinct colors simply
+        // produces a smaller palette. With a vibe, keep the full requested
+        // size so the AI may expand to fill whatever the image didn't cover.
+        // The pure color-seed path (colors selected, no image) is unchanged:
+        // it still builds a harmony palette around the seeds.
+        let targetSize = (selectedImage != nil && !hasVibe)
+            ? min(paletteSize, baseColors.count)
+            : paletteSize
 
         return try await PaletteGenerator.generate(
             baseColors: baseColors,
-            size: paletteSize,
+            size: targetSize,
             vibe: combinedVibe,
             scheme: scheme,
             onPartialColors: onColors

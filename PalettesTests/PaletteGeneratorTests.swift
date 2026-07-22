@@ -485,6 +485,30 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertTrue(result.hexCodes.contains("#3161A1"))
     }
 
+    /// An image-sourced palette (all colors locked, no vibe, size == the
+    /// number of colors supplied) must contain EXACTLY those colors — the
+    /// generator must synthesize nothing to "reach" a larger size. This is
+    /// the invariant `GenerateView` relies on to keep image palettes free of
+    /// colors that aren't in the image.
+    @available(iOS 26.0, *)
+    func testLockedColorsWithMatchingSizeAddNoSynthesizedColors() async throws {
+        let locked = [
+            PaletteGenerator.BaseColor(hex: "#2E4756", name: "A"),
+            PaletteGenerator.BaseColor(hex: "#C9A15A", name: "B"),
+            PaletteGenerator.BaseColor(hex: "#8B4A3F", name: "C"),
+            PaletteGenerator.BaseColor(hex: "#6E8B5A", name: "D"),
+            PaletteGenerator.BaseColor(hex: "#D8C7B0", name: "E"),
+        ]
+        let result = try await PaletteGenerator.generate(
+            baseColors: locked,
+            size: locked.count,
+            vibe: nil
+        )
+        XCTAssertEqual(result.hexCodes.count, locked.count)
+        XCTAssertEqual(Set(result.hexCodes), Set(locked.map { $0.hex }),
+                       "palette must contain only the supplied colors, none synthesized")
+    }
+
     /// `fillToTarget`'s golden-ratio rotation fallback must never append a
     /// color within `minDeltaE` of any color already in the palette. Seed
     /// with a single saturated anchor and an exhausted plan (nil) so every
