@@ -38,15 +38,34 @@ final class StoredPalette {
     var name: String = ""
     var hexCodes: [String] = []
     var colorNames: [String] = []
+    var colorRoles: [String] = []
     var isFavorite: Bool = false
     var sortIndex: Int = 0
 
-    init(id: UUID, name: String, hexCodes: [String], colorNames: [String], isFavorite: Bool = false, sortIndex: Int) {
+    init(id: UUID, name: String, hexCodes: [String], colorNames: [String], colorRoles: [String] = [], isFavorite: Bool = false, sortIndex: Int) {
         self.id = id
         self.name = name
         self.hexCodes = hexCodes
         self.colorNames = colorNames
+        self.colorRoles = colorRoles
         self.isFavorite = isFavorite
+        self.sortIndex = sortIndex
+    }
+}
+
+/// A user-defined tag available app-wide for tagging palette colors, in
+/// addition to `ColorRole.defaults`. Ordering is preserved via `sortIndex`;
+/// uniqueness (case-insensitive, and against the built-in defaults) is
+/// enforced by `AppData`, not the schema.
+@Model
+final class StoredTag {
+    var id: UUID = UUID()
+    var name: String = ""
+    var sortIndex: Int = 0
+
+    init(id: UUID, name: String, sortIndex: Int) {
+        self.id = id
+        self.name = name
         self.sortIndex = sortIndex
     }
 }

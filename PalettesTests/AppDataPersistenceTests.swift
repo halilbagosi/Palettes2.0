@@ -118,4 +118,157 @@ final class AppDataPersistenceTests: XCTestCase {
         XCTAssertFalse(appData.colors.contains { $0.id == doomed.id },
                        "Deleted color reappeared after reload")
     }
+
+    /// Round trip: a palette whose second color has a role must survive a
+    /// save + reload-from-store cycle (same container, fresh read).
+    func testColorRoleRoundTripsThroughPersistence() async throws {
+        let appData = AppData(inMemory: true)
+        let initialCount = appData.palettes.count
+
+        let paletteColors = [
+            PaletteColor(color: .red, hex: "#FF0000", name: "Red", role: nil),
+            PaletteColor(color: .blue, hex: "#0000FF", name: "Blue", role: "Accent"),
+        ]
+        let palette = PaletteViewModel(name: "Role Round Trip", paletteColors: paletteColors)
+        appData.palettes.append(palette)
+        try await Task.sleep(for: .seconds(1.5))
+
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        try await Task.sleep(for: .seconds(1.5))
+
+        XCTAssertEqual(appData.palettes.count, initialCount + 1)
+        let reloaded = try XCTUnwrap(appData.palettes.first { $0.id == palette.id })
+        XCTAssertEqual(reloaded.paletteColors[1].role, "Accent")
+        XCTAssertNil(reloaded.paletteColors[0].role)
+    }
+
+    /// Legacy records (inserted before `colorRoles` existed) have an empty
+    /// `colorRoles` array; hydration must map that to all-nil roles rather
+    /// than crashing or misaligning indices.
+    func testLegacyStoredPaletteWithoutColorRolesHydratesToNilRoles() async throws {
+        let appData = AppData(inMemory: true)
+        let context = try XCTUnwrap(appData.testContext)
+
+        let legacyID = UUID()
+        context.insert(StoredPalette(
+            id: legacyID,
+            name: "Legacy Palette",
+            hexCodes: ["#111111", "#222222"],
+            colorNames: ["One", "Two"],
+            sortIndex: 999
+        ))
+        try context.save()
+
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        try await Task.sleep(for: .seconds(1.5))
+
+        let reloaded = try XCTUnwrap(appData.palettes.first { $0.id == legacyID })
+        XCTAssertEqual(reloaded.paletteColors.count, 2)
+        XCTAssertNil(reloaded.paletteColors[0].role)
+        XCTAssertNil(reloaded.paletteColors[1].role)
+    }
+
+    // MARK: - Custom tag library
+
+    /// Adding a custom tag exposes it in `customTags` and the record must
+    /// survive a save + reload-from-store cycle.
+    func testAddCustomTagPersistsAndSurvivesReload() async throws {
+        let appData = AppData(inMemory: true)
+
+        XCTAssertTrue(appData.addCustomTag("Brand"))
+        XCTAssertTrue(appData.customTags.contains("Brand"))
+
+        try await Task.sleep(for: .seconds(1.5))
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        try await Task.sleep(for: .seconds(1.5))
+
+        XCTAssertTrue(appData.customTags.contains("Brand"),
+                       "Custom tag did not survive a reload from the store")
+    }
+
+    /// A new custom tag must not case-insensitively collide with one of the
+    /// built-in `ColorRole.defaults`.
+    func testAddCustomTagRejectsBuiltInCollisionCaseInsensitive() {
+        let appData = AppData(inMemory: true)
+
+        XCTAssertFalse(appData.addCustomTag("primary"))
+        XCTAssertFalse(appData.customTags.contains { $0.caseInsensitiveCompare("primary") == .orderedSame })
+    }
+
+    /// A new custom tag must not case-insensitively collide with an existing
+    /// custom tag either.
+    func testAddCustomTagRejectsCaseInsensitiveDuplicateOfExistingCustomTag() {
+        let appData = AppData(inMemory: true)
+
+        XCTAssertTrue(appData.addCustomTag("Brand"))
+        XCTAssertFalse(appData.addCustomTag("brand"))
+        XCTAssertEqual(appData.customTags.filter { $0.caseInsensitiveCompare("brand") == .orderedSame }.count, 1)
+    }
+
+    /// Renaming a custom tag must rewrite the `role` on every palette color
+    /// using it, and the rewrite must persist across a reload.
+    func testRenameCustomTagRewritesRoleOnPaletteColorAndPersists() async throws {
+        let appData = AppData(inMemory: true)
+        XCTAssertTrue(appData.addCustomTag("Brand"))
+
+        let paletteColors = [
+            PaletteColor(color: .red, hex: "#FF0000", name: "Red", role: "Brand"),
+            PaletteColor(color: .blue, hex: "#0000FF", name: "Blue", role: nil),
+        ]
+        let palette = PaletteViewModel(name: "Tag Rename Test", paletteColors: paletteColors)
+        appData.palettes.append(palette)
+        try await Task.sleep(for: .seconds(1.5))
+
+        appData.renameCustomTag("Brand", to: "Marketing")
+
+        XCTAssertTrue(appData.customTags.contains("Marketing"))
+        XCTAssertFalse(appData.customTags.contains("Brand"))
+        let updated = try XCTUnwrap(appData.palettes.first { $0.id == palette.id })
+        XCTAssertEqual(updated.paletteColors[0].role, "Marketing")
+        try await Task.sleep(for: .seconds(1.5))
+
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        try await Task.sleep(for: .seconds(1.5))
+
+        let reloaded = try XCTUnwrap(appData.palettes.first { $0.id == palette.id })
+        XCTAssertEqual(reloaded.paletteColors[0].role, "Marketing")
+        XCTAssertTrue(appData.customTags.contains("Marketing"))
+    }
+
+    /// Renaming to a name that collides (case-insensitively) with an
+    /// existing custom tag or a default role must be rejected (no-op).
+    func testRenameCustomTagRejectsCollisionWithExistingOrDefault() {
+        let appData = AppData(inMemory: true)
+        XCTAssertTrue(appData.addCustomTag("Brand"))
+        XCTAssertTrue(appData.addCustomTag("Marketing"))
+
+        appData.renameCustomTag("Brand", to: "Marketing")
+        XCTAssertTrue(appData.customTags.contains("Brand"),
+                       "Rename colliding with an existing custom tag should be rejected")
+        XCTAssertTrue(appData.customTags.contains("Marketing"))
+
+        appData.renameCustomTag("Brand", to: "primary")
+        XCTAssertTrue(appData.customTags.contains("Brand"),
+                       "Rename colliding with a default role name should be rejected")
+    }
+
+    /// Deleting a custom tag must clear the role (to nil) on every palette
+    /// color that used it.
+    func testDeleteCustomTagClearsRoleToNil() async throws {
+        let appData = AppData(inMemory: true)
+        XCTAssertTrue(appData.addCustomTag("Brand"))
+
+        let paletteColors = [
+            PaletteColor(color: .red, hex: "#FF0000", name: "Red", role: "Brand"),
+        ]
+        let palette = PaletteViewModel(name: "Tag Delete Test", paletteColors: paletteColors)
+        appData.palettes.append(palette)
+        try await Task.sleep(for: .seconds(1.5))
+
+        appData.deleteCustomTag("Brand")
+
+        XCTAssertFalse(appData.customTags.contains("Brand"))
+        let updated = try XCTUnwrap(appData.palettes.first { $0.id == palette.id })
+        XCTAssertNil(updated.paletteColors[0].role)
+    }
 }

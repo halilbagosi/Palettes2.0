@@ -24,19 +24,27 @@ enum ImageColorExtractor {
             pixels = filtered
         }
 
-        let centroids = kMeansPP(pixels: pixels, k: 6, iterations: 30)
-        guard let dominant = centroids.first else { throw AppError.colorExtractionFailed }
+        let clusters = kMeansPP(points: pixels.map { ($0.r, $0.g, $0.b) }, k: 6, iterations: 30)
+        guard let dominant = clusters.first?.centroid else { throw AppError.colorExtractionFailed }
 
         return (
-            Double(clamped(Int(round(dominant.r)), 0, 255)),
-            Double(clamped(Int(round(dominant.g)), 0, 255)),
-            Double(clamped(Int(round(dominant.b)), 0, 255))
+            Double(clamped(Int(round(dominant.0)), 0, 255)),
+            Double(clamped(Int(round(dominant.1)), 0, 255)),
+            Double(clamped(Int(round(dominant.2)), 0, 255))
         )
     }
 
     /// Extract multiple distinct colors from an image for palette creation.
+    ///
+    /// Clusters in CIELAB space so small-but-vivid accents (a bright logo
+    /// swatch, a single saturated flower) survive alongside large muted
+    /// regions, then ranks by a salience score — `share * (0.5 + chroma/100)`
+    /// clamped to a chroma boost of at most 1.0 — rather than raw pixel share
+    /// alone. Clusters covering under 0.5% of the image are dropped outright
+    /// (speckle/noise), and dedup runs in salience order so the more salient
+    /// color always wins a collision.
     static func extractColors(from image: UIImage, count: Int = 6) throws -> [ExtractedColor] {
-        let size = 80
+        let size = 160
         var pixels = getPixels(from: image, width: size, height: size)
         guard !pixels.isEmpty else { throw AppError.imageProcessingFailed }
 
@@ -46,24 +54,52 @@ enum ImageColorExtractor {
             pixels = filtered
         }
 
-        let clusterCount = min(count + 4, 14)
-        let centroids = kMeansPP(pixels: pixels, k: clusterCount, iterations: 30)
+        let totalPixels = pixels.count
+        let labPoints = pixels.map { px -> (Double, Double, Double) in
+            let lab = ColorNamer.sRGBtoLab(r: px.r / 255.0, g: px.g / 255.0, b: px.b / 255.0)
+            return (lab.L, lab.a, lab.b)
+        }
 
-        var results: [ExtractedColor] = []
-        for centroid in centroids {
-            let r = clamped(Int(round(centroid.r)), 0, 255)
-            let g = clamped(Int(round(centroid.g)), 0, 255)
-            let b = clamped(Int(round(centroid.b)), 0, 255)
+        let clusterCount = min(count + 4, 14)
+        let clusters = kMeansPP(points: labPoints, k: clusterCount, iterations: 30)
+
+        struct Candidate {
+            let hex: String
+            let salience: Double
+        }
+
+        var candidates: [Candidate] = []
+        for cluster in clusters {
+            let share = Double(cluster.count) / Double(totalPixels)
+            guard share >= 0.005 else { continue }
+
+            let labCentroid = (L: cluster.centroid.0, a: cluster.centroid.1, b: cluster.centroid.2)
+            let chromaBoost = min(1.0, ColorNamer.labChroma(labCentroid) / 100.0)
+            let salience = share * (0.5 + chromaBoost)
+
+            let rgb = ColorNamer.labToSRGB(labCentroid)
+            let r = clamped(Int(round(rgb.r * 255.0)), 0, 255)
+            let g = clamped(Int(round(rgb.g * 255.0)), 0, 255)
+            let b = clamped(Int(round(rgb.b * 255.0)), 0, 255)
             let hexStr = String(format: "%02X%02X%02X", r, g, b)
 
-            // Use perceptual distance (CIEDE2000) to check similarity
+            candidates.append(Candidate(hex: hexStr, salience: salience))
+        }
+
+        candidates.sort { $0.salience > $1.salience }
+
+        var results: [ExtractedColor] = []
+        for candidate in candidates {
+            // Use perceptual distance (CIEDE2000) to check similarity. Iterating
+            // in salience order means the higher-salience color already in
+            // `results` always wins a collision.
             let tooSimilar = results.contains { existing in
-                ColorNamer.perceptualDistance(hex1: existing.hex, hex2: "#\(hexStr)") < 10.0
+                ColorNamer.perceptualDistance(hex1: existing.hex, hex2: "#\(candidate.hex)") < 10.0
             }
             if tooSimilar { continue }
 
-            let name = ColorNamer.name(forHex: hexStr)
-            results.append(ExtractedColor(hex: "#\(hexStr)", name: name))
+            let name = ColorNamer.name(forHex: candidate.hex)
+            results.append(ExtractedColor(hex: "#\(candidate.hex)", name: name))
             if results.count >= count { break }
         }
 
@@ -215,86 +251,92 @@ enum ImageColorExtractor {
     // MARK: - K-Means++ Clustering
 
     /// K-means with k-means++ initialization for better convergence.
+    ///
+    /// Generalized over any 3-component tuple (RGB triples for the dominant-color
+    /// path, CIELAB triples for palette extraction) rather than duplicated per
+    /// color space. Returns clusters sorted by pixel count descending, each
+    /// paired with its member count so callers can compute pixel share.
     private static func kMeansPP(
-        pixels: [(r: Double, g: Double, b: Double)],
+        points: [(Double, Double, Double)],
         k: Int,
         iterations: Int
-    ) -> [(r: Double, g: Double, b: Double)] {
-        guard !pixels.isEmpty, k > 0 else { return [] }
+    ) -> [(centroid: (Double, Double, Double), count: Int)] {
+        guard !points.isEmpty, k > 0 else { return [] }
 
-        let actualK = min(k, pixels.count)
+        let actualK = min(k, points.count)
 
         // ── k-means++ initialization ──
-        var centroids: [(r: Double, g: Double, b: Double)] = []
+        var centroids: [(Double, Double, Double)] = []
 
-        // Use a simple deterministic seed: pick the pixel closest to the average
-        let avgR = pixels.reduce(0.0) { acc, px in acc + px.r } / Double(pixels.count)
-        let avgG = pixels.reduce(0.0) { acc, px in acc + px.g } / Double(pixels.count)
-        let avgB = pixels.reduce(0.0) { acc, px in acc + px.b } / Double(pixels.count)
+        // Use a simple deterministic seed: pick the point closest to the average
+        let avg0 = points.reduce(0.0) { acc, p in acc + p.0 } / Double(points.count)
+        let avg1 = points.reduce(0.0) { acc, p in acc + p.1 } / Double(points.count)
+        let avg2 = points.reduce(0.0) { acc, p in acc + p.2 } / Double(points.count)
 
         var bestIdx = 0
         var bestDist = Double.greatestFiniteMagnitude
-        for (i, px) in pixels.enumerated() {
-            let d = sqDist(px, (avgR, avgG, avgB))
+        for (i, p) in points.enumerated() {
+            let d = sqDist(p, (avg0, avg1, avg2))
             if d < bestDist { bestDist = d; bestIdx = i }
         }
-        centroids.append(pixels[bestIdx])
+        centroids.append(points[bestIdx])
 
         // Remaining centroids: pick furthest point from existing centroids
         // (simplified k-means++ that avoids randomness for deterministic results)
         while centroids.count < actualK {
             var maxMinDist = -1.0
             var nextIdx = 0
-            for (i, px) in pixels.enumerated() {
-                let minDist = centroids.map { c in sqDist(px, c) }.min() ?? 0
+            for (i, p) in points.enumerated() {
+                let minDist = centroids.map { c in sqDist(p, c) }.min() ?? 0
                 if minDist > maxMinDist {
                     maxMinDist = minDist
                     nextIdx = i
                 }
             }
-            centroids.append(pixels[nextIdx])
+            centroids.append(points[nextIdx])
         }
 
         // ── Standard k-means iterations ──
         var clusterCounts = [Int](repeating: 0, count: actualK)
 
         for _ in 0..<iterations {
-            var sums = Array(repeating: (r: 0.0, g: 0.0, b: 0.0), count: actualK)
+            var sums = Array(repeating: (0.0, 0.0, 0.0), count: actualK)
             var counts = [Int](repeating: 0, count: actualK)
 
-            for pixel in pixels {
+            for point in points {
                 var minDist = Double.greatestFiniteMagnitude
                 var bestCluster = 0
                 for j in 0..<actualK {
-                    let d = sqDist(pixel, centroids[j])
+                    let d = sqDist(point, centroids[j])
                     if d < minDist { minDist = d; bestCluster = j }
                 }
-                sums[bestCluster].r += pixel.r
-                sums[bestCluster].g += pixel.g
-                sums[bestCluster].b += pixel.b
+                sums[bestCluster].0 += point.0
+                sums[bestCluster].1 += point.1
+                sums[bestCluster].2 += point.2
                 counts[bestCluster] += 1
             }
 
             for j in 0..<actualK where counts[j] > 0 {
                 let n = Double(counts[j])
-                centroids[j] = (sums[j].r / n, sums[j].g / n, sums[j].b / n)
+                centroids[j] = (sums[j].0 / n, sums[j].1 / n, sums[j].2 / n)
             }
             clusterCounts = counts
         }
 
-        // Sort by cluster size (most pixels first = most dominant)
+        // Sort by cluster size (most points first = most dominant)
         let paired = zip(centroids, clusterCounts).sorted { $0.1 > $1.1 }
-        return paired.map { $0.0 }
+        return paired.map { (centroid: $0.0, count: $0.1) }
     }
 
-    /// Squared RGB distance (fast, for cluster assignment only)
+    /// Squared distance in the caller's 3-component space (fast, for cluster
+    /// assignment only — used for both RGB and Lab triples).
     private static func sqDist(
-        _ p1: (r: Double, g: Double, b: Double),
-        _ p2: (r: Double, g: Double, b: Double)
+        _ p1: (Double, Double, Double),
+        _ p2: (Double, Double, Double)
     ) -> Double {
-        let dr = p1.r - p2.r
-        let dg = p1.g - p2.g
-        let db = p1.b - p2.b
-        return dr * dr + dg * dg + db * db
+        let d0 = p1.0 - p2.0
+        let d1 = p1.1 - p2.1
+        let d2 = p1.2 - p2.2
+        return d0 * d0 + d1 * d1 + d2 * d2
     }
 }

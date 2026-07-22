@@ -7,6 +7,7 @@
 
 import XCTest
 import SwiftUI
+import PDFKit
 @testable import Palettes
 
 final class PaletteExporterTests: XCTestCase {
@@ -118,18 +119,197 @@ final class PaletteExporterTests: XCTestCase {
         XCTAssertEqual(PaletteExporter.export(makePalette(), as: .svg), expected)
     }
 
+    func testSVGUsesDisplayNameEvenWhenRoleTagged() {
+        // CRITICAL regression guard: SVG swatch labels must always be the
+        // color's display name ("Ocean"), never the role ("Primary"), per
+        // plans/010 line 93 ("SVG ... unaffected"). The pre-fix
+        // slugSourcesAndHexes-driven implementation rendered the role here.
+        let palette = PaletteViewModel(
+            name: "Roled",
+            colors: [.blue],
+            hexCodes: ["#0077BE"],
+            colorNames: ["Ocean"],
+            colorRoles: ["Primary"]
+        )
+        let output = PaletteExporter.export(palette, as: .svg)
+        XCTAssertTrue(output.contains(">Ocean<"), "SVG label must be the display name: \(output)")
+        XCTAssertFalse(output.contains(">Primary<"), "SVG label must not be the role name: \(output)")
+    }
+
     // MARK: - Slug collision
 
-    func testSlugCollision() {
-        let palette = PaletteViewModel(
+    private func collisionPalette() -> PaletteViewModel {
+        PaletteViewModel(
             name: "Collisions",
             colors: [.blue, .red],
             hexCodes: ["#0000FF", "#FF0000"],
             colorNames: ["Sea", "Sea!"]
         )
-        let output = PaletteExporter.export(palette, as: .css)
+    }
+
+    func testSlugCollision() {
+        let output = PaletteExporter.export(collisionPalette(), as: .css)
         XCTAssertTrue(output.contains("--sea: #0000FF;"))
         XCTAssertTrue(output.contains("--sea-2: #FF0000;"))
+    }
+
+    func testSlugCollisionSCSS() {
+        let output = PaletteExporter.export(collisionPalette(), as: .scss)
+        XCTAssertTrue(output.contains("$sea: #0000FF;"))
+        XCTAssertTrue(output.contains("$sea-2: #FF0000;"))
+    }
+
+    func testSlugCollisionTailwind() {
+        let output = PaletteExporter.export(collisionPalette(), as: .tailwind)
+        XCTAssertTrue(output.contains("'sea': '#0000FF',"))
+        XCTAssertTrue(output.contains("'sea-2': '#FF0000',"))
+    }
+
+    func testSlugCollisionSwiftUI() {
+        let output = PaletteExporter.export(collisionPalette(), as: .swiftui)
+        XCTAssertTrue(output.contains("static let sea = Color"))
+        XCTAssertTrue(output.contains("static let sea2 = Color"))
+    }
+
+    // MARK: - Role-driven export names
+
+    private func makeRolePalette() -> PaletteViewModel {
+        PaletteViewModel(
+            name: "Roled",
+            colors: [.blue, .orange],
+            hexCodes: ["#0077BE", "#C2B280"],
+            colorNames: ["Ocean", "Sand"],
+            colorRoles: ["Primary", ""]
+        )
+    }
+
+    func testRoleDrivenCSS() {
+        let expected = """
+        :root {
+          --primary: #0077BE;
+          --sand: #C2B280;
+        }
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .css), expected)
+    }
+
+    func testRoleDrivenSCSS() {
+        let expected = """
+        $primary: #0077BE;
+        $sand: #C2B280;
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .scss), expected)
+    }
+
+    func testRoleDrivenTailwind() {
+        let expected = """
+        colors: {
+          'primary': '#0077BE',
+          'sand': '#C2B280',
+        }
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .tailwind), expected)
+    }
+
+    func testRoleDrivenSwiftUI() {
+        let expected = """
+        extension Color {
+            static let primary = Color(red: 0.000, green: 0.467, blue: 0.745) // #0077BE
+            static let sand = Color(red: 0.761, green: 0.698, blue: 0.502) // #C2B280
+        }
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .swiftui), expected)
+    }
+
+    func testRoleDrivenJSON() {
+        // "name" stays the color's display name; a tagged color gains a
+        // separate "role" field holding the slugified role. Untagged colors
+        // omit the "role" field entirely.
+        let expected = """
+        [
+          { "name": "Ocean", "role": "primary", "hex": "#0077BE" },
+          { "name": "Sand", "hex": "#C2B280" }
+        ]
+        """
+        XCTAssertEqual(PaletteExporter.export(makeRolePalette(), as: .json), expected)
+    }
+
+    func testJSONRoleFieldCollisionAmongTaggedColors() {
+        // Two colors both tagged "Primary" must dedup through the shared
+        // uniqueSlugs pass, same as CSS/SCSS/etc, yielding primary / primary-2
+        // in the "role" fields.
+        let palette = PaletteViewModel(
+            name: "RoleRoleCollision",
+            colors: [.blue, .cyan],
+            hexCodes: ["#0077BE", "#00AACC"],
+            colorNames: ["Ocean", "Sky"],
+            colorRoles: ["Primary", "Primary"]
+        )
+        let expected = """
+        [
+          { "name": "Ocean", "role": "primary", "hex": "#0077BE" },
+          { "name": "Sky", "role": "primary-2", "hex": "#00AACC" }
+        ]
+        """
+        XCTAssertEqual(PaletteExporter.export(palette, as: .json), expected)
+    }
+
+    func testJSONRoleFieldOmittedWhenRoleCollidesWithUntaggedName() {
+        // Role "Primary" collides with a second, untagged color literally
+        // named "Primary". The tagged color's role field still resolves to
+        // "primary"; the untagged color gets no "role" field at all (its
+        // name-derived slug is irrelevant to JSON).
+        let palette = PaletteViewModel(
+            name: "RoleNameCollision",
+            colors: [.blue, .red],
+            hexCodes: ["#0000FF", "#FF0000"],
+            colorNames: ["Ocean", "Primary"],
+            colorRoles: ["Primary", ""]
+        )
+        let expected = """
+        [
+          { "name": "Ocean", "role": "primary", "hex": "#0000FF" },
+          { "name": "Primary", "hex": "#FF0000" }
+        ]
+        """
+        XCTAssertEqual(PaletteExporter.export(palette, as: .json), expected)
+    }
+
+    func testRoleNameSlugCollision() {
+        // A color tagged with role "Primary" alongside a different color
+        // literally *named* "Primary" (untagged) must collide and dedup.
+        let palette = PaletteViewModel(
+            name: "RoleCollision",
+            colors: [.blue, .red],
+            hexCodes: ["#0000FF", "#FF0000"],
+            colorNames: ["Ocean", "Primary"],
+            colorRoles: ["Primary", ""]
+        )
+        let output = PaletteExporter.export(palette, as: .css)
+        XCTAssertTrue(output.contains("--primary: #0000FF;"))
+        XCTAssertTrue(output.contains("--primary-2: #FF0000;"))
+    }
+
+    // MARK: - Untagged-format regression (role must not affect these)
+
+    func testRolePresentDoesNotAffectPlainHexSVGOrCoolors() {
+        // Using the original (role-free) test palette, plainHex/SVG/Coolors
+        // output must remain byte-identical to pre-change behavior.
+        let palette = makePalette()
+        XCTAssertEqual(PaletteExporter.export(palette, as: .plainHex), "#1B4D1B\n#99FA99\n#333333")
+        XCTAssertEqual(PaletteExporter.export(palette, as: .coolorsURL), "https://coolors.co/1b4d1b-99fa99-333333")
+        let svgExpected = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"140\" viewBox=\"0 0 300 140\">"
+        + "<rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" fill=\"#1B4D1B\"/>"
+        + "<text x=\"50\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">Forest Green</text>"
+        + "<text x=\"50\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">#1B4D1B</text>"
+        + "<rect x=\"100\" y=\"0\" width=\"100\" height=\"100\" fill=\"#99FA99\"/>"
+        + "<text x=\"150\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">Pastel Mint</text>"
+        + "<text x=\"150\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">#99FA99</text>"
+        + "<rect x=\"200\" y=\"0\" width=\"100\" height=\"100\" fill=\"#333333\"/>"
+        + "<text x=\"250\" y=\"118\" text-anchor=\"middle\" font-family=\"-apple-system, sans-serif\" font-size=\"10\">Charcoal</text>"
+        + "<text x=\"250\" y=\"132\" text-anchor=\"middle\" font-family=\"ui-monospace, monospace\" font-size=\"9\">#333333</text>"
+        + "</svg>"
+        XCTAssertEqual(PaletteExporter.export(palette, as: .svg), svgExpected)
     }
 
     // MARK: - XML escape
@@ -197,6 +377,39 @@ final class PaletteExporterTests: XCTestCase {
         XCTAssertEqual(Array(data), expected)
     }
 
+    /// Decodes the null-terminated UTF-16BE color name from an ASE color
+    /// block, given the 12-byte header + block-type/length/name-length
+    /// preamble is fixed-size at the start of a single-color ASE payload.
+    private func decodeASEFirstColorName(_ data: Data) -> String {
+        let bytes = Array(data)
+        // offsets: 0-11 header, 12-13 block type, 14-17 block length, 18-19 name length
+        let nameLength = Int(bytes[18]) << 8 | Int(bytes[19])
+        var units: [UInt16] = []
+        var offset = 20
+        for _ in 0..<nameLength {
+            let unit = UInt16(bytes[offset]) << 8 | UInt16(bytes[offset + 1])
+            units.append(unit)
+            offset += 2
+        }
+        if units.last == 0 { units.removeLast() } // drop null terminator
+        return String(decoding: units, as: UTF16.self)
+    }
+
+    func testASEUsesDisplayNameEvenWhenRoleTagged() {
+        // IMPORTANT: ASE swatch names are design-tool labels; a role-tagged
+        // color must still export its display name ("Ocean"), not the role
+        // ("Primary").
+        let palette = PaletteViewModel(
+            name: "Roled",
+            colors: [.blue],
+            hexCodes: ["#0077BE"],
+            colorNames: ["Ocean"],
+            colorRoles: ["Primary"]
+        )
+        let data = PaletteExporter.aseData(palette)
+        XCTAssertEqual(decodeASEFirstColorName(data), "Ocean")
+    }
+
     // MARK: - PDF
 
     @MainActor
@@ -204,5 +417,27 @@ final class PaletteExporterTests: XCTestCase {
         let data = PaletteExporter.pdfData(makePalette())
         XCTAssertFalse(data.isEmpty)
         XCTAssertEqual(data.prefix(4), Data("%PDF".utf8))
+    }
+
+    @MainActor
+    func testPDFUsesDisplayNameEvenWhenRoleTagged() {
+        // IMPORTANT: PDF swatch labels are design-tool labels; a role-tagged
+        // color must still export its display name ("Ocean"), not the role
+        // ("Primary").
+        let palette = PaletteViewModel(
+            name: "Roled",
+            colors: [.blue],
+            hexCodes: ["#0077BE"],
+            colorNames: ["Ocean"],
+            colorRoles: ["Primary"]
+        )
+        let data = PaletteExporter.pdfData(palette)
+        guard let document = PDFDocument(data: data), let page = document.page(at: 0) else {
+            XCTFail("Could not parse generated PDF")
+            return
+        }
+        let text = page.string ?? ""
+        XCTAssertTrue(text.contains("Ocean"), "PDF text should contain display name: \(text)")
+        XCTAssertFalse(text.contains("Primary"), "PDF text should not contain role name: \(text)")
     }
 }

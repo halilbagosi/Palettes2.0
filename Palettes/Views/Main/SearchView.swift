@@ -12,6 +12,7 @@ struct SearchView: View {
     @State private var searchText: String = ""
     @State private var scope: SearchScope = .all
     @State private var selectedHues: Set<HueCategory> = []
+    @State private var selectedTags: Set<String> = []
     @AppStorage("recentSearches") private var recentSearchesJSON: String = "[]"
 
     // MARK: - Query
@@ -42,9 +43,7 @@ struct SearchView: View {
 
     var filteredPalettes: [PaletteViewModel] {
         appData.palettes.filter { palette in
-            palette.name.localizedCaseInsensitiveContains(query) ||
-            palette.colorNames.contains(where: { $0.localizedCaseInsensitiveContains(query) }) ||
-            (!hexQuery.isEmpty && palette.hexCodes.contains(where: { $0.localizedCaseInsensitiveContains(hexQuery) }))
+            SearchMatching.paletteMatchesQuery(palette, query: query, hexQuery: hexQuery)
         }
     }
 
@@ -60,9 +59,9 @@ struct SearchView: View {
     }
 
     private var browsePalettes: [PaletteViewModel] {
-        guard !selectedHues.isEmpty else { return appData.palettes }
-        return appData.palettes.filter { palette in
-            palette.colors.contains(where: { selectedHues.contains($0.hueCategory) })
+        appData.palettes.filter { palette in
+            (selectedHues.isEmpty || palette.colors.contains(where: { selectedHues.contains($0.hueCategory) })) &&
+            SearchMatching.paletteMatchesTags(palette, tags: selectedTags)
         }
     }
 
@@ -71,6 +70,11 @@ struct SearchView: View {
         let present = Set(appData.colors.map { $0.color.hueCategory })
             .union(appData.palettes.flatMap { $0.colors.map { $0.hueCategory } })
         return HueCategory.allCases.filter { present.contains($0) }
+    }
+
+    /// Only offer chips for color-role tags that actually exist in the library's palettes.
+    private var availableTags: [String] {
+        SearchMatching.tagsInUse(palettes: appData.palettes)
     }
 
     // MARK: - Recent Searches
@@ -126,6 +130,7 @@ struct SearchView: View {
             recordRecentSearch()
         }
         .sensoryFeedback(.selection, trigger: selectedHues)
+        .sensoryFeedback(.selection, trigger: selectedTags)
         .sensoryFeedback(.selection, trigger: scope)
     }
 
@@ -219,6 +224,11 @@ struct SearchView: View {
                 }
             }
 
+            if !availableTags.isEmpty {
+                tagChips
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             if !browsePalettes.isEmpty {
                 SearchSectionHeader(title: "Palettes", count: browsePalettes.count)
 
@@ -238,17 +248,19 @@ struct SearchView: View {
                 }
             }
 
-            if browseColors.isEmpty && browsePalettes.isEmpty, !selectedHues.isEmpty {
+            if browseColors.isEmpty && browsePalettes.isEmpty, (!selectedHues.isEmpty || !selectedTags.isEmpty) {
                 ContentUnavailableView(
                     "No matches",
                     systemImage: "paintpalette",
-                    description: Text("Nothing in your library falls in the selected hue range\(selectedHues.count == 1 ? "" : "s").")
+                    description: Text("Nothing in your library matches the selected filters.")
                 )
                 .padding(.top, 40)
             }
         }
         .padding()
         .animation(.spring(response: 0.3), value: selectedHues)
+        .animation(.spring(response: 0.3), value: selectedTags)
+        .animation(.spring(duration: 0.35, bounce: 0.2), value: availableTags.isEmpty)
     }
 
     private var hueChips: some View {
@@ -273,6 +285,38 @@ struct SearchView: View {
                                 selectedHues.remove(hue)
                             } else {
                                 selectedHues.insert(hue)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .scrollClipDisabled()
+    }
+
+    private var tagChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                HueChip(
+                    title: "All",
+                    swatch: nil,
+                    isSelected: selectedTags.isEmpty
+                ) {
+                    withAnimation(.spring(response: 0.3)) { selectedTags.removeAll() }
+                }
+
+                ForEach(availableTags, id: \.self) { tag in
+                    HueChip(
+                        title: tag,
+                        swatch: nil,
+                        isSelected: selectedTags.contains(tag)
+                    ) {
+                        withAnimation(.spring(response: 0.3)) {
+                            if selectedTags.contains(tag) {
+                                selectedTags.remove(tag)
+                            } else {
+                                selectedTags.insert(tag)
                             }
                         }
                     }

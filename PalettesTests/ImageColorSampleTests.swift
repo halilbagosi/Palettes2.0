@@ -86,4 +86,80 @@ final class ImageColorSampleTests: XCTestCase {
         XCTAssertEqual(left.g, oneOff.g, accuracy: 0.001)
         XCTAssertEqual(left.b, oneOff.b, accuracy: 0.001)
     }
+
+    // MARK: - extractColors (Lab-space salience ranking)
+
+    private func colorForHex(_ hex: String) -> UIColor {
+        var c = hex
+        if c.hasPrefix("#") { c.removeFirst() }
+        let n = UInt64(c, radix: 16) ?? 0
+        return UIColor(
+            red: CGFloat((n >> 16) & 0xFF) / 255.0,
+            green: CGFloat((n >> 8) & 0xFF) / 255.0,
+            blue: CGFloat(n & 0xFF) / 255.0,
+            alpha: 1
+        )
+    }
+
+    private func imageWithPatch(
+        background: String,
+        patch: String,
+        patchRect: CGRect,
+        size: CGFloat = 200
+    ) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        return renderer.image { ctx in
+            colorForHex(background).setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+            colorForHex(patch).setFill()
+            ctx.fill(patchRect)
+        }
+    }
+
+    private func closestDelta(_ hex: String, in colors: [ImageColorExtractor.ExtractedColor]) -> Double {
+        colors.map { ColorNamer.perceptualDistance(hex1: $0.hex, hex2: hex) }.min() ?? .greatestFiniteMagnitude
+    }
+
+    func testSmallAccentSurvivesExtraction() throws {
+        // Five competing regions (four muted, low-chroma; one vivid, small) so the
+        // count:4 budget forces a real choice between raw pixel-share and
+        // chroma-boosted salience. Shares: 30% / 30% / 25% / 10% / 5%(accent).
+        // Under plain size-ranking the 10% muted region beats the 5% vivid patch;
+        // under salience (share * (0.5 + min(1, chroma/100))) the vivid patch wins.
+        let size: CGFloat = 200
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        let img = renderer.image { ctx in
+            colorForHex("#8C7868").setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 60, height: size))
+            colorForHex("#688C78").setFill()
+            ctx.fill(CGRect(x: 60, y: 0, width: 60, height: size))
+            colorForHex("#78688C").setFill()
+            ctx.fill(CGRect(x: 120, y: 0, width: 50, height: size))
+            colorForHex("#808080").setFill()
+            ctx.fill(CGRect(x: 170, y: 0, width: 20, height: size))
+            colorForHex("#FF3B30").setFill()
+            ctx.fill(CGRect(x: 190, y: 0, width: 10, height: size))
+        }
+        let results = try ImageColorExtractor.extractColors(from: img, count: 4)
+        XCTAssertLessThan(closestDelta("#FF3B30", in: results), 12.0)
+    }
+
+    func testLabSeparationKeepsPerceptuallyDistinctPair() throws {
+        // RGB-close-ish but perceptually distinct pair (blue-gray vs green-gray).
+        let img = splitImage(left: colorForHex("#4A6FA5"), right: colorForHex("#4AA56F"), size: 200)
+        let results = try ImageColorExtractor.extractColors(from: img, count: 4)
+        XCTAssertLessThan(closestDelta("#4A6FA5", in: results), 12.0)
+        XCTAssertLessThan(closestDelta("#4AA56F", in: results), 12.0)
+    }
+
+    func testSpeckleIsRejected() throws {
+        // ~0.01% area speckle should not survive the share threshold.
+        let img = imageWithPatch(
+            background: "#777777",
+            patch: "#FF00FF",
+            patchRect: CGRect(x: 100, y: 100, width: 2, height: 2)
+        )
+        let results = try ImageColorExtractor.extractColors(from: img, count: 4)
+        XCTAssertGreaterThanOrEqual(closestDelta("#FF00FF", in: results), 12.0)
+    }
 }

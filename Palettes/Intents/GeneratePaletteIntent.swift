@@ -35,7 +35,8 @@ struct GeneratePaletteIntent: AppIntent {
         let generated = try await PaletteGenerator.generate(
             baseColors: [],
             size: min(max(size, 2), 10),
-            vibe: vibe
+            vibe: vibe,
+            scheme: .auto
         )
         let saved = AppData.shared.addPalette(name: generated.name, paletteColors: generated.paletteColors)
 

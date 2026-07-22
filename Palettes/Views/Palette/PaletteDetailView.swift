@@ -18,7 +18,12 @@ struct PaletteDetailView: View {
     @State private var isEditingPalette = false
     @State private var showDeleteAlert = false
     @State private var isExporting = false
+    @State private var taggingColorIndex: Int?
     @Environment(\.dismiss) var dismiss
+
+    /// Identifiable wrapper so `.sheet(item:)` can present `RolePickerSheet`
+    /// for a specific swatch index (mirrors `PaletteEditSheet.ColorBindingWrapper`).
+    private struct TaggingTarget: Identifiable { let id: Int }
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == palette.id })
@@ -69,13 +74,27 @@ struct PaletteDetailView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)], spacing: 20) {
                     ForEach(Array(livePalette.colors.enumerated()), id: \.offset) { index, _ in
                         let colorVM = colorViewModel(at: index, from: livePalette)
+                        let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
                         ColorCellBig(
                             colorName: colorVM.name,
                             hexCode: colorVM.HEX,
                             color: colorVM.color,
                             isUsedInPalette: true
                         )
-                        .contextMenu { colorContextMenu(colorVM) } preview: {
+                        .overlay(alignment: .topTrailing) {
+                            if let role {
+                                Button {
+                                    taggingColorIndex = index
+                                } label: {
+                                    RoleBadge(role: role)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(12)
+                                .transition(.scale(scale: 0.8).combined(with: .opacity))
+                            }
+                        }
+                        .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
+                        .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
                             ColorMorphCard(
                                 colorName: colorVM.name,
                                 hexCode: colorVM.HEX,
@@ -189,6 +208,18 @@ struct PaletteDetailView: View {
             ExportPaletteSheet(palette: livePalette)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(item: Binding(
+            get: { taggingColorIndex.map { TaggingTarget(id: $0) } },
+            set: { newValue in taggingColorIndex = newValue?.id }
+        )) { target in
+            RolePickerSheet(
+                currentRole: target.id < livePalette.paletteColors.count ? livePalette.paletteColors[target.id].role : nil,
+                palette: livePalette,
+                colorIndex: target.id
+            )
+            .environmentObject(appData)
+            .presentationDetents([.medium, .large])
+        }
         .alert("Delete Palette", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
                 withAnimation(.spring()) {
@@ -207,7 +238,7 @@ struct PaletteDetailView: View {
     /// Same actions as the Colors tab's card menu, minus edit/delete — those
     /// belong to the library; here the card may be a transient palette color.
     @ViewBuilder
-    private func colorContextMenu(_ color: ColorViewModel) -> some View {
+    private func colorContextMenu(_ color: ColorViewModel, index: Int) -> some View {
         if appData.colors.contains(where: { $0.id == color.id }) {
             Button {
                 toggleColorFavorite(color)
@@ -215,6 +246,12 @@ struct PaletteDetailView: View {
                 Label(color.isFavorite ? "Remove Favorite" : "Favorite",
                       systemImage: color.isFavorite ? "star.slash" : "star")
             }
+        }
+
+        Button {
+            taggingColorIndex = index
+        } label: {
+            Label("Tag…", systemImage: "tag")
         }
 
         Button {
