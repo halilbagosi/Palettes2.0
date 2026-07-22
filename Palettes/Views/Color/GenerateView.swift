@@ -20,6 +20,7 @@ struct GenerateView: View {
     @State private var selectedImage: UIImage?
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var showCamera = false
+    @State private var showPhotoPicker = false
     @FocusState private var vibeFocused: Bool
 
     // Generation state
@@ -296,6 +297,17 @@ struct GenerateView: View {
                         Text("· \(selectedColorIDs.count) selected")
                             .font(.subheadline)
                             .foregroundStyle(.tint)
+
+                        Spacer(minLength: 0)
+
+                        Button("Clear") {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                selectedColorIDs.removeAll()
+                            }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tint)
                     }
                 }
 
@@ -506,7 +518,12 @@ struct GenerateView: View {
                 Label("Take Photo", systemImage: "camera")
             }
 
-            PhotosPicker(selection: $photosPickerItem, matching: .images) {
+            // A PhotosPicker nested directly in a Menu never presents, so the
+            // menu item just flips a flag and the picker is driven by the
+            // `.photosPicker(isPresented:)` modifier below.
+            Button {
+                showPhotoPicker = true
+            } label: {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
             }
         } label: {
@@ -518,6 +535,7 @@ struct GenerateView: View {
                 .liquidGlass(.interactive, in: .circle)
         }
         .clipShape(Circle())
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photosPickerItem, matching: .images)
         .onChange(of: photosPickerItem) { _, newItem in
             Task {
                 if let data = try? await newItem?.loadTransferable(type: Data.self),
