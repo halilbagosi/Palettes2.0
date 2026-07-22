@@ -15,6 +15,7 @@ struct GenerateView: View {
     @State private var colorsFadeLeading = false
     @State private var colorsFadeTrailing = true
     @State private var selectedColorIDs: Set<UUID> = []
+    @State private var scheme: HarmonyScheme = .auto
     @State private var vibeDescription = ""
     @State private var glowPhase: CGFloat = 0
     @State private var selectedImage: UIImage?
@@ -297,6 +298,13 @@ struct GenerateView: View {
                             .font(.subheadline)
                             .foregroundStyle(.tint)
                     }
+
+                    Spacer(minLength: 8)
+
+                    if !selectedColorIDs.isEmpty {
+                        schemeMenu
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -383,6 +391,35 @@ struct GenerateView: View {
         .hoverEffect(.lift)
         .accessibilityLabel(Text(colorItem.name))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Lets the user override the harmony scheme the generator would
+    /// otherwise pick automatically from the selected base colors.
+    private var schemeMenu: some View {
+        Menu {
+            ForEach(HarmonyScheme.allCases) { option in
+                Button {
+                    scheme = option
+                } label: {
+                    if option == scheme {
+                        Label(option.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(option.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(scheme.displayName)
+                    .font(.caption.weight(.medium))
+                Image(systemName: "paintpalette")
+                    .font(.caption)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .liquidGlass(.interactive, in: .capsule)
+        }
     }
 
     // MARK: - Vibe
@@ -607,6 +644,7 @@ struct GenerateView: View {
     private func resetForm() {
         paletteSize = 4
         selectedColorIDs = []
+        scheme = .auto
         vibeDescription = ""
         selectedImage = nil
         photosPickerItem = nil
@@ -633,7 +671,7 @@ struct GenerateView: View {
             baseColors: baseColors,
             size: paletteSize,
             vibe: combinedVibe,
-            scheme: .auto,
+            scheme: scheme,
             onPartialColors: onColors
         )
     }
