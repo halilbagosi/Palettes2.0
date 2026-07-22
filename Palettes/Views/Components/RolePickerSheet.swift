@@ -123,20 +123,45 @@ struct RolePickerSheet: View {
 
     // MARK: - Rows
 
+    /// Each role/tag is rendered as an actual chip — leading tag glyph, bold
+    /// label, filled pill — rather than plain list text, so the available
+    /// tags read clearly at a glance in the slide-up sheet. The selected one
+    /// gets a solid dark fill with a white label (matching the row control in
+    /// Edit Palette) plus a trailing checkmark; the rest use a subtle fill
+    /// that stays legible in both light and dark mode.
     private func roleRow(_ name: String) -> some View {
-        Button {
+        let isSelected = liveCurrentRole?.caseInsensitiveCompare(name) == .orderedSame
+        return Button {
             assign(role: name)
         } label: {
-            HStack {
-                Text(name)
-                    .foregroundStyle(.primary)
+            HStack(spacing: 12) {
+                HStack(spacing: 5) {
+                    Image(systemName: "tag.fill")
+                        .font(.caption2)
+                    Text(name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill(isSelected
+                        ? AnyShapeStyle(Color(white: 0.22))
+                        : AnyShapeStyle(Color(.tertiarySystemFill)))
+                )
+
                 Spacer()
-                if liveCurrentRole?.caseInsensitiveCompare(name) == .orderedSame {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.tint)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(white: 0.22))
                 }
             }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     private func manageTagRow(_ tag: String) -> some View {
