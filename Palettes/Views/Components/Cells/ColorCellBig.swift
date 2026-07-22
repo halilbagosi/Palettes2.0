@@ -18,20 +18,28 @@ struct ColorCellBig: View {
     /// Shown as a "View" pill; opens the color detail view.
     var onViewPalettes: (() -> Void)? = nil
 
+    /// Corner radius of the card itself. Overlays that want to sit
+    /// concentric with the card (same center of curvature) should derive
+    /// their own radius from this value rather than hardcoding one — see
+    /// `RoleBadge.cornerRadius`.
+    static let cornerRadius: CGFloat = 28
+    /// Standard inset used for pills/badges overlaid at the card's corners.
+    static let overlayInset: CGFloat = 12
+
     var body: some View {
         Rectangle()
             .fill(color.gradient)
             .frame(height: 180)
             .overlay(alignment: .topLeading) {
-                namePill.padding(12)
+                namePill.padding(Self.overlayInset)
             }
             .overlay(alignment: .bottom) {
-                bottomBar.padding(12)
+                bottomBar.padding(Self.overlayInset)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
             .compositingGroup()
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
-            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
             // Only claim taps when a handler exists — an unconditional tap
             // gesture swallows taps meant for an enclosing NavigationLink.
             .modifier(OptionalTapModifier(action: onCardTap))

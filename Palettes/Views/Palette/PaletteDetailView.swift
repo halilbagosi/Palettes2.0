@@ -18,12 +18,14 @@ struct PaletteDetailView: View {
     @State private var isEditingPalette = false
     @State private var showDeleteAlert = false
     @State private var isExporting = false
-    @State private var taggingColorIndex: Int?
+    /// Set alongside `isEditingPalette` when tagging is entered via the
+    /// RoleBadge or "Tag…" context menu action, so `PaletteEditSheet` opens
+    /// already focused on that color's tag picker instead of the plain
+    /// palette editor. Tag assignment/creation now lives entirely in
+    /// `PaletteEditSheet` (see its `roleControl(for:)`); this view only
+    /// routes into it.
+    @State private var editFocusColorIndex: Int?
     @Environment(\.dismiss) var dismiss
-
-    /// Identifiable wrapper so `.sheet(item:)` can present `RolePickerSheet`
-    /// for a specific swatch index (mirrors `PaletteEditSheet.ColorBindingWrapper`).
-    private struct TaggingTarget: Identifiable { let id: Int }
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == palette.id })
@@ -84,12 +86,12 @@ struct PaletteDetailView: View {
                         .overlay(alignment: .topTrailing) {
                             if let role {
                                 Button {
-                                    taggingColorIndex = index
+                                    openTagging(for: index)
                                 } label: {
                                     RoleBadge(role: role)
                                 }
                                 .buttonStyle(.plain)
-                                .padding(12)
+                                .padding(ColorCellBig.overlayInset)
                                 .transition(.scale(scale: 0.8).combined(with: .opacity))
                             }
                         }
@@ -123,6 +125,7 @@ struct PaletteDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        editFocusColorIndex = nil
                         isEditingPalette = true
                     } label: {
                         Label("Edit Palette", systemImage: "pencil")
@@ -199,26 +202,14 @@ struct PaletteDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $isEditingPalette) {
-            PaletteEditSheet(paletteName: livePalette.name, palette: palette)
+        .sheet(isPresented: $isEditingPalette, onDismiss: { editFocusColorIndex = nil }) {
+            PaletteEditSheet(paletteName: livePalette.name, palette: palette, initialTaggingColorIndex: editFocusColorIndex)
                 .environmentObject(appData)
                 .formPresentationSizing()
         }
         .sheet(isPresented: $isExporting) {
             ExportPaletteSheet(palette: livePalette)
                 .presentationDetents([.medium, .large])
-        }
-        .sheet(item: Binding(
-            get: { taggingColorIndex.map { TaggingTarget(id: $0) } },
-            set: { newValue in taggingColorIndex = newValue?.id }
-        )) { target in
-            RolePickerSheet(
-                currentRole: target.id < livePalette.paletteColors.count ? livePalette.paletteColors[target.id].role : nil,
-                palette: livePalette,
-                colorIndex: target.id
-            )
-            .environmentObject(appData)
-            .presentationDetents([.medium, .large])
         }
         .alert("Delete Palette", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -249,7 +240,7 @@ struct PaletteDetailView: View {
         }
 
         Button {
-            taggingColorIndex = index
+            openTagging(for: index)
         } label: {
             Label("Tag…", systemImage: "tag")
         }
@@ -287,6 +278,14 @@ struct PaletteDetailView: View {
     }
 
     // MARK: - Actions
+
+    /// Routes into `PaletteEditSheet`'s tag picker for `index`, rather than
+    /// presenting a standalone role sheet — tag assignment/creation now
+    /// lives only in the Edit Palette view (see `roleControl(for:)` there).
+    private func openTagging(for index: Int) {
+        editFocusColorIndex = index
+        isEditingPalette = true
+    }
 
     private func toggleFavorite() {
         if let idx = paletteIndex {
