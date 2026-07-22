@@ -9,9 +9,7 @@ import SwiftUI
 /// edit or remove individual colors, regenerate, or save.
 struct GenerationResultView: View {
     @Binding var name: String
-    @Binding var colors: [Color]
-    @Binding var hexCodes: [String]
-    @Binding var colorNames: [String]
+    @Binding var paletteColors: [PaletteColor]
     var onBack: () -> Void
     var onRegenerate: () -> Void
     var onDescribeChange: (String) -> Void
@@ -70,29 +68,17 @@ struct GenerationResultView: View {
             }
         }
         .sheet(item: $editTarget) { target in
-            if target.id < colors.count, target.id < hexCodes.count, target.id < colorNames.count {
+            if target.id < paletteColors.count {
                 ColorEditView(
-                    colorName: $colorNames[target.id],
-                    hexCode: $hexCodes[target.id],
-                    colorValue: $colors[target.id]
+                    colorName: $paletteColors[target.id].name,
+                    hexCode: $paletteColors[target.id].hex,
+                    colorValue: $paletteColors[target.id].color
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])
                 .formPresentationSizing()
             }
         }
-        // The generator can return mismatched array lengths; keep names and
-        // hex codes in lockstep with the colors so index access is safe.
-        .onAppear(perform: normalizeArrays)
-        .onChange(of: colors.count) { _, _ in normalizeArrays() }
-    }
-
-    /// Pads or trims `hexCodes`/`colorNames` to match `colors` exactly.
-    private func normalizeArrays() {
-        while hexCodes.count < colors.count { hexCodes.append("") }
-        while colorNames.count < colors.count { colorNames.append("Color \(colorNames.count + 1)") }
-        if hexCodes.count > colors.count { hexCodes.removeLast(hexCodes.count - colors.count) }
-        if colorNames.count > colors.count { colorNames.removeLast(colorNames.count - colors.count) }
     }
 
     // MARK: - Name
@@ -128,8 +114,8 @@ struct GenerationResultView: View {
 
     private var swatchStrip: some View {
         HStack(spacing: 0) {
-            ForEach(colors.indices, id: \.self) { i in
-                Rectangle().fill(colors[i])
+            ForEach(paletteColors.indices, id: \.self) { i in
+                Rectangle().fill(paletteColors[i].color)
             }
         }
         .frame(height: 140)
@@ -138,24 +124,24 @@ struct GenerationResultView: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(.white.opacity(0.25), lineWidth: 1)
         )
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: colors.count)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: paletteColors.count)
     }
 
     // MARK: - Color Rows
 
     private var colorList: some View {
         VStack(spacing: 10) {
-            ForEach(colors.indices, id: \.self) { i in
+            ForEach(paletteColors.indices, id: \.self) { i in
                 colorRow(at: i)
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: colors.count)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: paletteColors.count)
     }
 
     private func colorRow(at index: Int) -> some View {
         HStack(spacing: 14) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(colors[index].gradient)
+                .fill(paletteColors[index].color.gradient)
                 .frame(width: 50, height: 50)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -163,9 +149,9 @@ struct GenerationResultView: View {
                 )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(index < colorNames.count ? colorNames[index] : "Color \(index + 1)")
+                Text(paletteColors[index].name)
                     .font(.system(size: 15, weight: .semibold))
-                Text(index < hexCodes.count ? hexCodes[index] : "")
+                Text(paletteColors[index].hex)
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundColor(.secondary)
             }
@@ -188,9 +174,9 @@ struct GenerationResultView: View {
                 Image(systemName: "minus.circle.fill")
                     .font(.title2)
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(colors.count > 2 ? Color.red.opacity(0.8) : Color.secondary.opacity(0.4))
+                    .foregroundStyle(paletteColors.count > 2 ? Color.red.opacity(0.8) : Color.secondary.opacity(0.4))
             }
-            .disabled(colors.count <= 2)
+            .disabled(paletteColors.count <= 2)
             .accessibilityLabel("Remove color")
         }
         .padding(10)
@@ -198,21 +184,14 @@ struct GenerationResultView: View {
     }
 
     private func removeColor(at index: Int) {
-        guard colors.count > 2, index < colors.count else { return }
-        let removedColor = colors[index]
-        let removedHex = index < hexCodes.count ? hexCodes[index] : ""
-        let removedName = index < colorNames.count ? colorNames[index] : "Color \(index + 1)"
+        guard paletteColors.count > 2, index < paletteColors.count else { return }
+        let removed = paletteColors[index]
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            colors.remove(at: index)
-            if index < hexCodes.count { hexCodes.remove(at: index) }
-            if index < colorNames.count { colorNames.remove(at: index) }
+            paletteColors.remove(at: index)
         }
         ToastManager.shared.show("Color removed", icon: "trash.fill") {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                let at = min(index, colors.count)
-                colors.insert(removedColor, at: at)
-                hexCodes.insert(removedHex, at: min(index, hexCodes.count))
-                colorNames.insert(removedName, at: min(index, colorNames.count))
+                paletteColors.insert(removed, at: min(index, paletteColors.count))
             }
         }
     }
@@ -289,13 +268,16 @@ struct GenerationResultView: View {
 
 #Preview {
     @Previewable @State var name = "Warm Autumn Forest"
-    @Previewable @State var colors: [Color] = [Color(hex: "A95F4D")!, Color(hex: "D98A6C")!, Color(hex: "F5C79A")!, Color(hex: "E29C88")!]
-    @Previewable @State var hexes = ["#A95F4D", "#D98A6C", "#F5C79A", "#E29C88"]
-    @Previewable @State var names = ["Amber", "Maple", "Goldenrod", "Moss"]
+    @Previewable @State var paletteColors: [PaletteColor] = [
+        PaletteColor(color: Color(hex: "A95F4D")!, hex: "#A95F4D", name: "Amber"),
+        PaletteColor(color: Color(hex: "D98A6C")!, hex: "#D98A6C", name: "Maple"),
+        PaletteColor(color: Color(hex: "F5C79A")!, hex: "#F5C79A", name: "Goldenrod"),
+        PaletteColor(color: Color(hex: "E29C88")!, hex: "#E29C88", name: "Moss"),
+    ]
 
     NavigationStack {
         GenerationResultView(
-            name: $name, colors: $colors, hexCodes: $hexes, colorNames: $names,
+            name: $name, paletteColors: $paletteColors,
             onBack: {}, onRegenerate: {}, onDescribeChange: { _ in }, onSave: {}
         )
     }

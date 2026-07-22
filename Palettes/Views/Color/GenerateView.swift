@@ -27,11 +27,11 @@ struct GenerateView: View {
     @State private var arrivedColors: [Color] = []
     @State private var generationTask: Task<Void, Never>?
 
-    // Result state (editable draft)
+    // Result state (editable draft). A single `PaletteColor` array is the
+    // sole source of truth here — no parallel colors/hexCodes/colorNames
+    // arrays to keep aligned by index, and roles ride along for free.
     @State private var resultName = ""
-    @State private var resultColors: [Color] = []
-    @State private var resultHexes: [String] = []
-    @State private var resultColorNames: [String] = []
+    @State private var resultPaletteColors: [PaletteColor] = []
     @State private var pendingRefinement = ""
     @State private var showDuplicateAlert = false
     @State private var showNameDuplicateAlert = false
@@ -89,7 +89,7 @@ struct GenerateView: View {
                 LiquidGradientView(
                     speed: 0.25,
                     intensity: phase == .result ? 0.22 : 0.10,
-                    colors: phase == .result ? resultColors : []
+                    colors: phase == .result ? resultPaletteColors.map(\.color) : []
                 )
                 .blur(radius: 60)
                 .ignoresSafeArea()
@@ -136,9 +136,7 @@ struct GenerateView: View {
             if phase == .result {
                 GenerationResultView(
                     name: $resultName,
-                    colors: $resultColors,
-                    hexCodes: $resultHexes,
-                    colorNames: $resultColorNames,
+                    paletteColors: $resultPaletteColors,
                     onBack: { withAnimation(.smooth(duration: 0.5)) { phase = .form } },
                     onRegenerate: {
                         pendingRefinement = ""
@@ -590,9 +588,7 @@ struct GenerateView: View {
                     arrivedColors = colors
                 }
                 resultName = palette.name
-                resultColors = palette.colors
-                resultHexes = palette.hexCodes
-                resultColorNames = palette.colorNames
+                resultPaletteColors = palette.paletteColors
                 // Let the last drop settle before revealing the result
                 try? await Task.sleep(for: .milliseconds(900))
                 withAnimation(.smooth(duration: 0.7)) { phase = .result }
@@ -606,8 +602,8 @@ struct GenerateView: View {
     }
 
     private func saveResult() {
-        guard resultColors.count >= 2 else { return }
-        if let existing = appData.existingPalette(matching: resultHexes) {
+        guard resultPaletteColors.count >= 2 else { return }
+        if let existing = appData.existingPalette(matching: resultPaletteColors.map(\.hex)) {
             duplicateOfName = existing.name
             showDuplicateAlert = true
             return
@@ -625,19 +621,17 @@ struct GenerateView: View {
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
         appData.palettes.append(PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
-            colors: resultColors,
-            hexCodes: resultHexes,
-            colorNames: resultColorNames
+            paletteColors: resultPaletteColors
         ))
 
         // Add any newly generated colors to the Colors library.
-        for i in resultColors.indices {
-            let hex = i < resultHexes.count ? resultHexes[i] : ""
+        for (i, paletteColor) in resultPaletteColors.enumerated() {
+            let hex = paletteColor.hex
             guard !hex.isEmpty else { continue }
             let alreadyExists = appData.colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
             guard !alreadyExists else { continue }
-            let name = i < resultColorNames.count && !resultColorNames[i].isEmpty ? resultColorNames[i] : "Color \(i + 1)"
-            appData.colors.append(ColorViewModel(name: name, color: resultColors[i], HEX: hex, usedInPalette: true))
+            let name = paletteColor.name.isEmpty ? "Color \(i + 1)" : paletteColor.name
+            appData.colors.append(ColorViewModel(name: name, color: paletteColor.color, HEX: hex, usedInPalette: true))
         }
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
