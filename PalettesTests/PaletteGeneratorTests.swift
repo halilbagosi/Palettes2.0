@@ -316,4 +316,111 @@ final class PaletteGeneratorTests: XCTestCase {
             "with no locked colors there is no real anchor for a role — expected all-empty roles, got \(colorRoles)"
         )
     }
+
+    // MARK: - I2: a role must never be assigned to two colors (plan replay)
+
+    /// Regression test for the review finding: in the no-vibe+bases path, the
+    /// model's Nth color already inherited `noVibePlan.slots[N].role`. When
+    /// the model under-delivers, `repairViolations` replays the SAME plan
+    /// from slot 0 as its `fallbackPlan`. Because the model's refined hex can
+    /// differ slightly from the slot's own hex, `seen` doesn't block the
+    /// replay — pre-fix, `fillToTarget` would append slot 0's role ("Primary")
+    /// again even though it's already held by the locked base, producing two
+    /// colors tagged with the same role. `fillToTarget` must skip (append
+    /// "") a slot's role whenever that role is already present in `roles`.
+    @available(iOS 26.0, *)
+    func testFillToTargetNeverAssignsADuplicateRoleOnPlanReplay() {
+        var colors = [Color(hex: "#3060A0")!]
+        var hexCodes = ["#3060A0"]
+        var colorNames = ["Primary Anchor"]
+        var colorRoles = ["Primary"]
+        var seen = Set(hexCodes)
+
+        // A plan replayed from slot 0: slot 0's role ("Primary") duplicates
+        // the role already held by the locked base; slots 1 and 2 introduce
+        // fresh roles. Slot hexes deliberately differ from the locked base's
+        // hex so `seen` alone can't block the replay — only role-dedup can.
+        let replayedPlan = HarmonyPlan(
+            resolvedScheme: .complementary,
+            slots: [
+                HarmonySlot(hue: 0.6, saturation: 0.6, brightness: 0.5, role: "Primary"),
+                HarmonySlot(hue: 0.1, saturation: 0.7, brightness: 0.6, role: "Accent"),
+                HarmonySlot(hue: 0.3, saturation: 0.4, brightness: 0.3, role: "Background"),
+            ],
+            roleForBase: ["Primary"]
+        )
+
+        PaletteGenerator.repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &colorRoles,
+            seen: &seen,
+            lockedCount: 1,
+            targetCount: 4,
+            fallbackPlan: replayedPlan,
+            planSeed: 11
+        )
+
+        XCTAssertEqual(colors.count, 4)
+        XCTAssertEqual(colorRoles.count, 4)
+        let nonEmptyRoles = colorRoles.filter { !$0.isEmpty }
+        XCTAssertEqual(
+            nonEmptyRoles.count, Set(nonEmptyRoles).count,
+            "no role should be held by more than one color: \(colorRoles)"
+        )
+        XCTAssertEqual(
+            colorRoles.filter { $0 == "Primary" }.count, 1,
+            "Primary must not be duplicated when its slot is replayed: \(colorRoles)"
+        )
+        XCTAssertTrue(colorRoles.contains("Accent"))
+        XCTAssertTrue(colorRoles.contains("Background"))
+    }
+
+    // MARK: - I3: repair-path roles must not leak from an ad-hoc plan
+
+    /// Regression test for the review finding: a vibe given alongside base
+    /// colors takes the `lockedCount > 0, fallbackPlan == nil` branch — there
+    /// is no deliberate `noVibePlan` to inherit slot roles from. Pre-fix, a
+    /// shortfall here still built an ad-hoc `ColorHarmony.plan` from the
+    /// surviving colors and `fillToTarget` appended that plan's
+    /// Accent/Background/Text roles verbatim, making role assignment depend
+    /// on whether the model happened to under-deliver rather than on
+    /// deliberate intent. The existing `lockedCount == 0` suppression doesn't
+    /// cover this case. Only the locked base's own pre-existing role may
+    /// survive; every ad-hoc-filled slot must stay untagged.
+    @available(iOS 26.0, *)
+    func testRepairViolationsDoesNotInheritRolesFromAdHocPlanWhenBaseColorsPresent() {
+        var colors = [Color(hex: "#3060A0")!]
+        var hexCodes = ["#3060A0"]
+        var colorNames = ["Ocean Blue"]
+        var colorRoles = ["Primary"]
+        var seen = Set(hexCodes)
+
+        // Single saturated base at target size 6 — the same shortfall shape
+        // that triggers `ColorHarmony.plan`'s `reserveNeutrals` gate
+        // (Background/Text), exercised elsewhere with `lockedCount: 0`. Here
+        // `lockedCount: 1` and `fallbackPlan: nil` model a vibe supplied
+        // alongside a base color, which routes through the same ad-hoc-plan
+        // branch but must not leak that plan's roles.
+        PaletteGenerator.repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &colorRoles,
+            seen: &seen,
+            lockedCount: 1,
+            targetCount: 6,
+            fallbackPlan: nil,
+            planSeed: 55
+        )
+
+        XCTAssertEqual(colors.count, 6, "fill guarantee must still hold")
+        XCTAssertEqual(colorRoles.count, 6)
+        XCTAssertEqual(colorRoles[0], "Primary", "the locked base's own role must survive untouched")
+        XCTAssertTrue(
+            colorRoles.dropFirst().allSatisfy { $0.isEmpty },
+            "ad-hoc repair plan roles must never leak onto the palette when there's no deliberate plan to inherit from — got \(colorRoles)"
+        )
+    }
 }

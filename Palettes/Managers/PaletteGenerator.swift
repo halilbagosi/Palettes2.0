@@ -310,9 +310,18 @@ enum PaletteGenerator {
                 ? (fallbackPlan ?? ColorHarmony.plan(baseHexes: hexCodes, size: targetCount, scheme: .auto, seed: planSeed))
                 : nil
 
+            // Only inherit slot roles when `repairPlan` is the caller's own
+            // deliberate plan (`fallbackPlan`, e.g. the `noVibePlan` computed
+            // once from the original prompt targets). When `fallbackPlan` is
+            // nil, `repairPlan` was just synthesized above from whatever
+            // colors happen to be surviving at this point in the repair —
+            // an implementation detail, not a deliberate role assignment —
+            // so its slots must never leak into `roles`.
+            let inheritRoles = fallbackPlan != nil
+
             // Unconditional: must run even when `bad` was empty, so a
             // shortfall with no violations still gets padded to target.
-            fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, roles: &roles, seen: &seen, target: targetCount, plan: repairPlan)
+            fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, roles: &roles, seen: &seen, target: targetCount, plan: repairPlan, inheritRoles: inheritRoles)
 
             bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
             if bad.isEmpty { break }
@@ -347,21 +356,37 @@ enum PaletteGenerator {
         roles: inout [String],
         seen: inout Set<String>,
         target: Int,
-        plan: HarmonyPlan? = nil
+        plan: HarmonyPlan? = nil,
+        inheritRoles: Bool = true
     ) {
         guard target > colors.count else { return }
 
         if let plan {
             // Colors filled from a plan slot inherit that slot's role
             // (consumption order == slot order), keeping `roles` aligned
-            // with `colors`/`hexCodes`/`colorNames`.
+            // with `colors`/`hexCodes`/`colorNames`. `inheritRoles` lets a
+            // caller pass a plan purely for its color *values* (e.g. an
+            // ad-hoc repair plan with no deliberate role assignment behind
+            // it) without leaking its slot roles.
+            //
+            // A role is never assigned twice within one palette: when the
+            // same plan is replayed (e.g. a repair pass restarting from
+            // slot 0 after the model under-delivered), the model's refined
+            // hex can differ slightly from the slot's hex, so `seen` alone
+            // doesn't block the replay — without this check a role like
+            // "Accent" could land on two different colors.
             for slot in plan.slots where colors.count < target {
                 let hex = slot.hex
                 guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
                 colors.append(color)
                 hexCodes.append(hex)
                 colorNames.append(ColorNamer.name(forHex: hex))
-                roles.append(slot.role ?? "")
+                let candidateRole = inheritRoles ? (slot.role ?? "") : ""
+                if !candidateRole.isEmpty && roles.contains(candidateRole) {
+                    roles.append("")
+                } else {
+                    roles.append(candidateRole)
+                }
             }
         }
 
