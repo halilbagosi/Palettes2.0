@@ -470,6 +470,131 @@ enum ColorNamer {
         return bestName
     }
 
+    /// Names an entire palette at once, guaranteeing every returned name is
+    /// unique within the call. Preferred (AI-supplied) names are honored
+    /// verbatim when present and not already claimed by an earlier index;
+    /// everything else gets a descriptive name built from the nearest
+    /// dictionary entry plus a modifier reflecting how the color actually
+    /// deviates from that entry in Lab (lightness → Deep/Dark/Pale/Light,
+    /// chroma → Muted/Soft/Vivid/Rich). Colors very close to their nearest
+    /// entry get the plain entry name, no modifier.
+    ///
+    /// If a name is still claimed once names are considered in order (a
+    /// duplicate preferred name, or two colors that would otherwise
+    /// synthesize the same descriptive name), later indices fall through to
+    /// alternate modifiers on the same entry, then to the next-nearest
+    /// dictionary entries, deterministically — never a numeric suffix.
+    ///
+    /// Deterministic: identical input (`hexes`, `preferred`) always produces
+    /// identical output.
+    static func uniqueNames(forHexes hexes: [String], preferred: [String?] = []) -> [String] {
+        let n = hexes.count
+        guard n > 0 else { return [] }
+
+        // Modifier threshold: below this CIEDE2000 delta from the nearest
+        // entry, the color reads as "basically that color" — no modifier
+        // needed. Chosen well under `PaletteValidation.minDeltaE` (12) so a
+        // color that's still clearly distinguishable from a sibling color
+        // can nonetheless read as an unmodified match to its own entry.
+        let modifierThreshold: Double = 8
+
+        // Precompute Lab + every dictionary entry ranked by ascending
+        // CIEDE2000 distance, once per input color.
+        let labs: [(L: Double, a: Double, b: Double)?] = hexes.map { hex in
+            guard let c = parseHexComponents(hex) else { return nil }
+            return sRGBtoLab(r: c.r, g: c.g, b: c.b)
+        }
+        let ranked: [[(index: Int, delta: Double)]] = labs.map { lab in
+            guard let lab else { return [] }
+            return namedColorsLab.enumerated()
+                .map { (index: $0.offset, delta: ciede2000(lab, $0.element.lab)) }
+                .sorted { $0.delta < $1.delta }
+        }
+
+        enum Axis { case lightness, chroma }
+        func modifierWord(dL: Double, dC: Double, axis: Axis) -> String {
+            switch axis {
+            case .lightness:
+                return dL < 0 ? (dC > 0 ? "Deep" : "Dark") : (dC < 0 ? "Pale" : "Light")
+            case .chroma:
+                return dC > 0 ? (dL < 0 ? "Rich" : "Vivid") : (dL < 0 ? "Muted" : "Soft")
+            }
+        }
+
+        // Every candidate name for a given color at a given rank into its
+        // ranked-entries list: the plain entry name if it's a close match,
+        // otherwise the dominant-axis modifier first, then the secondary
+        // axis's modifier as a second, distinct option before moving on to
+        // the next-nearest entry.
+        func candidates(colorIndex: Int, rank: Int) -> [String] {
+            guard let lab = labs[colorIndex], rank < ranked[colorIndex].count else { return [] }
+            let entry = ranked[colorIndex][rank]
+            let entryName = namedColorsLab[entry.index].name
+            guard entry.delta >= modifierThreshold else { return [entryName] }
+
+            let entryLab = namedColorsLab[entry.index].lab
+            let dL = lab.L - entryLab.L
+            let dC = labChroma(lab) - labChroma(entryLab)
+            let dominant: Axis = abs(dL) >= abs(dC) ? .lightness : .chroma
+            let secondary: Axis = dominant == .lightness ? .chroma : .lightness
+
+            let primary = "\(modifierWord(dL: dL, dC: dC, axis: dominant)) \(entryName)"
+            let alternate = "\(modifierWord(dL: dL, dC: dC, axis: secondary)) \(entryName)"
+            return primary == alternate ? [primary] : [primary, alternate]
+        }
+
+        var result = Array(repeating: "", count: n)
+        var used = Set<String>()
+
+        for i in 0..<n {
+            // 1. AI-supplied / user-supplied preferred name, if present,
+            // non-empty, and not already claimed by an earlier index.
+            if i < preferred.count, let raw = preferred[i] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, !used.contains(trimmed) {
+                    result[i] = trimmed
+                    used.insert(trimmed)
+                    continue
+                }
+            }
+
+            // 2. Invalid hex: deterministic, always-unique placeholder.
+            guard labs[i] != nil, !ranked[i].isEmpty else {
+                let fallback = used.contains("Unknown") ? "Unknown (\(hexes[i]))" : "Unknown"
+                result[i] = fallback
+                used.insert(fallback)
+                continue
+            }
+
+            // 3. Descriptive name: nearest entry first, then progressively
+            // further entries (each with its own modifier variants), until
+            // an unclaimed name is found. Guaranteed to terminate — there
+            // are ~460 entries and palettes are always far smaller.
+            var chosen: String?
+            searchEntries: for rank in 0..<ranked[i].count {
+                for candidate in candidates(colorIndex: i, rank: rank) {
+                    if !used.contains(candidate) {
+                        chosen = candidate
+                        break searchEntries
+                    }
+                }
+            }
+            let final = chosen ?? "\(ranked[i].first.map { namedColorsLab[$0.index].name } ?? "Unknown") (\(hexes[i]))"
+            result[i] = final
+            used.insert(final)
+        }
+
+        return result
+    }
+
+    /// Shared hex → sRGB component parser for the naming/distance helpers.
+    private static func parseHexComponents(_ hex: String) -> (r: Double, g: Double, b: Double)? {
+        var c = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if c.hasPrefix("#") { c.removeFirst() }
+        guard c.count == 6, let n = UInt64(c, radix: 16) else { return nil }
+        return (Double((n >> 16) & 0xFF) / 255.0, Double((n >> 8) & 0xFF) / 255.0, Double(n & 0xFF) / 255.0)
+    }
+
     // Also expose a distance function for external consumers
     static func perceptualDistance(hex1: String, hex2: String) -> Double {
         func parse(_ hex: String) -> (r: Double, g: Double, b: Double)? {

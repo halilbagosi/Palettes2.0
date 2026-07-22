@@ -176,8 +176,13 @@ enum PaletteGenerator {
             guard colors.count < targetCount else { break }
             var hex = item.hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             if !hex.hasPrefix("#") { hex = "#" + hex }
+            // Exact-hex set first as a cheap early-out, then the real
+            // perceptual gate: a candidate within minDeltaE of ANY color
+            // already accepted (locked or previously generated) is rejected
+            // outright rather than shipped and cleaned up later.
             guard seenHexes.insert(hex).inserted else { continue }
             guard let color = Color(hex: hex) else { continue }
+            guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
             // Only `noVibePlan` (not the broader `rolePlan`) carries a
             // positional guarantee: its slot hexes were shown to the model
             // in the prompt as explicit refinement targets, so the model's
@@ -192,8 +197,12 @@ enum PaletteGenerator {
             }()
             colors.append(color)
             hexCodes.append(hex)
-            let trimmed = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            colorNames.append(trimmed.isEmpty ? ColorNamer.name(forHex: hex) : trimmed)
+            // Stash the model's own (possibly empty) name as a "preferred"
+            // placeholder; the final `ColorNamer.uniqueNames` pass below
+            // resolves it against the whole shipped palette, honoring it
+            // verbatim when non-empty and unique, or synthesizing a
+            // descriptive name otherwise.
+            colorNames.append(item.name.trimmingCharacters(in: .whitespacesAndNewlines))
             colorRoles.append(role ?? "")
         }
 
@@ -216,6 +225,14 @@ enum PaletteGenerator {
         )
 
         guard colors.count >= 2 else { throw AppError.generationFailed }
+
+        // Name the FINAL color list (after repair) in one pass, so every
+        // name reflects what actually shipped and no two colors in the
+        // palette collide on name — locked/user names and the model's own
+        // names are honored verbatim when unique; everything else
+        // (harmony-slot fills, rotation fallback fills) gets a descriptive
+        // name synthesized from its nearest dictionary entry.
+        colorNames = ColorNamer.uniqueNames(forHexes: hexCodes, preferred: colorNames)
 
         // Reflect the final, complete palette in the orb before the reveal.
         if let onPartialColors {
@@ -243,6 +260,14 @@ enum PaletteGenerator {
     }
 
     /// Normalizes and de-duplicates the user's chosen colors, preserving order.
+    ///
+    /// `name` is left as the user's own text verbatim (or empty if they
+    /// didn't provide one) rather than eagerly falling back to
+    /// `ColorNamer.name(forHex:)` here — the final `ColorNamer.uniqueNames`
+    /// pass over the complete palette (see `generate`/`mockGenerate`) is
+    /// what fills in a name for any empty entry, so it can guarantee
+    /// uniqueness against every other color that ships, not just pick the
+    /// nearest dictionary match in isolation.
     private static func lockedEntries(from baseColors: [BaseColor]) -> [LockedColor] {
         var result: [LockedColor] = []
         var seen = Set<String>()
@@ -251,9 +276,29 @@ enum PaletteGenerator {
             if !hex.hasPrefix("#") { hex = "#" + hex }
             guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
             let name = base.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            result.append(LockedColor(color: color, hex: hex, name: name.isEmpty ? ColorNamer.name(forHex: hex) : name))
+            result.append(LockedColor(color: color, hex: hex, name: name))
         }
         return result
+    }
+
+    // MARK: - Perceptual dedup
+
+    /// Returns whether `hex` is at least `PaletteValidation.minDeltaE` (12)
+    /// away, in CIEDE2000, from every color already in `existingHexes`. Used
+    /// to gate generated/filled candidates at the point they're added, so a
+    /// palette never ships two colors that read as visually the same —
+    /// rather than relying solely on after-the-fact repair. Locked/base
+    /// colors are never passed through this gate themselves (they always
+    /// appear verbatim, even if similar to each other); they only ever
+    /// appear on the `existingHexes` side, as a neighbor a new candidate
+    /// must stay distinct from.
+    private static func isPerceptuallyDistinct(_ hex: String, from existingHexes: [String]) -> Bool {
+        for existing in existingHexes {
+            if ColorNamer.perceptualDistance(hex1: hex, hex2: existing) < PaletteValidation.minDeltaE {
+                return false
+            }
+        }
+        return true
     }
 
     // MARK: - Post-validation repair
@@ -378,9 +423,16 @@ enum PaletteGenerator {
             for slot in plan.slots where colors.count < target {
                 let hex = slot.hex
                 guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
+                // Perceptual gate: a plan slot that reads as visually the
+                // same as a color already in the palette is skipped rather
+                // than shipped as a near-duplicate.
+                guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
                 colors.append(color)
                 hexCodes.append(hex)
-                colorNames.append(ColorNamer.name(forHex: hex))
+                // Left empty (no AI/user name for a fill slot) — named
+                // descriptively by the final `ColorNamer.uniqueNames` pass
+                // over the complete, post-repair palette.
+                colorNames.append("")
                 let candidateRole = inheritRoles ? (slot.role ?? "") : ""
                 if !candidateRole.isEmpty && roles.contains(candidateRole) {
                     roles.append("")
@@ -398,9 +450,15 @@ enum PaletteGenerator {
         // spin the safety counter forever (it only increments inside the
         // `for seed in seeds` loop, which never runs when seeds is empty).
         guard !seeds.isEmpty else { return }
+        // Hard bound on search attempts: with the perceptual gate below now
+        // able to reject a candidate hue as well as an exact-hex repeat,
+        // finding `target` distinct colors can take more attempts than
+        // before — but this must still never spin forever, so if the bound
+        // is hit the function returns fewer than `target` colors rather
+        // than looping or emitting a near-duplicate.
         var step = 1
         var safety = 0
-        while colors.count < target && safety < target * 24 {
+        while colors.count < target && safety < target * 48 {
             for seed in seeds where colors.count < target {
                 safety += 1
                 let ui = UIColor(seed)
@@ -415,9 +473,15 @@ enum PaletteGenerator {
                 ui2.getRed(&r, green: &g, blue: &bl, alpha: &al)
                 let hex = String(format: "#%02X%02X%02X", Int(round(r * 255)), Int(round(g * 255)), Int(round(bl * 255)))
                 guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
+                // Keep searching (next seed/step) until a candidate is
+                // perceptually distinct from every color already in the
+                // palette — never append a near-duplicate.
+                guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
                 colors.append(color)
                 hexCodes.append(hex)
-                colorNames.append(ColorNamer.name(forHex: hex))
+                // Named descriptively by the final `ColorNamer.uniqueNames`
+                // pass over the complete, post-repair palette.
+                colorNames.append("")
                 // No slot to inherit a role from — this is a last-resort
                 // synthetic fill, so it stays untagged.
                 roles.append("")
@@ -495,6 +559,11 @@ enum PaletteGenerator {
                 await MainActor.run { onPartialColors(snapshot) }
             }
         }
+
+        // Name the final color list in one pass, same as the on-device path:
+        // locked/user names honored verbatim when unique, filled slots get a
+        // descriptive name, and nothing collides within the palette.
+        colorNames = ColorNamer.uniqueNames(forHexes: hexCodes, preferred: colorNames)
 
         return PaletteViewModel(
             name: "Simulator Palette",
