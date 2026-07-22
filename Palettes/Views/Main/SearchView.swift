@@ -226,6 +226,7 @@ struct SearchView: View {
 
             if !availableTags.isEmpty {
                 tagChips
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if !browsePalettes.isEmpty {
@@ -259,6 +260,7 @@ struct SearchView: View {
         .padding()
         .animation(.spring(response: 0.3), value: selectedHues)
         .animation(.spring(response: 0.3), value: selectedTags)
+        .animation(.spring(duration: 0.35, bounce: 0.2), value: availableTags.isEmpty)
     }
 
     private var hueChips: some View {

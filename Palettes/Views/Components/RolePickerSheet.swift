@@ -168,19 +168,40 @@ struct RolePickerSheet: View {
     /// Assigns `role` to `colorIndex` in the palette. If another color in the
     /// same palette already holds `role`, that color is cleared first so a
     /// role only ever has one holder per palette.
+    ///
+    /// The sheet is dismissed *before* the mutation is applied, and the
+    /// mutation itself is deferred until after the dismissal animation
+    /// finishes. `RoleBadge`'s scale+opacity transition on
+    /// `PaletteDetailView` (see its `.animation(value: role)`) only plays
+    /// when the state change lands on a visible view — applying it while
+    /// this sheet still covers the detail view makes SwiftUI snap it in
+    /// flat instead of animating it in. `paletteIndex`/`colorIndex` are
+    /// re-validated after the delay since the palette's colors can change
+    /// while the sheet is closing.
     private func assign(role: String?) {
         guard let idx = paletteIndex, colorIndex < appData.palettes[idx].paletteColors.count else { return }
 
-        if let role {
-            for j in appData.palettes[idx].paletteColors.indices where j != colorIndex {
-                if appData.palettes[idx].paletteColors[j].role?.caseInsensitiveCompare(role) == .orderedSame {
-                    appData.palettes[idx].paletteColors[j].role = nil
+        dismiss()
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+
+            guard let idx = paletteIndex,
+                  colorIndex >= 0,
+                  colorIndex < appData.palettes[idx].paletteColors.count else { return }
+
+            withAnimation(.spring(duration: 0.35, bounce: 0.25)) {
+                if let role {
+                    for j in appData.palettes[idx].paletteColors.indices where j != colorIndex {
+                        if appData.palettes[idx].paletteColors[j].role?.caseInsensitiveCompare(role) == .orderedSame {
+                            appData.palettes[idx].paletteColors[j].role = nil
+                        }
+                    }
                 }
+
+                appData.palettes[idx].paletteColors[colorIndex].role = role
             }
         }
-
-        appData.palettes[idx].paletteColors[colorIndex].role = role
-        dismiss()
     }
 }
 
