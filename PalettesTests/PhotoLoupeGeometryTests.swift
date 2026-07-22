@@ -9,61 +9,70 @@ import CoreGraphics
 
 final class PhotoLoupeGeometryTests: XCTestCase {
 
-    func testCenterMapsToCenterForSquareInSquare() {
-        let p = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 100, y: 100),
-            viewSize: CGSize(width: 200, height: 200),
-            imageSize: CGSize(width: 500, height: 500)
+    // MARK: - imageRect
+
+    func testSquareImageInSquareViewFillsView() {
+        let r = PhotoLoupeGeometry.imageRect(
+            imageSize: CGSize(width: 500, height: 500),
+            in: CGSize(width: 200, height: 200)
         )
+        XCTAssertEqual(r.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(r.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(r.width, 200, accuracy: 0.001)
+        XCTAssertEqual(r.height, 200, accuracy: 0.001)
+    }
+
+    func testLandscapeImageInSquareViewHasVerticalBars() {
+        // 2:1 image in 200×200 view: 200 wide, 100 tall, 50pt bars top/bottom.
+        let r = PhotoLoupeGeometry.imageRect(
+            imageSize: CGSize(width: 400, height: 200),
+            in: CGSize(width: 200, height: 200)
+        )
+        XCTAssertEqual(r.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(r.minY, 50, accuracy: 0.001)
+        XCTAssertEqual(r.width, 200, accuracy: 0.001)
+        XCTAssertEqual(r.height, 100, accuracy: 0.001)
+    }
+
+    func testPortraitImageInSquareViewHasHorizontalBars() {
+        // 1:2 image in 200×200 view: 100 wide, 200 tall, 50pt bars left/right.
+        let r = PhotoLoupeGeometry.imageRect(
+            imageSize: CGSize(width: 200, height: 400),
+            in: CGSize(width: 200, height: 200)
+        )
+        XCTAssertEqual(r.minX, 50, accuracy: 0.001)
+        XCTAssertEqual(r.minY, 0, accuracy: 0.001)
+        XCTAssertEqual(r.width, 100, accuracy: 0.001)
+        XCTAssertEqual(r.height, 200, accuracy: 0.001)
+    }
+
+    func testDegenerateSizesReturnViewRect() {
+        let r = PhotoLoupeGeometry.imageRect(imageSize: .zero, in: CGSize(width: 10, height: 20))
+        XCTAssertEqual(r.width, 10, accuracy: 0.001)
+        XCTAssertEqual(r.height, 20, accuracy: 0.001)
+    }
+
+    // MARK: - normalizedPoint(in:at:)
+
+    func testNormalizedCenter() {
+        let rect = CGRect(x: 0, y: 50, width: 200, height: 100)
+        let p = PhotoLoupeGeometry.normalizedPoint(in: rect, at: CGPoint(x: 100, y: 100))
         XCTAssertEqual(p.x, 0.5, accuracy: 0.001)
         XCTAssertEqual(p.y, 0.5, accuracy: 0.001)
     }
 
-    func testLandscapeImageInSquareViewHasVerticalBars() {
-        // 2:1 image in 200×200 view: displayed 200 wide, 100 tall, 50pt bars top/bottom.
-        let view = CGSize(width: 200, height: 200)
-        let image = CGSize(width: 400, height: 200)
-
-        // Center of the displayed image (y = 100) → (0.5, 0.5).
-        let center = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 100, y: 100), viewSize: view, imageSize: image)
-        XCTAssertEqual(center.x, 0.5, accuracy: 0.001)
-        XCTAssertEqual(center.y, 0.5, accuracy: 0.001)
-
-        // Top edge of displayed image is at y = 50 → normalized y = 0.
-        let topEdge = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 100, y: 50), viewSize: view, imageSize: image)
-        XCTAssertEqual(topEdge.y, 0.0, accuracy: 0.001)
-
-        // A touch in the top bar (y = 10) clamps to 0.
-        let inBar = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 100, y: 10), viewSize: view, imageSize: image)
-        XCTAssertEqual(inBar.y, 0.0, accuracy: 0.001)
+    func testNormalizedTopLeftCorner() {
+        let rect = CGRect(x: 50, y: 0, width: 100, height: 200)
+        let p = PhotoLoupeGeometry.normalizedPoint(in: rect, at: CGPoint(x: 50, y: 0))
+        XCTAssertEqual(p.x, 0.0, accuracy: 0.001)
+        XCTAssertEqual(p.y, 0.0, accuracy: 0.001)
     }
 
-    func testPortraitImageInSquareViewHasHorizontalBars() {
-        // 1:2 image in 200×200 view: displayed 100 wide, 200 tall, 50pt bars left/right.
-        let view = CGSize(width: 200, height: 200)
-        let image = CGSize(width: 200, height: 400)
-
-        // Left edge of displayed image at x = 50 → normalized x = 0.
-        let leftEdge = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 50, y: 100), viewSize: view, imageSize: image)
-        XCTAssertEqual(leftEdge.x, 0.0, accuracy: 0.001)
-
-        // A touch in the right bar (x = 190) clamps to 1.
-        let inBar = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 190, y: 100), viewSize: view, imageSize: image)
-        XCTAssertEqual(inBar.x, 1.0, accuracy: 0.001)
-    }
-
-    func testDegenerateSizesDoNotCrash() {
-        let p = PhotoLoupeGeometry.normalizedPoint(
-            forViewPoint: CGPoint(x: 10, y: 10),
-            viewSize: .zero,
-            imageSize: .zero
-        )
-        XCTAssertTrue(p.x >= 0 && p.x <= 1)
-        XCTAssertTrue(p.y >= 0 && p.y <= 1)
+    func testNormalizedClampsPointOutsideRect() {
+        let rect = CGRect(x: 50, y: 0, width: 100, height: 200)
+        // Far left of the image rect clamps to 0; far below clamps to 1.
+        let p = PhotoLoupeGeometry.normalizedPoint(in: rect, at: CGPoint(x: -20, y: 999))
+        XCTAssertEqual(p.x, 0.0, accuracy: 0.001)
+        XCTAssertEqual(p.y, 1.0, accuracy: 0.001)
     }
 }

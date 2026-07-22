@@ -4,7 +4,6 @@ struct AddColorToPaletteSheet: View {
     let paletteID: UUID
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
-    @State private var isSampling = false
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == paletteID })
@@ -25,13 +24,11 @@ struct AddColorToPaletteSheet: View {
                     addButtonTitle: "Add to Palette",
                     onAdd: { entry in
                         add(entry)
-                    },
-                    onSamplingChanged: { isSampling = $0 }
+                    }
                 )
                 .environmentObject(appData)
                 .padding(.bottom, 20)
             }
-            .scrollDisabled(isSampling)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {

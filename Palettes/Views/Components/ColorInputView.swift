@@ -45,9 +45,6 @@ struct ColorInputView: View {
     var onScanPalette: (([ColorInputEntry]) -> Void)? = nil
     var showsAddButton: Bool = true
     var controller: ColorInputController? = nil
-    /// Forwarded from the photo loupe: `true` while the user is dragging to
-    /// sample a color, so a host can disable its enclosing ScrollView.
-    var onSamplingChanged: ((Bool) -> Void)? = nil
 
     // isSourceTypeAvailable(.camera) probes capture hardware and is slow;
     // calling it during body evaluation makes every keystroke pay for it.
@@ -78,6 +75,7 @@ struct ColorInputView: View {
     @State private var baseG: Double = 128
     @State private var baseB: Double = 128
     @State private var hasExtractedColor = false
+    @State private var showPhotoPicker = false
 
     private var adjustedRGB: (r: Double, g: Double, b: Double) {
         guard hasExtractedColor else { return (128, 128, 128) }
@@ -313,27 +311,21 @@ struct ColorInputView: View {
 
             if let image = selectedImage {
                 if case .dominant = scanExtraction {
-                    PhotoLoupeView(
-                        image: image,
-                        onSample: { rgb in
-                            baseR = rgb.r
-                            baseG = rgb.g
-                            baseB = rgb.b
-                            temperatureValue = 0.5
-                            saturationValue = 0.5
-                            brightnessValue = 0.5
-                            hasExtractedColor = true
-                        },
-                        onSampleEnd: {
-                            let hex = String(
-                                format: "%02X%02X%02X",
-                                Int(round(baseR)), Int(round(baseG)), Int(round(baseB))
-                            )
-                            scanName = autoName(forRawHex: hex)
-                        },
-                        onSamplingChanged: { onSamplingChanged?($0) }
-                    )
-                    .frame(height: 200)
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay(alignment: .bottom) {
+                            Label("Tap to pick a color", systemImage: "eyedropper")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(.ultraThinMaterial, in: Capsule())
+                                .padding(.bottom, 10)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { showPhotoPicker = true }
                 } else {
                     Image(uiImage: image)
                         .resizable()
@@ -358,6 +350,28 @@ struct ColorInputView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal)
         .padding(.top, 8)
+        .fullScreenCover(isPresented: $showPhotoPicker) {
+            if let image = selectedImage {
+                PhotoColorPickerView(
+                    image: image,
+                    initialRGB: hasExtractedColor ? (baseR, baseG, baseB) : nil,
+                    onUse: { rgb in
+                        baseR = rgb.r
+                        baseG = rgb.g
+                        baseB = rgb.b
+                        temperatureValue = 0.5
+                        saturationValue = 0.5
+                        brightnessValue = 0.5
+                        hasExtractedColor = true
+                        let hex = String(
+                            format: "%02X%02X%02X",
+                            Int(round(baseR)), Int(round(baseG)), Int(round(baseB))
+                        )
+                        scanName = autoName(forRawHex: hex)
+                    }
+                )
+            }
+        }
     }
 
     private var scanPlaceholderText: String {

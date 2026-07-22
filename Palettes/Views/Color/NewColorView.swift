@@ -8,7 +8,6 @@ struct NewColorView: View {
     @EnvironmentObject var appData: AppData
 
     @State private var inputController = ColorInputController()
-    @State private var isSampling = false
 
     /// Entry waiting on the user's decision after a duplicate hex was found.
     @State private var duplicateEntry: ColorInputEntry?
@@ -25,13 +24,11 @@ struct NewColorView: View {
                     addButtonTitle: "Create",
                     onAdd: { entry in create(entry) },
                     showsAddButton: false,
-                    controller: inputController,
-                    onSamplingChanged: { isSampling = $0 }
+                    controller: inputController
                 )
                 .environmentObject(appData)
                 .padding(.bottom, 20)
             }
-            .scrollDisabled(isSampling)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
