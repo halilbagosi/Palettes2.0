@@ -60,6 +60,7 @@ struct RolePickerSheet: View {
                     HStack {
                         TextField("New tag…", text: $newTagText)
                             .autocorrectionDisabled()
+                            .onChange(of: newTagText) { _, _ in newTagError = nil }
                         Button("Add") {
                             addTag()
                         }
@@ -90,8 +91,8 @@ struct RolePickerSheet: View {
                             manageTagRow(tag)
                         }
                         .onDelete { offsets in
-                            for index in offsets {
-                                appData.deleteCustomTag(appData.customTags[index])
+                            for name in offsets.map({ appData.customTags[$0] }) {
+                                appData.deleteCustomTag(name)
                             }
                         }
                     }

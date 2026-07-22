@@ -74,7 +74,7 @@ Tagged colors export under their **role name**, so a color tagged Primary become
 | **Xcode** | 17.0+ with the latest iOS SDK |
 | **AI hardware** | iPhone 15 Pro or later, M-series iPad, or Apple Silicon Mac (Simulator) |
 
-Harmony generation, role tags, extraction, and export all work on iOS 17 — only the AI naming/refinement step needs Apple Intelligence. Without it, palettes are still generated from the harmony engine.
+Role tags, photo extraction, and export all work on iOS 17. Palette *generation* — harmony-guided or otherwise — requires iOS 26+ with Apple Intelligence: `PaletteGenerator` and the Generate tab are gated behind `@available(iOS 26.0, *)` and throw if Apple Intelligence isn't available, so there's no lower-availability fallback that still produces palettes.
 
 ---
 

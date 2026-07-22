@@ -81,26 +81,12 @@ enum PaletteExporter {
         return result
     }
 
+    /// Delegates to `ColorRole.slug` — the two used to be character-identical
+    /// twins (this one doing the real export work, `ColorRole.slug` exercised
+    /// only by tests). Keeping a single implementation means there's only one
+    /// place left to fix if slugging rules ever change.
     private static func slugify(_ name: String) -> String {
-        let lowered = name.lowercased()
-        var result = ""
-        result.reserveCapacity(lowered.count)
-        for ch in lowered {
-            if ch.isLetter || ch.isNumber {
-                result.append(ch)
-            } else if ch == " " || ch == "-" || ch == "_" {
-                result.append("-")
-            }
-            // else: strip
-        }
-        // collapse consecutive hyphens
-        while result.contains("--") {
-            result = result.replacingOccurrences(of: "--", with: "-")
-        }
-        // trim leading/trailing hyphens
-        while result.hasPrefix("-") { result.removeFirst() }
-        while result.hasSuffix("-") { result.removeLast() }
-        return result.isEmpty ? "color" : result
+        ColorRole(name: name).slug
     }
 
     /// Slugifies names, deduplicating collisions with -2, -3 suffixes in order of appearance.
