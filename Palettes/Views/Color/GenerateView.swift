@@ -241,6 +241,13 @@ struct GenerateView: View {
                 }
             }
         }
+        .onChange(of: selectedColorIDs) { _, ids in
+            // The scheme menu only makes sense while base colors are
+            // selected; once the last one is deselected (one at a time, not
+            // just via resetForm), drop back to Auto so a stale override
+            // can't silently apply to a vibe- or photo-only generation.
+            if ids.isEmpty { scheme = .auto }
+        }
         }
     }
 
