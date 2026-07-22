@@ -205,10 +205,14 @@ struct PaletteEditSheet: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .foregroundStyle(role != nil ? Color.accentColor : Color.secondary)
+            // Tagged: white label on a solid dark capsule — legible in both
+            // light and dark mode (a fixed dark fill keeps white text high
+            // contrast regardless of appearance). Untagged: muted "Add Tag"
+            // affordance on the system fill.
+            .foregroundStyle(role != nil ? Color.white : Color.secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Capsule().fill(role != nil ? Color.accentColor.opacity(0.15) : Color(.secondarySystemFill)))
+            .background(Capsule().fill(role != nil ? AnyShapeStyle(Color(white: 0.22)) : AnyShapeStyle(Color(.secondarySystemFill))))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
