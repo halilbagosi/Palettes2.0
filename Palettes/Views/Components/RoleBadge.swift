@@ -13,13 +13,26 @@ import SwiftUI
 struct RoleBadge: View {
     let role: String
 
+    /// Concentricity rule: a shape nested inside another shares its center
+    /// of curvature only when its radius equals the outer radius minus the
+    /// inset between them. This badge sits `ColorCellBig.overlayInset` in
+    /// from the card's edge, so its radius is the card's corner radius minus
+    /// that inset (28 − 12 = 16). Do NOT simplify this back to `.capsule` —
+    /// a capsule's corners don't nest inside the card's `.continuous` 28pt
+    /// corners, which is exactly the mismatch this shape fixes. If
+    /// `ColorCellBig.cornerRadius`/`overlayInset` ever change, this stays
+    /// correct because it's derived, not hardcoded.
+    private static var cornerRadius: CGFloat {
+        ColorCellBig.cornerRadius - ColorCellBig.overlayInset
+    }
+
     var body: some View {
         Text(role)
             .font(.caption2.weight(.semibold))
             .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .liquidGlass(.regular, in: .capsule)
+            .liquidGlass(.regular, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
     }
 }
 

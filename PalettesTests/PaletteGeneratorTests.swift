@@ -71,10 +71,13 @@ final class PaletteGeneratorTests: XCTestCase {
     /// An adversarial case that can never converge: the fallback plan itself
     /// reintroduces near-duplicate dark colors every time it's consumed, so
     /// violations persist after every repair pass. This proves the loop is
-    /// hard-capped at two passes (never unbounded) and that the palette is
-    /// accepted as-is — fill guarantee intact, no crash, no throw — rather
-    /// than looping forever or failing when violations can't be fully
-    /// resolved.
+    /// hard-capped at two passes (never unbounded), never crashes or throws,
+    /// and — per the Bug 1 perceptual-dedup contract — never ships a
+    /// duplicate just to hit the requested count: when distinct colors
+    /// genuinely aren't achievable from what's available, the function
+    /// returns fewer colors instead. (Superseded the pre-perceptual-gate
+    /// expectation of always hitting `targetCount` even via near-duplicates;
+    /// that was the exact anti-pattern Bug 1 eliminates.)
     @available(iOS 26.0, *)
     func testRepairViolationsTerminatesAndAcceptsPaletteWhenUnresolvable() {
         var colors = ["#101010", "#111111", "#0F0F0F", "#101112"].map { Color(hex: $0)! }
@@ -109,13 +112,25 @@ final class PaletteGeneratorTests: XCTestCase {
             planSeed: 7
         )
 
-        // Fill guarantee holds even though distinctness could not be fully
-        // repaired — the function accepted the palette rather than looping
-        // forever or throwing.
-        XCTAssertEqual(colors.count, 4)
-        XCTAssertEqual(hexCodes.count, 4)
-        XCTAssertEqual(colorNames.count, 4)
-        XCTAssertEqual(colorRoles.count, 4)
+        // Never crashed, never looped forever, never exceeded the requested
+        // count, and the four parallel arrays stayed aligned.
+        XCTAssertLessThanOrEqual(colors.count, 4)
+        XCTAssertGreaterThanOrEqual(colors.count, 1, "the surviving anchor must never be lost")
+        XCTAssertEqual(hexCodes.count, colors.count)
+        XCTAssertEqual(colorNames.count, colors.count)
+        XCTAssertEqual(colorRoles.count, colors.count)
+        // The whole point of the perceptual gate: whatever DID ship must be
+        // genuinely distinct, never a near-duplicate accepted just to pad
+        // the count.
+        for i in 0..<hexCodes.count {
+            for j in (i + 1)..<hexCodes.count where j > i {
+                XCTAssertGreaterThanOrEqual(
+                    ColorNamer.perceptualDistance(hex1: hexCodes[i], hex2: hexCodes[j]),
+                    PaletteValidation.minDeltaE,
+                    "must never ship two colors that read as the same color"
+                )
+            }
+        }
     }
 
     /// Regression test for the refactor bug: with the loop shaped as
@@ -422,5 +437,117 @@ final class PaletteGeneratorTests: XCTestCase {
             colorRoles.dropFirst().allSatisfy { $0.isEmpty },
             "ad-hoc repair plan roles must never leak onto the palette when there's no deliberate plan to inherit from — got \(colorRoles)"
         )
+    }
+
+    // MARK: - Bug 1: perceptual dedup (never ship visually-repeating colors)
+
+    /// A full mock-generated palette of size 8 must have every pair of
+    /// non-locked colors at least `PaletteValidation.minDeltaE` (12) apart —
+    /// the whole point of gating candidates perceptually at insertion time
+    /// rather than only cleaning up after the fact.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testGeneratedPaletteOfEightHasAllPairsAtLeastMinDeltaEApart() async throws {
+        let result = try await PaletteGenerator.generate(
+            baseColors: [],
+            size: 8,
+            vibe: nil
+        )
+        let hexes = result.hexCodes
+        XCTAssertEqual(hexes.count, 8, "expected the full requested size when distinct colors are achievable")
+        for i in 0..<hexes.count {
+            for j in (i + 1)..<hexes.count where j > i {
+                let distance = ColorNamer.perceptualDistance(hex1: hexes[i], hex2: hexes[j])
+                XCTAssertGreaterThanOrEqual(
+                    distance, PaletteValidation.minDeltaE,
+                    "colors at \(i) (\(hexes[i])) and \(j) (\(hexes[j])) are only ΔE \(distance) apart"
+                )
+            }
+        }
+    }
+
+    /// Locked (user-chosen) base colors are exempt from the perceptual gate
+    /// against EACH OTHER — two similar locked colors must both still appear
+    /// verbatim. Only non-locked candidates are gated.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testLockedColorsAreExemptFromPerceptualGateAgainstEachOther() async throws {
+        // Two near-identical locked blues (ΔE well under 12 from each other).
+        let result = try await PaletteGenerator.generate(
+            baseColors: [
+                PaletteGenerator.BaseColor(hex: "#3060A0", name: "Ocean Blue"),
+                PaletteGenerator.BaseColor(hex: "#3161A1", name: "Ocean Blue Two"),
+            ],
+            size: 4,
+            vibe: nil
+        )
+        XCTAssertTrue(result.hexCodes.contains("#3060A0"))
+        XCTAssertTrue(result.hexCodes.contains("#3161A1"))
+    }
+
+    /// `fillToTarget`'s golden-ratio rotation fallback must never append a
+    /// color within `minDeltaE` of any color already in the palette. Seed
+    /// with a single saturated anchor and an exhausted plan (nil) so every
+    /// fill must come from the rotation fallback, then check every color
+    /// pairwise in the final result (equivalent to checking at insertion
+    /// time, since the gate is enforced there).
+    @available(iOS 26.0, *)
+    func testFillToTargetNeverAppendsAColorWithinMinDeltaEOfAnExisting() {
+        var colors = [Color(hex: "#4A90D9")!]
+        var hexCodes = ["#4A90D9"]
+        var colorNames = ["Electric Blue"]
+        var colorRoles = [""]
+        var seen = Set(hexCodes)
+
+        PaletteGenerator.repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &colorRoles,
+            seen: &seen,
+            lockedCount: 0,
+            targetCount: 6,
+            fallbackPlan: nil,
+            planSeed: 2026
+        )
+
+        for i in 0..<hexCodes.count {
+            for j in (i + 1)..<hexCodes.count where j > i {
+                let distance = ColorNamer.perceptualDistance(hex1: hexCodes[i], hex2: hexCodes[j])
+                XCTAssertGreaterThanOrEqual(
+                    distance, PaletteValidation.minDeltaE,
+                    "colors at \(i) (\(hexCodes[i])) and \(j) (\(hexCodes[j])) are only ΔE \(distance) apart"
+                )
+            }
+        }
+    }
+
+    /// The size guarantee still holds (fills all the way to target) when
+    /// distinct colors are genuinely achievable — the perceptual gate must
+    /// not cause the fill to stop early in the ordinary case.
+    @available(iOS 26.0, *)
+    func testFillToTargetStillReachesTargetWhenDistinctColorsAreAchievable() {
+        var colors = [Color(hex: "#3060A0")!]
+        var hexCodes = ["#3060A0"]
+        var colorNames = ["Ocean Blue"]
+        var colorRoles = [""]
+        var seen = Set(hexCodes)
+
+        PaletteGenerator.repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &colorRoles,
+            seen: &seen,
+            lockedCount: 0,
+            targetCount: 8,
+            fallbackPlan: nil,
+            planSeed: 99
+        )
+
+        XCTAssertEqual(colors.count, 8, "expected the full requested size when distinct colors are achievable")
+        XCTAssertEqual(hexCodes.count, 8)
+        XCTAssertEqual(colorNames.count, 8)
+        XCTAssertEqual(colorRoles.count, 8)
     }
 }
