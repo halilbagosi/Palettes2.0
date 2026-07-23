@@ -6,60 +6,6 @@
 import SwiftUI
 import Combine
 
-#if DEBUG
-/// Live-tunable orb deformation parameters, shared by every orb instance.
-/// Triple-tap an orb to open the tuning panel.
-@MainActor
-final class OrbDebugSettings: ObservableObject {
-    static let shared = OrbDebugSettings()
-
-    @Published var malleability: CGFloat = 0.38
-    /// How much the orb thins on the axis perpendicular to the stretch.
-    @Published var crossThin: CGFloat = 0.10
-    /// Inner-content refraction intensity.
-    @Published var warpStrength: CGFloat = 0.38
-    /// 0 = stretch from center, 1 = anchored fully on the side opposite the drag.
-    @Published var anchorStrength: CGFloat = 1.0
-    /// Residual whole-orb translation per point of drag (0 = fixed in place).
-    @Published var translation: CGFloat = 0.0
-}
-
-private struct OrbDebugPanel: View {
-    @ObservedObject var settings: OrbDebugSettings
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Stretch") {
-                    row("Malleability", $settings.malleability, 0...0.8)
-                    row("Cross-axis thin", $settings.crossThin, 0...0.3)
-                    row("Warp strength", $settings.warpStrength, 0...1)
-                }
-                Section("Anchoring") {
-                    row("Anchor strength", $settings.anchorStrength, 0...1)
-                    row("Translation", $settings.translation, 0...0.3)
-                }
-            }
-            .navigationTitle("Orb Debug")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private func row(_ label: String, _ value: Binding<CGFloat>, _ range: ClosedRange<CGFloat>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                Spacer()
-                Text(String(format: "%.2f", value.wrappedValue))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            Slider(value: value, in: range)
-        }
-    }
-}
-#endif
-
 /// An embeddable clear liquid glass orb. Colors materialize inside it as soft
 /// drops of liquid that drift and mingle; an optional prompt, photo, and
 /// progress dots render inside the glass. Dragging stretches the orb toward
@@ -75,11 +21,6 @@ struct GenerationOrbView: View {
 
     @State private var arrivalTimes: [Date] = []
     @State private var dragOffset: CGSize = .zero
-
-    #if DEBUG
-    @ObservedObject private var debug = OrbDebugSettings.shared
-    @State private var showDebugPanel = false
-    #endif
 
     private let startDate = Date()
 
@@ -122,13 +63,6 @@ struct GenerationOrbView: View {
         )
         .offset(x: dragOffset.width * translation, y: dragOffset.height * translation)
         .contentShape(Circle())
-        #if DEBUG
-        .onTapGesture(count: 3) { showDebugPanel = true }
-        .sheet(isPresented: $showDebugPanel) {
-            OrbDebugPanel(settings: debug)
-                .presentationDetents([.medium])
-        }
-        #endif
         .gesture(
             DragGesture()
                 .onChanged { value in
@@ -200,22 +134,17 @@ struct GenerationOrbView: View {
 
     // MARK: - Deformation
 
-    // In DEBUG builds these read from the live-tunable OrbDebugSettings;
-    // release builds use the fixed values.
-    #if DEBUG
-    private var malleability: CGFloat { debug.malleability }
-    private var crossThin: CGFloat { debug.crossThin }
-    private var warpStrength: CGFloat { debug.warpStrength }
-    private var anchorStrength: CGFloat { debug.anchorStrength }
-    private var translation: CGFloat { debug.translation }
-    #else
+    // Deformation constants, tuned via the (now removed) live debug panel.
     /// How far the orb stretches toward the finger.
-    private let malleability: CGFloat = 0.38
-    private let crossThin: CGFloat = 0.10
-    private let warpStrength: CGFloat = 0.38
-    private let anchorStrength: CGFloat = 1.0
-    private let translation: CGFloat = 0.0
-    #endif
+    private let malleability: CGFloat = 0.50
+    /// How much the orb thins on the axis perpendicular to the stretch.
+    private let crossThin: CGFloat = 0.00
+    /// Inner-content refraction intensity.
+    private let warpStrength: CGFloat = 0.00
+    /// 0 = stretch from center, 1 = anchored fully on the side opposite the drag.
+    private let anchorStrength: CGFloat = 1.00
+    /// Residual whole-orb translation per point of drag.
+    private let translation: CGFloat = 0.01
 
     /// Normalized stretch amount from the current drag, capped so the orb
     /// deforms gently rather than tearing apart.

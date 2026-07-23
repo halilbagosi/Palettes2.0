@@ -317,11 +317,6 @@ struct GenerateView: View {
                     }
 
                     Spacer(minLength: 8)
-
-                    if !selectedColorIDs.isEmpty {
-                        schemeMenu
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -355,6 +350,13 @@ struct GenerateView: View {
                     }
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+                }
+
+                // Scheme (generation type) selector sits under the color
+                // strip, revealed once at least one base color is chosen.
+                if !selectedColorIDs.isEmpty {
+                    schemeMenu
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
