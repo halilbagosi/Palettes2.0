@@ -24,7 +24,7 @@ struct GeneratedColor {
 @available(iOS 26.0, *)
 @Generable
 struct GeneratedPalette {
-    @Guide(description: "A short, evocative two or three word name for the palette")
+    @Guide(description: "A specific, evocative two or three word title for this exact palette, drawn from its colors or mood — for example 'Harbor Dusk' or 'Terracotta Bloom'. Never generic: do not use the words palette, colors, scheme, theme, custom, or generated.")
     var name: String
 
     @Guide(description: "The colors that make up the palette")
@@ -44,17 +44,20 @@ enum PaletteGenerator {
 
     /// Generates a palette, streaming each color to `onPartialColors` as the
     /// model produces it (used to feed the generation orb in real time).
+    /// - Parameter existingNames: names already in the user's library, so the
+    ///   generated palette's title can be kept distinct from them.
     static func generate(
         baseColors: [BaseColor],
         size: Int,
         vibe: String?,
         scheme: HarmonyScheme = .auto,
+        existingNames: [String] = [],
         onPartialColors: (@MainActor ([Color]) -> Void)? = nil
     ) async throws -> PaletteViewModel {
         #if targetEnvironment(simulator)
         // The simulator can't run Apple Intelligence — stream a plan-driven
         // palette so the generation experience can be exercised during development.
-        return try await mockGenerate(baseColors: baseColors, size: size, scheme: scheme, onPartialColors: onPartialColors)
+        return try await mockGenerate(baseColors: baseColors, size: size, scheme: scheme, existingNames: existingNames, onPartialColors: onPartialColors)
         #else
         guard case .available = SystemLanguageModel.default.availability else {
             throw AppError.aiUnavailable
@@ -240,9 +243,15 @@ enum PaletteGenerator {
             await MainActor.run { onPartialColors(finalColors) }
         }
 
-        let paletteName = generated.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The model's title is kept only when it's specific and unused;
+        // otherwise a descriptive one is derived from the palette's own colors,
+        // so titles stay varied instead of clustering on generic phrases.
         return PaletteViewModel(
-            name: paletteName.isEmpty ? "Generated Palette" : paletteName,
+            name: PaletteNamer.resolvedName(
+                aiName: generated.name,
+                hexes: hexCodes,
+                existingNames: existingNames
+            ),
             colors: colors,
             hexCodes: hexCodes,
             colorNames: colorNames,
@@ -495,6 +504,7 @@ enum PaletteGenerator {
         baseColors: [BaseColor],
         size: Int,
         scheme: HarmonyScheme,
+        existingNames: [String] = [],
         onPartialColors: (@MainActor ([Color]) -> Void)?
     ) async throws -> PaletteViewModel {
         // Locked colors preserved verbatim, then a harmony plan fills the
@@ -566,7 +576,10 @@ enum PaletteGenerator {
         colorNames = ColorNamer.uniqueNames(forHexes: hexCodes, preferred: colorNames)
 
         return PaletteViewModel(
-            name: "Simulator Palette",
+            // No model on the Simulator, so the descriptive namer supplies the
+            // title — same behavior a device gets when the model's suggestion
+            // is generic or already taken.
+            name: PaletteNamer.resolvedName(aiName: nil, hexes: hexCodes, existingNames: existingNames),
             colors: colors,
             hexCodes: hexCodes,
             colorNames: colorNames,
