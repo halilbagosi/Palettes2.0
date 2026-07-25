@@ -711,6 +711,7 @@ struct GenerateView: View {
             size: targetSize,
             vibe: combinedVibe,
             scheme: scheme,
+            existingNames: appData.palettes.map { $0.name },
             onPartialColors: onColors
         )
     }

@@ -18,6 +18,26 @@ final class PaletteGeneratorTests: XCTestCase {
     /// harmony-plan slot filling entirely, so generation returned a palette
     /// with zero colors. Exercises the same simulator mock path the test
     /// suite actually runs under.
+    /// Generated palettes must not be handed a generic title, and must not
+    /// reuse a title already present in the user's library.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testGeneratedPaletteTitleIsSpecificAndNotAlreadyUsed() async throws {
+        let base = [PaletteGenerator.BaseColor(hex: "#A9603F", name: "Clay")]
+        let first = try await PaletteGenerator.generate(baseColors: base, size: 5, vibe: nil)
+        XCTAssertFalse(first.name.isEmpty)
+        for generic in ["Generated Palette", "Simulator Palette", "Palette", "Untitled"] {
+            XCTAssertNotEqual(first.name.caseInsensitiveCompare(generic), .orderedSame,
+                              "got a generic title: \(first.name)")
+        }
+
+        // Asking again with that title already taken must yield a different one.
+        let second = try await PaletteGenerator.generate(
+            baseColors: base, size: 5, vibe: nil, existingNames: [first.name]
+        )
+        XCTAssertNotEqual(second.name.lowercased(), first.name.lowercased())
+    }
+
     @available(iOS 26.0, *)
     @MainActor
     func testMockGenerateWithNoBaseColorsFillsToRequestedSize() async throws {
