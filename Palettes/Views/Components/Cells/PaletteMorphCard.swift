@@ -65,11 +65,14 @@ struct PaletteMorphCard: View {
     }
 
     private var favoriteBadge: some View {
-        Image(systemName: "star.fill")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.yellow)
-            .frame(width: 34, height: 34)
-            .liquidGlass(.regular, in: .circle)
+        ZStack {
+            Image(systemName: "star.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.yellow)
+                .offset(y: -1)
+        }
+        .frame(width: 34, height: 34)
+        .liquidGlass(.regular, in: .circle)
     }
 
     // MARK: - Normal layout: name + View + copy
