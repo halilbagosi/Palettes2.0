@@ -24,7 +24,7 @@ struct GeneratedColor {
 @available(iOS 26.0, *)
 @Generable
 struct GeneratedPalette {
-    @Guide(description: "A specific, evocative two or three word title for this exact palette, drawn from its colors or mood — for example 'Harbor Dusk' or 'Terracotta Bloom'. Never generic: do not use the words palette, colors, scheme, theme, custom, or generated.")
+    @Guide(description: "A specific, evocative two or three word title for this exact palette, drawn from its colors or mood — for example 'Harbor Dusk' or 'Terracotta Bloom'. Vary the wording between palettes. Never generic: do not use the words palette, colors, scheme, theme, custom, generated, whisper, horizon, harmony, dream, or serene.")
     var name: String
 
     @Guide(description: "The colors that make up the palette")
@@ -80,7 +80,7 @@ enum PaletteGenerator {
             You are an expert color designer creating harmonious color palettes. \
             Before choosing colors, silently pick a color-harmony strategy that \
             best fits the requested vibe — complementary, split-complementary, \
-            analogous, triadic, or monochromatic with a saturated accent — and \
+            analogous, triadic, or monochromatic tones rooted in the chosen hue — and \
             apply it consistently across every color. For palettes of four or \
             more colors, spread lightness across the set so it includes at \
             least one clearly light color and one clearly dark color. Keep every \
@@ -96,23 +96,25 @@ enum PaletteGenerator {
             """
         }
 
-        // No-vibe path with base colors present: plan the harmony deterministically
-        // and have the model only lightly refine each target. Kept for reuse as the
-        // preferred seed for post-validation repairs below.
-        let noVibePlan: HarmonyPlan? = (!locked.isEmpty && !hasVibe && remaining > 0)
+        // Plan the harmony deterministically and use those exact colors for
+        // both the generation preview and saved palette. This applies with
+        // a base and no vibe, or whenever the user selected a concrete mode:
+        // without concrete targets, a mode is only a suggestion the model can
+        // ignore. The vibe still shapes naming and the palette title.
+        let promptPlan: HarmonyPlan? = (!locked.isEmpty && remaining > 0 && (!hasVibe || scheme != .auto))
             ? ColorHarmony.plan(baseHexes: locked.map(\.hex), size: size, scheme: scheme, seed: seed)
             : nil
 
         // Role source for the locked/base colors. `roleForBases` (the source
         // of `roleForBase`) depends only on the base count, not on scheme or
         // vibe, so it's safe to compute a plan purely for role-tagging
-        // purposes even when `noVibePlan` above is nil (e.g. a vibe was
-        // given alongside base colors). With no base colors at all there's
-        // no anchor for "Primary"/"Secondary" to attach to, so roles stay
-        // empty in that case — matching the "pure vibe, no bases" rule.
+        // purposes even when `promptPlan` above is nil (e.g. a free-form vibe
+        // with no explicit scheme). With no base colors at all there's no
+        // anchor for "Primary"/"Secondary" to attach to, so roles stay empty
+        // in that case — matching the "pure vibe, no bases" rule.
         let rolePlan: HarmonyPlan? = locked.isEmpty
             ? nil
-            : (noVibePlan ?? ColorHarmony.plan(baseHexes: locked.map(\.hex), size: size, scheme: scheme, seed: seed))
+            : (promptPlan ?? ColorHarmony.plan(baseHexes: locked.map(\.hex), size: size, scheme: scheme, seed: seed))
 
         var prompt: String
         if locked.isEmpty {
@@ -120,9 +122,9 @@ enum PaletteGenerator {
         } else {
             let list = locked.map { "\($0.hex) (\($0.name))" }.joined(separator: ", ")
             if remaining > 0 {
-                if let noVibePlan {
-                    let targetList = noVibePlan.slots.map(\.hex).joined(separator: ", ")
-                    prompt = "These exact colors are already chosen and must stay in the palette unchanged: \(list). Do not modify, replace, or restate them. Generate exactly \(remaining) additional color\(remaining == 1 ? "" : "s") to reach these harmony targets: \(targetList). Refine each target only slightly — keep within about 8 degrees of its hue — and give every color an evocative name. Every added color must be visually distinct and must not repeat any hex value already listed."
+                if let promptPlan {
+                    let targetList = promptPlan.slots.map(\.hex).joined(separator: ", ")
+                    prompt = "These exact colors are already chosen and must stay in the palette unchanged: \(list). Do not modify, replace, or restate them. Return exactly \(remaining) additional colors, in this order and with these exact hex values: \(targetList). Give every added color an evocative name."
                 } else {
                     prompt = "These exact colors are already chosen and must stay in the palette unchanged: \(list). Do not modify, replace, or restate them. Generate exactly \(remaining) additional color\(remaining == 1 ? "" : "s") that complement and harmonize with them. Every added color must be visually distinct and must not repeat any hex value already listed."
                 }
@@ -137,6 +139,28 @@ enum PaletteGenerator {
             prompt += " Use a \(scheme.displayName) color-harmony scheme."
         }
 
+        // Planned modes already know their final colors. Feed those exact,
+        // fully validated colors into the orb one at a time, preserving the
+        // original arrival rhythm without ever showing a provisional color
+        // that will be replaced at reveal time.
+        let plannedOutput: PlannedOutput? = promptPlan.map {
+            makePlannedOutput(
+                locked: locked,
+                baseRoles: rolePlan?.roleForBase.map { $0 ?? "" } ?? [],
+                targetCount: targetCount,
+                plan: $0,
+                planSeed: seed,
+                scheme: scheme
+            )
+        }
+        if let onPartialColors, let plannedOutput {
+            for index in locked.count..<plannedOutput.colors.count {
+                try await Task.sleep(for: .milliseconds(700))
+                let previewColors = Array(plannedOutput.colors.prefix(index + 1))
+                await MainActor.run { onPartialColors(previewColors) }
+            }
+        }
+
         let session = LanguageModelSession(instructions: instructions)
 
         let generated: GeneratedPalette
@@ -144,6 +168,9 @@ enum PaletteGenerator {
             let stream = session.streamResponse(to: prompt, generating: GeneratedPalette.self)
             for try await snapshot in stream {
                 guard let onPartialColors else { continue }
+                // Names and title still stream, but a planned mode must never
+                // overwrite its correct preview with raw model color guesses.
+                guard case nil = plannedOutput else { continue }
                 // Locked colors always lead; complementary colors stream in after.
                 var shownSeen = Set(locked.map { $0.hex })
                 var shown = locked.map { $0.color }
@@ -166,66 +193,63 @@ enum PaletteGenerator {
             throw AppError.generationFailed
         }
 
-        // Locked colors first (verbatim), then the model's complementary colors.
-        var colors = locked.map { $0.color }
-        var hexCodes = locked.map { $0.hex }
-        var colorNames = locked.map { $0.name }
-        // Locked/base colors take their role from `rolePlan.roleForBase`;
-        // with no base colors, `rolePlan` is nil and this stays empty.
-        var colorRoles: [String] = rolePlan?.roleForBase.map { $0 ?? "" } ?? Array(repeating: "", count: locked.count)
-        var seenHexes = Set(hexCodes)
+        var colors: [Color]
+        var hexCodes: [String]
+        var colorNames: [String]
+        var colorRoles: [String]
 
-        for item in generated.colors {
-            guard colors.count < targetCount else { break }
-            var hex = item.hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            if !hex.hasPrefix("#") { hex = "#" + hex }
-            // Exact-hex set first as a cheap early-out, then the real
-            // perceptual gate: a candidate within minDeltaE of ANY color
-            // already accepted (locked or previously generated) is rejected
-            // outright rather than shipped and cleaned up later.
-            guard seenHexes.insert(hex).inserted else { continue }
-            guard let color = Color(hex: hex) else { continue }
-            guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
-            // Only `noVibePlan` (not the broader `rolePlan`) carries a
-            // positional guarantee: its slot hexes were shown to the model
-            // in the prompt as explicit refinement targets, so the model's
-            // Nth added color corresponds to that plan's Nth slot. When
-            // there's no `noVibePlan` (a vibe was given, or there's nothing
-            // to refine), the model generated freely and there's no slot to
-            // attribute a role to.
-            let slotIndex = colors.count - locked.count
-            let role: String? = {
-                guard let slots = noVibePlan?.slots, slotIndex >= 0, slotIndex < slots.count else { return nil }
-                return slots[slotIndex].role
-            }()
-            colors.append(color)
-            hexCodes.append(hex)
-            // Stash the model's own (possibly empty) name as a "preferred"
-            // placeholder; the final `ColorNamer.uniqueNames` pass below
-            // resolves it against the whole shipped palette, honoring it
-            // verbatim when non-empty and unique, or synthesizing a
-            // descriptive name otherwise.
-            colorNames.append(item.name.trimmingCharacters(in: .whitespacesAndNewlines))
-            colorRoles.append(role ?? "")
+        if let plannedOutput, let promptPlan {
+            colors = plannedOutput.colors
+            hexCodes = plannedOutput.hexCodes
+            colorNames = plannedOutput.colorNames
+            colorRoles = plannedOutput.roles
+
+            // Model-provided color values never replace a validated target,
+            // but the name for the corresponding target is still useful.
+            var namesByTargetHex: [String: String] = [:]
+            for (slot, item) in zip(promptPlan.slots, generated.colors) {
+                let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty { namesByTargetHex[slot.hex] = name }
+            }
+            for index in locked.count..<hexCodes.count {
+                if let name = namesByTargetHex[hexCodes[index]] {
+                    colorNames[index] = name
+                }
+            }
+        } else {
+            // Free-form generation has no predetermined targets, so its
+            // accepted model colors remain the source of truth.
+            colors = locked.map { $0.color }
+            hexCodes = locked.map { $0.hex }
+            colorNames = locked.map { $0.name }
+            colorRoles = rolePlan?.roleForBase.map { $0 ?? "" } ?? Array(repeating: "", count: locked.count)
+            var seenHexes = Set(hexCodes)
+
+            for item in generated.colors {
+                guard colors.count < targetCount else { break }
+                var hex = item.hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                if !hex.hasPrefix("#") { hex = "#" + hex }
+                guard seenHexes.insert(hex).inserted, let color = Color(hex: hex) else { continue }
+                guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
+                colors.append(color)
+                hexCodes.append(hex)
+                colorNames.append(item.name.trimmingCharacters(in: .whitespacesAndNewlines))
+                colorRoles.append("")
+            }
+
+            repairViolations(
+                colors: &colors,
+                hexCodes: &hexCodes,
+                colorNames: &colorNames,
+                roles: &colorRoles,
+                seen: &seenHexes,
+                lockedCount: locked.count,
+                targetCount: targetCount,
+                fallbackPlan: nil,
+                planSeed: seed,
+                scheme: scheme
+            )
         }
-
-        // Post-validation: drop colors that are too similar to a neighbor, or
-        // that leave the palette without enough brightness spread, then
-        // repair using a harmony plan so replacements stay in-family rather
-        // than drifting to arbitrary golden-ratio hues. Bounded to at most
-        // two passes total — the palette is accepted as-is if violations
-        // remain after the cap rather than throwing.
-        repairViolations(
-            colors: &colors,
-            hexCodes: &hexCodes,
-            colorNames: &colorNames,
-            roles: &colorRoles,
-            seen: &seenHexes,
-            lockedCount: locked.count,
-            targetCount: targetCount,
-            fallbackPlan: noVibePlan,
-            planSeed: seed
-        )
 
         guard colors.count >= 2 else { throw AppError.generationFailed }
 
@@ -268,6 +292,58 @@ enum PaletteGenerator {
         let name: String
     }
 
+    /// A plan's fully repaired color output. Keeping this as one small value
+    /// lets the orb and returned palette share the *same* color source.
+    private struct PlannedOutput {
+        let colors: [Color]
+        let hexCodes: [String]
+        let colorNames: [String]
+        let roles: [String]
+    }
+
+    /// Resolves a deterministic plan exactly as the final palette will be
+    /// resolved: first its explicit slots, then in-family extensions and
+    /// validation repair when necessary. Used before model streaming so the
+    /// visual preview cannot diverge from the returned palette.
+    private static func makePlannedOutput(
+        locked: [LockedColor],
+        baseRoles: [String],
+        targetCount: Int,
+        plan: HarmonyPlan,
+        planSeed: UInt64,
+        scheme: HarmonyScheme
+    ) -> PlannedOutput {
+        var colors = locked.map(\.color)
+        var hexCodes = locked.map(\.hex)
+        var colorNames = locked.map(\.name)
+        var roles = baseRoles
+        var seen = Set(hexCodes)
+
+        fillToTarget(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &roles,
+            seen: &seen,
+            target: targetCount,
+            plan: plan
+        )
+        repairViolations(
+            colors: &colors,
+            hexCodes: &hexCodes,
+            colorNames: &colorNames,
+            roles: &roles,
+            seen: &seen,
+            lockedCount: locked.count,
+            targetCount: targetCount,
+            fallbackPlan: plan,
+            planSeed: planSeed,
+            scheme: scheme
+        )
+
+        return PlannedOutput(colors: colors, hexCodes: hexCodes, colorNames: colorNames, roles: roles)
+    }
+
     /// Normalizes and de-duplicates the user's chosen colors, preserving order.
     ///
     /// `name` is left as the user's own text verbatim (or empty if they
@@ -301,9 +377,13 @@ enum PaletteGenerator {
     /// appear verbatim, even if similar to each other); they only ever
     /// appear on the `existingHexes` side, as a neighbor a new candidate
     /// must stay distinct from.
-    private static func isPerceptuallyDistinct(_ hex: String, from existingHexes: [String]) -> Bool {
+    private static func isPerceptuallyDistinct(
+        _ hex: String,
+        from existingHexes: [String],
+        minDistance: Double = PaletteValidation.minDeltaE
+    ) -> Bool {
         for existing in existingHexes {
-            if ColorNamer.perceptualDistance(hex1: hex, hex2: existing) < PaletteValidation.minDeltaE {
+            if ColorNamer.perceptualDistance(hex1: hex, hex2: existing) < minDistance {
                 return false
             }
         }
@@ -339,7 +419,8 @@ enum PaletteGenerator {
         lockedCount: Int,
         targetCount: Int,
         fallbackPlan: HarmonyPlan?,
-        planSeed: UInt64
+        planSeed: UInt64,
+        scheme: HarmonyScheme = .auto
     ) {
         var bad = PaletteValidation.violations(hexCodes: hexCodes, lockedCount: lockedCount)
         for _ in 0..<2 {
@@ -358,14 +439,18 @@ enum PaletteGenerator {
 
             // The caller's plan (if one exists) keeps repairs on the
             // originally planned targets; otherwise seed a fresh plan from
-            // the surviving colors so repairs stay in the same family. Only
-            // computed when there's actually a shortfall to fill.
+            // the surviving colors so repairs stay in the same family. The
+            // user's chosen `scheme` is carried into that fresh plan — with
+            // `.auto` hardcoded here, a repair could re-resolve to a
+            // different scheme and pull the palette out of the family the
+            // user actually picked. Only computed when there's actually a
+            // shortfall to fill.
             let repairPlan: HarmonyPlan? = (colors.count < targetCount)
-                ? (fallbackPlan ?? ColorHarmony.plan(baseHexes: hexCodes, size: targetCount, scheme: .auto, seed: planSeed))
+                ? (fallbackPlan ?? ColorHarmony.plan(baseHexes: hexCodes, size: targetCount, scheme: scheme, seed: planSeed))
                 : nil
 
             // Only inherit slot roles when `repairPlan` is the caller's own
-            // deliberate plan (`fallbackPlan`, e.g. the `noVibePlan` computed
+            // deliberate plan (`fallbackPlan`, e.g. the `promptPlan` computed
             // once from the original prompt targets). When `fallbackPlan` is
             // nil, `repairPlan` was just synthesized above from whatever
             // colors happen to be surviving at this point in the repair —
@@ -396,13 +481,21 @@ enum PaletteGenerator {
 
     // MARK: - Count guarantee
 
-    /// Ensures the palette reaches `target` colors. Prefers consuming unused
-    /// slots from a harmony `plan` (in order, skipping any whose hex fails
-    /// the `seen` dedup) so fills/repairs stay in the intended harmony
-    /// family; only once the plan is exhausted does it fall back to
-    /// synthesizing distinct colors by rotating the hue of existing ones
-    /// (golden-ratio spacing) with slight brightness variation, so the final
-    /// count always matches the selected size.
+    /// Ensures the palette reaches `target` colors, without ever leaving the
+    /// selected harmony family.
+    ///
+    /// First consumes the `plan`'s own slots (in order, skipping any that
+    /// fail the `seen`/perceptual gates); if that leaves a shortfall — which
+    /// it routinely does, since a slot that reads the same as a color already
+    /// placed is dropped — it keeps drawing *further slots from the same
+    /// plan* via `ColorHarmony.extraSlots`, which continues that scheme's own
+    /// hue offsets and tone ladder.
+    ///
+    /// The hue is only ever varied off an existing color as an absolute last
+    /// resort, when there is no plan at all to derive a family from — an
+    /// earlier version reached for a golden-ratio hue rotation (≈137° per
+    /// step) at the first shortfall, which is precisely what put an unrelated
+    /// red in the middle of a monochromatic blue palette.
     private static func fillToTarget(
         colors: inout [Color],
         hexCodes: inout [String],
@@ -415,27 +508,34 @@ enum PaletteGenerator {
     ) {
         guard target > colors.count else { return }
 
-        if let plan {
-            // Colors filled from a plan slot inherit that slot's role
-            // (consumption order == slot order), keeping `roles` aligned
-            // with `colors`/`hexCodes`/`colorNames`. `inheritRoles` lets a
-            // caller pass a plan purely for its color *values* (e.g. an
-            // ad-hoc repair plan with no deliberate role assignment behind
-            // it) without leaking its slot roles.
-            //
-            // A role is never assigned twice within one palette: when the
-            // same plan is replayed (e.g. a repair pass restarting from
-            // slot 0 after the model under-delivered), the model's refined
-            // hex can differ slightly from the slot's hex, so `seen` alone
-            // doesn't block the replay — without this check a role like
-            // "Accent" could land on two different colors.
-            for slot in plan.slots where colors.count < target {
+        // Colors filled from a plan slot inherit that slot's role
+        // (consumption order == slot order), keeping `roles` aligned with
+        // `colors`/`hexCodes`/`colorNames`. `inheritRoles` lets a caller pass
+        // a plan purely for its color *values* (e.g. an ad-hoc repair plan
+        // with no deliberate role assignment behind it) without leaking its
+        // slot roles.
+        //
+        // A role is never assigned twice within one palette: when the same
+        // plan is replayed (e.g. a repair pass restarting from slot 0 after
+        // the model under-delivered), the model's refined hex can differ
+        // slightly from the slot's hex, so `seen` alone doesn't block the
+        // replay — without this check a role like "Accent" could land on two
+        // different colors.
+        func consume(_ slots: [HarmonySlot], inheritRoles: Bool, minDistance: Double = PaletteValidation.minDeltaE) {
+            for slot in slots where colors.count < target {
                 let hex = slot.hex
-                guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
-                // Perceptual gate: a plan slot that reads as visually the
-                // same as a color already in the palette is skipped rather
-                // than shipped as a near-duplicate.
-                guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
+                guard !seen.contains(hex), let color = Color(hex: hex) else { continue }
+                // Perceptual gate: a slot that reads as visually the same as
+                // a color already in the palette is skipped rather than
+                // shipped as a near-duplicate.
+                //
+                // `seen` is only written once a candidate is actually
+                // accepted — it tracks what's IN the palette. Marking
+                // rejected candidates as seen would blacklist them for the
+                // rest of the fill, including the relaxed-floor retry below,
+                // where the very same slot may well be acceptable.
+                guard isPerceptuallyDistinct(hex, from: hexCodes, minDistance: minDistance) else { continue }
+                seen.insert(hex)
                 colors.append(color)
                 hexCodes.append(hex)
                 // Left empty (no AI/user name for a fill slot) — named
@@ -451,21 +551,47 @@ enum PaletteGenerator {
             }
         }
 
+        if let plan {
+            consume(plan.slots, inheritRoles: inheritRoles)
+
+            // Shortfall: continue this plan's ladder. Candidates are drawn
+            // generously (the perceptual gate rejects most of them by design)
+            // and bounded, so this never spins.
+            //
+            // The distinctness floor steps down across attempts. A tight
+            // family genuinely runs out of room — a single hue can only
+            // supply about nine colors that are all a full deltaE 12 apart,
+            // so a 12-color monochromatic palette has to choose between
+            // shipping short, shipping an off-family color, and shipping
+            // neighbouring shades that sit a little closer together. The last
+            // is what a monochromatic palette is *supposed* to look like, so
+            // the floor relaxes toward 6 — still a visible step, never a
+            // repeat — rather than reaching for another hue. Only extension
+            // candidates relax; the plan's own slots and the last-resort path
+            // below always hold the full floor.
+            for floor in [PaletteValidation.minDeltaE, 9, 6] where target > colors.count {
+                let shortfall = target - colors.count
+                let extras = ColorHarmony.extraSlots(for: plan, count: min(160, max(24, shortfall * 16)))
+                // Role-less by construction: an extension slot is a top-up,
+                // not part of the deliberate plan.
+                consume(extras, inheritRoles: false, minDistance: floor)
+            }
+        }
+
         guard target > colors.count else { return }
+        // No plan to extend (a hand-built plan carrying no base hexes, or no
+        // plan at all). Vary the tone of the colors already present while
+        // holding their hue, so even this path stays inside whatever family
+        // the palette already has.
         let seeds = colors
-        // The golden-ratio rotation below seeds new hues off of existing
-        // colors; with no plan (or an exhausted one) and a still-empty
-        // palette, there's nothing to rotate from, so bail rather than
-        // spin the safety counter forever (it only increments inside the
-        // `for seed in seeds` loop, which never runs when seeds is empty).
         guard !seeds.isEmpty else { return }
-        // Hard bound on search attempts: with the perceptual gate below now
-        // able to reject a candidate hue as well as an exact-hex repeat,
-        // finding `target` distinct colors can take more attempts than
-        // before — but this must still never spin forever, so if the bound
-        // is hit the function returns fewer than `target` colors rather
-        // than looping or emitting a near-duplicate.
-        var step = 1
+        // Hard bound on search attempts: the perceptual gate can reject a
+        // candidate as well as an exact-hex repeat, so this must never spin
+        // forever — if the bound is hit, fewer than `target` colors are
+        // returned rather than a near-duplicate emitted.
+        let brightnessSteps: [CGFloat] = [0.22, 0.86, 0.46, 0.96, 0.12, 0.66, 0.34, 0.76]
+        let saturationScales: [CGFloat] = [1.0, 0.55, 0.82, 0.3]
+        var step = 0
         var safety = 0
         while colors.count < target && safety < target * 48 {
             for seed in seeds where colors.count < target {
@@ -473,19 +599,18 @@ enum PaletteGenerator {
                 let ui = UIColor(seed)
                 var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
                 guard ui.getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { continue }
-                var newHue = (h + CGFloat(0.381966 * Double(step))).truncatingRemainder(dividingBy: 1)
-                if newHue < 0 { newHue += 1 }
-                let newBright = min(0.95, max(0.2, b + CGFloat((step % 3) - 1) * 0.1))
-                let newSat = min(1.0, max(0.25, s))
-                let ui2 = UIColor(hue: newHue, saturation: newSat, brightness: newBright, alpha: 1)
+                let newBright = brightnessSteps[step % brightnessSteps.count]
+                let newSat = min(1.0, max(0.04, s * saturationScales[(step / brightnessSteps.count) % saturationScales.count]))
+                let ui2 = UIColor(hue: h, saturation: newSat, brightness: newBright, alpha: 1)
                 var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, al: CGFloat = 0
                 ui2.getRed(&r, green: &g, blue: &bl, alpha: &al)
                 let hex = String(format: "#%02X%02X%02X", Int(round(r * 255)), Int(round(g * 255)), Int(round(bl * 255)))
-                guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
+                guard !seen.contains(hex), let color = Color(hex: hex) else { continue }
                 // Keep searching (next seed/step) until a candidate is
                 // perceptually distinct from every color already in the
                 // palette — never append a near-duplicate.
                 guard isPerceptuallyDistinct(hex, from: hexCodes) else { continue }
+                seen.insert(hex)
                 colors.append(color)
                 hexCodes.append(hex)
                 // Named descriptively by the final `ColorNamer.uniqueNames`
@@ -558,15 +683,13 @@ enum PaletteGenerator {
             colorRoles = Array(repeating: "", count: colorRoles.count)
         }
 
-        // Stream: locked colors appear immediately, then each new one plops in.
+        // The simulator follows the device path: reveal the already-resolved
+        // colors one at a time, never temporary placeholders.
         if let onPartialColors {
-            var shown = locked.map { $0.color }
-            await MainActor.run { onPartialColors(shown) }
             for index in locked.count..<colors.count {
                 try await Task.sleep(for: .milliseconds(700))
-                shown.append(colors[index])
-                let snapshot = shown
-                await MainActor.run { onPartialColors(snapshot) }
+                let previewColors = Array(colors.prefix(index + 1))
+                await MainActor.run { onPartialColors(previewColors) }
             }
         }
 

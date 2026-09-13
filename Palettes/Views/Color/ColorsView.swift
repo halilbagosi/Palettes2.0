@@ -23,6 +23,7 @@ struct ColorsView: View {
     @State private var showBulkDeleteAlert = false
     @AppStorage("colorsLayout") private var layoutRaw = ListLayout.normal.rawValue
     @AppStorage("colorsSort") private var sortRaw = LibrarySort.newestFirst.rawValue
+    @AppStorage("colorsOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
     @EnvironmentObject var appData: AppData
 
@@ -35,6 +36,9 @@ struct ColorsView: View {
 
     private var layout: ListLayout { ListLayout(rawValue: layoutRaw) ?? .normal }
     private var sort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .newestFirst }
+    private var originFilter: LibraryOriginFilter {
+        LibraryOriginFilter(rawValue: originFilterRaw) ?? .all
+    }
 
     private var layoutBinding: Binding<ListLayout> {
         Binding(get: { layout }, set: { newValue in
@@ -48,10 +52,15 @@ struct ColorsView: View {
         Binding(get: { sort }, set: { sortRaw = $0.rawValue })
     }
 
+    private var originFilterBinding: Binding<LibraryOriginFilter> {
+        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue })
+    }
+
     /// Filtered + sorted for display only; the stored array keeps creation order.
     private var displayedColors: [ColorViewModel] {
         var items = appData.colors
         if favoritesOnly { items = items.filter(\.isFavorite) }
+        items = items.filter { originFilter.includes(isGenerated: $0.isGenerated) }
         if sort == .newestFirst { items.reverse() }
         return items
     }
@@ -59,6 +68,28 @@ struct ColorsView: View {
     private var allVisibleSelected: Bool {
         let visibleIDs = Set(displayedColors.map(\.id))
         return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedIDs)
+    }
+
+    private var filteredEmptyTitle: String {
+        switch (originFilter, favoritesOnly) {
+        case (.all, true): "No Favorites"
+        case (.created, true): "No Created Favorites"
+        case (.generated, true): "No Generated Favorites"
+        case (.all, false): "No Colors"
+        case (.created, false): "No Created Colors"
+        case (.generated, false): "No Generated Colors"
+        }
+    }
+
+    private var filteredEmptyMessage: String {
+        switch (originFilter, favoritesOnly) {
+        case (.all, true): "Colors you mark as favorites will appear here."
+        case (.created, true): "Created colors you mark as favorites will appear here."
+        case (.generated, true): "Generated colors you mark as favorites will appear here."
+        case (.all, false): "Create a color to add it to your library."
+        case (.created, false): "Colors you create will appear here."
+        case (.generated, false): "Colors generated with Apple Intelligence will appear here."
+        }
     }
 
     // MARK: - Body
@@ -153,9 +184,9 @@ struct ColorsView: View {
     private var libraryContent: some View {
         if displayedColors.isEmpty {
             ContentUnavailableView(
-                "No Favorites",
-                systemImage: "star",
-                description: Text("Colors you mark as favorites will appear here.")
+                filteredEmptyTitle,
+                systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
+                description: Text(filteredEmptyMessage)
             )
         } else {
             ScrollView {
@@ -187,6 +218,9 @@ struct ColorsView: View {
             hexCode: color.HEX,
             color: color.color,
             isCompact: layout == .compact,
+            isGenerated: color.isGenerated,
+            isFavorite: color.isFavorite && !isSelecting,
+            isSelecting: isSelecting,
             onView: { if !isSelecting { path.append(color) } },
             onCopy: { copyToClipboard(color.HEX, label: "Copied HEX") }
         )
@@ -194,8 +228,6 @@ struct ColorsView: View {
         .overlay(alignment: .topTrailing) {
             if isSelecting {
                 SelectionCheckmark(isSelected: selectedIDs.contains(color.id))
-            } else if color.isFavorite {
-                favoriteBadge
             }
         }
         .overlay {
@@ -220,20 +252,12 @@ struct ColorsView: View {
                 colorName: color.name,
                 hexCode: color.HEX,
                 color: color.color,
-                isCompact: false
+                isCompact: false,
+                isGenerated: color.isGenerated
             )
             .frame(width: 360, height: 180)
             .padding(4)
         }
-    }
-
-    private var favoriteBadge: some View {
-        Image(systemName: "star.fill")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.yellow)
-            .padding(7)
-            .background(.black.opacity(0.18), in: .circle)
-            .padding(10)
     }
 
     // MARK: - Context menu
@@ -337,7 +361,8 @@ struct ColorsView: View {
             LibraryOptionsMenu(
                 layout: layoutBinding,
                 sort: sortBinding,
-                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3))
+                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                originFilter: originFilterBinding.animation(.spring(response: 0.3))
             )
         } label: {
             Image(systemName: "ellipsis")

@@ -39,7 +39,11 @@ struct GeneratePaletteIntent: AppIntent {
             scheme: .auto,
             existingNames: AppData.shared.palettes.map { $0.name }
         )
-        let saved = AppData.shared.addPalette(name: generated.name, paletteColors: generated.paletteColors)
+        let saved = AppData.shared.addPalette(
+            name: generated.name,
+            paletteColors: generated.paletteColors,
+            isGenerated: true
+        )
 
         return .result(
             value: PaletteEntity(saved),

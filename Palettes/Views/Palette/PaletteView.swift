@@ -16,6 +16,7 @@ struct PaletteView: View {
     @State private var showBulkDeleteAlert = false
     @AppStorage("palettesLayout") private var layoutRaw = ListLayout.normal.rawValue
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
+    @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
     @EnvironmentObject var appData: AppData
 
@@ -23,6 +24,9 @@ struct PaletteView: View {
 
     private var layout: ListLayout { ListLayout(rawValue: layoutRaw) ?? .normal }
     private var sort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .newestFirst }
+    private var originFilter: LibraryOriginFilter {
+        LibraryOriginFilter(rawValue: originFilterRaw) ?? .all
+    }
 
     private var layoutBinding: Binding<ListLayout> {
         Binding(get: { layout }, set: { newValue in
@@ -36,10 +40,15 @@ struct PaletteView: View {
         Binding(get: { sort }, set: { sortRaw = $0.rawValue })
     }
 
+    private var originFilterBinding: Binding<LibraryOriginFilter> {
+        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue })
+    }
+
     /// Filtered + sorted for display only; the stored array keeps creation order.
     private var displayedPalettes: [PaletteViewModel] {
         var items = appData.palettes
         if favoritesOnly { items = items.filter(\.isFavorite) }
+        items = items.filter { originFilter.includes(isGenerated: $0.isGenerated) }
         if sort == .newestFirst { items.reverse() }
         return items
     }
@@ -47,6 +56,28 @@ struct PaletteView: View {
     private var allVisibleSelected: Bool {
         let visibleIDs = Set(displayedPalettes.map(\.id))
         return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedIDs)
+    }
+
+    private var filteredEmptyTitle: String {
+        switch (originFilter, favoritesOnly) {
+        case (.all, true): "No Favorites"
+        case (.created, true): "No Created Favorites"
+        case (.generated, true): "No Generated Favorites"
+        case (.all, false): "No Palettes"
+        case (.created, false): "No Created Palettes"
+        case (.generated, false): "No Generated Palettes"
+        }
+    }
+
+    private var filteredEmptyMessage: String {
+        switch (originFilter, favoritesOnly) {
+        case (.all, true): "Palettes you mark as favorites will appear here."
+        case (.created, true): "Created palettes you mark as favorites will appear here."
+        case (.generated, true): "Generated palettes you mark as favorites will appear here."
+        case (.all, false): "Create a palette to add it to your library."
+        case (.created, false): "Palettes you create will appear here."
+        case (.generated, false): "Palettes generated with Apple Intelligence will appear here."
+        }
     }
 
     // MARK: - Body
@@ -135,16 +166,16 @@ struct PaletteView: View {
     private var libraryContent: some View {
         if displayedPalettes.isEmpty {
             ContentUnavailableView(
-                "No Favorites",
-                systemImage: "star",
-                description: Text("Palettes you mark as favorites will appear here.")
+                filteredEmptyTitle,
+                systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
+                description: Text(filteredEmptyMessage)
             )
         } else {
             ScrollView {
                 MorphingCardGrid(
                     minColumnWidth: layout == .compact ? 320 : 340,
                     maxColumnWidth: 560,
-                    rowHeight: layout == .compact ? 96 : 180,
+                    rowHeight: layout == .compact ? 108 : 180,
                     spacing: layout == .compact ? 10 : 20
                 ) {
                     ForEach(displayedPalettes) { palette in
@@ -169,6 +200,9 @@ struct PaletteView: View {
             paletteName: palette.name,
             colors: palette.colors,
             isCompact: layout == .compact,
+            isGenerated: palette.isGenerated,
+            isFavorite: palette.isFavorite && !isSelecting,
+            isSelecting: isSelecting,
             onView: { if !isSelecting { path.append(palette) } },
             onCopy: { copyToClipboard(palette.hexCodes.joined(separator: ", "), label: "Copied HEX") }
         )
@@ -176,8 +210,6 @@ struct PaletteView: View {
         .overlay(alignment: .topTrailing) {
             if isSelecting {
                 SelectionCheckmark(isSelected: selectedIDs.contains(palette.id))
-            } else if palette.isFavorite {
-                favoriteBadge
             }
         }
         .overlay {
@@ -198,19 +230,15 @@ struct PaletteView: View {
             if !isSelecting { path.append(palette) }
         }
         .contextMenu { paletteContextMenu(palette) } preview: {
-            PaletteMorphCard(paletteName: palette.name, colors: palette.colors, isCompact: false)
+            PaletteMorphCard(
+                paletteName: palette.name,
+                colors: palette.colors,
+                isCompact: false,
+                isGenerated: palette.isGenerated
+            )
                 .frame(width: 360, height: 180)
                 .padding(4)
         }
-    }
-
-    private var favoriteBadge: some View {
-        Image(systemName: "star.fill")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.yellow)
-            .padding(7)
-            .background(.black.opacity(0.18), in: .circle)
-            .padding(10)
     }
 
     // MARK: - Context menu
@@ -344,7 +372,8 @@ struct PaletteView: View {
             LibraryOptionsMenu(
                 layout: layoutBinding,
                 sort: sortBinding,
-                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3))
+                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                originFilter: originFilterBinding.animation(.spring(response: 0.3))
             )
         } label: {
             Image(systemName: "ellipsis")

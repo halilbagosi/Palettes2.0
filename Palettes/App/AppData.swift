@@ -245,7 +245,8 @@ class AppData: ObservableObject {
                     color: Color(hex: $0.hex) ?? .gray,
                     HEX: $0.hex,
                     usedInPalette: $0.usedInPalette,
-                    isFavorite: $0.isFavorite
+                    isFavorite: $0.isFavorite,
+                    isGenerated: $0.isGenerated
                 )
             }
             palettes = uniquePalettes.map { stored in
@@ -256,7 +257,8 @@ class AppData: ObservableObject {
                     hexCodes: stored.hexCodes,
                     colorNames: stored.colorNames,
                     colorRoles: stored.colorRoles,
-                    isFavorite: stored.isFavorite
+                    isFavorite: stored.isFavorite,
+                    isGenerated: stored.isGenerated
                 )
             }
         }
@@ -283,6 +285,7 @@ class AppData: ObservableObject {
                 if stored.hex != color.HEX { stored.hex = color.HEX }
                 if stored.usedInPalette != color.usedInPalette { stored.usedInPalette = color.usedInPalette }
                 if stored.isFavorite != color.isFavorite { stored.isFavorite = color.isFavorite }
+                if stored.isGenerated != color.isGenerated { stored.isGenerated = color.isGenerated }
                 if stored.sortIndex != index { stored.sortIndex = index }
             } else {
                 context.insert(StoredColor(
@@ -291,6 +294,7 @@ class AppData: ObservableObject {
                     hex: color.HEX,
                     usedInPalette: color.usedInPalette,
                     isFavorite: color.isFavorite,
+                    isGenerated: color.isGenerated,
                     sortIndex: index
                 ))
             }
@@ -341,6 +345,7 @@ class AppData: ObservableObject {
                 if stored.colorNames != palette.colorNames { stored.colorNames = palette.colorNames }
                 if stored.colorRoles != palette.colorRoles { stored.colorRoles = palette.colorRoles }
                 if stored.isFavorite != palette.isFavorite { stored.isFavorite = palette.isFavorite }
+                if stored.isGenerated != palette.isGenerated { stored.isGenerated = palette.isGenerated }
                 if stored.sortIndex != index { stored.sortIndex = index }
             } else {
                 context.insert(StoredPalette(
@@ -350,6 +355,7 @@ class AppData: ObservableObject {
                     colorNames: palette.colorNames,
                     colorRoles: palette.colorRoles,
                     isFavorite: palette.isFavorite,
+                    isGenerated: palette.isGenerated,
                     sortIndex: index
                 ))
             }
@@ -455,8 +461,8 @@ class AppData: ObservableObject {
     /// the debounced sink later fires and finds nothing changed
     /// (`context.hasChanges` guard).
     @discardableResult
-    func addPalette(name: String, paletteColors: [PaletteColor]) -> PaletteViewModel {
-        let palette = PaletteViewModel(name: name, paletteColors: paletteColors)
+    func addPalette(name: String, paletteColors: [PaletteColor], isGenerated: Bool = false) -> PaletteViewModel {
+        let palette = PaletteViewModel(name: name, paletteColors: paletteColors, isGenerated: isGenerated)
         palettes.append(palette)
         persistPalettes(palettes)
         return palette

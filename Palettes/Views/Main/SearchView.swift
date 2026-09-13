@@ -51,6 +51,10 @@ struct SearchView: View {
     private var showPaletteResults: Bool { scope != .colors && !filteredPalettes.isEmpty }
     private var hasResults: Bool { showColorResults || showPaletteResults }
 
+    private var browseResultIDs: [UUID] {
+        browseColors.map(\.id) + browsePalettes.map(\.id)
+    }
+
     // MARK: - Browse (idle) Filtering
 
     private var browseColors: [ColorViewModel] {
@@ -150,7 +154,8 @@ struct SearchView: View {
                                 colorName: color.name,
                                 hexCode: color.HEX,
                                 color: color.color,
-                                highlight: query
+                                highlight: query,
+                                isGenerated: color.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
@@ -171,7 +176,8 @@ struct SearchView: View {
                             PaletteCellSearch(
                                 paletteName: palette.name,
                                 colors: palette.colors,
-                                highlight: query
+                                highlight: query,
+                                isGenerated: palette.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
@@ -204,6 +210,14 @@ struct SearchView: View {
 
             hueChips
 
+            browseResultSections
+        }
+        .padding()
+    }
+
+    private var browseResultSections: some View {
+        VStack(alignment: .leading, spacing: 20) {
+
             if !browseColors.isEmpty {
                 SearchSectionHeader(title: "Colors", count: browseColors.count)
 
@@ -215,18 +229,19 @@ struct SearchView: View {
                             ColorCellSearch(
                                 colorName: color.name,
                                 hexCode: color.HEX,
-                                color: color.color
+                                color: color.color,
+                                isGenerated: color.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
                         .hoverEffect(.lift)
+                        .transition(.opacity)
                     }
                 }
             }
 
             if !availableTags.isEmpty {
                 tagChips
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if !browsePalettes.isEmpty {
@@ -239,11 +254,13 @@ struct SearchView: View {
                         NavigationLink(value: palette) {
                             PaletteCellSearch(
                                 paletteName: palette.name,
-                                colors: palette.colors
+                                colors: palette.colors,
+                                isGenerated: palette.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
                         .hoverEffect(.lift)
+                        .transition(.opacity)
                     }
                 }
             }
@@ -255,12 +272,10 @@ struct SearchView: View {
                     description: Text("Nothing in your library matches the selected filters.")
                 )
                 .padding(.top, 40)
+                .transition(.opacity)
             }
         }
-        .padding()
-        .animation(.spring(response: 0.3), value: selectedHues)
-        .animation(.spring(response: 0.3), value: selectedTags)
-        .animation(.spring(duration: 0.35, bounce: 0.2), value: availableTags.isEmpty)
+        .animation(.spring(response: 0.24, dampingFraction: 1), value: browseResultIDs)
     }
 
     private var hueChips: some View {
@@ -268,29 +283,29 @@ struct SearchView: View {
             HStack(spacing: 8) {
                 HueChip(
                     title: "All",
-                    swatch: nil,
+                    tint: nil,
                     isSelected: selectedHues.isEmpty
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedHues.removeAll() }
+                    selectedHues.removeAll()
                 }
 
                 ForEach(availableHues) { hue in
                     HueChip(
                         title: hue.rawValue,
-                        swatch: hue.representativeColor,
+                        tint: hue.representativeColor,
                         isSelected: selectedHues.contains(hue)
                     ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            if selectedHues.contains(hue) {
-                                selectedHues.remove(hue)
-                            } else {
-                                selectedHues.insert(hue)
-                            }
+                        if selectedHues.contains(hue) {
+                            selectedHues.remove(hue)
+                        } else {
+                            selectedHues.insert(hue)
                         }
                     }
                 }
             }
             .padding(.vertical, 2)
+            .padding(.trailing, 18)
+            .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedHues)
         }
         .scrollClipDisabled()
     }
@@ -300,29 +315,29 @@ struct SearchView: View {
             HStack(spacing: 8) {
                 HueChip(
                     title: "All",
-                    swatch: nil,
+                    tint: nil,
                     isSelected: selectedTags.isEmpty
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedTags.removeAll() }
+                    selectedTags.removeAll()
                 }
 
                 ForEach(availableTags, id: \.self) { tag in
                     HueChip(
                         title: tag,
-                        swatch: nil,
+                        tint: nil,
                         isSelected: selectedTags.contains(tag)
                     ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            if selectedTags.contains(tag) {
-                                selectedTags.remove(tag)
-                            } else {
-                                selectedTags.insert(tag)
-                            }
+                        if selectedTags.contains(tag) {
+                            selectedTags.remove(tag)
+                        } else {
+                            selectedTags.insert(tag)
                         }
                     }
                 }
             }
             .padding(.vertical, 2)
+            .padding(.trailing, 18)
+            .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedTags)
         }
         .scrollClipDisabled()
     }

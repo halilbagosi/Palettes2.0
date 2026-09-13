@@ -21,6 +21,7 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
     var name: String
     var paletteColors: [PaletteColor]
     var isFavorite: Bool = false
+    var isGenerated: Bool = false
 
     var colors: [Color] { paletteColors.map { $0.color } }
     var hexCodes: [String] { paletteColors.map { $0.hex } }
@@ -38,11 +39,13 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         hexCodes: [String] = [],
         colorNames: [String] = [],
         colorRoles: [String] = [],
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        isGenerated: Bool = false
     ) {
         self.id = id
         self.name = name
         self.isFavorite = isFavorite
+        self.isGenerated = isGenerated
         self.paletteColors = colors.enumerated().map { index, color in
             let hex = index < hexCodes.count ? hexCodes[index] : ColorAdjustment.hexString(from: color)
             let name = index < colorNames.count ? colorNames[index] : ColorNamer.name(forHex: hex)
@@ -51,11 +54,18 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         }
     }
 
-    init(id: UUID = UUID(), name: String, paletteColors: [PaletteColor], isFavorite: Bool = false) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        paletteColors: [PaletteColor],
+        isFavorite: Bool = false,
+        isGenerated: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.paletteColors = paletteColors
         self.isFavorite = isFavorite
+        self.isGenerated = isGenerated
     }
 
     static func == (lhs: PaletteViewModel, rhs: PaletteViewModel) -> Bool {

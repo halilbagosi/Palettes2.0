@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import FoundationModels
+import Foundation
 
 @available(iOS 26.0, *)
 struct GenerateView: View {
@@ -43,23 +44,7 @@ struct GenerateView: View {
 
     /// Iridescent tint reserved for the Apple Intelligence glyph.
     private var glowGradient: AnyShapeStyle {
-        let t = Float(glowPhase)
-        let d: Float = 0.18
-        return AnyShapeStyle(MeshGradient(width: 3, height: 3, points: [
-            SIMD2(-0.5, -0.5),
-            SIMD2(0.5 + d * sin(t * .pi * 2), -0.5),
-            SIMD2(1.5, -0.5),
-            SIMD2(-0.5, 0.5 + d * cos(t * .pi * 2 + 1)),
-            SIMD2(0.5 + d * cos(t * .pi * 2), 0.5 + d * sin(t * .pi * 2)),
-            SIMD2(1.5, 0.5 - d * cos(t * .pi * 2 + 2)),
-            SIMD2(-0.5, 1.5),
-            SIMD2(0.5 - d * sin(t * .pi * 2 + 1.5), 1.5),
-            SIMD2(1.5, 1.5)
-        ], colors: [
-            .yellow,  .orange, .pink,
-            .orange,  .purple, .indigo,
-            .pink,    .indigo, .blue
-        ]))
+        GeneratedGradient.style(phase: glowPhase)
     }
 
     /// The simulator can't run Apple Intelligence; show the form there so the
@@ -99,7 +84,7 @@ struct GenerateView: View {
             .toolbar(phase == .generating ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
-                withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
+                withAnimation(.easeInOut(duration: GeneratedGradient.cycleDuration).repeatForever(autoreverses: true)) {
                     glowPhase = 1
                 }
                 consumePendingColor()
@@ -153,7 +138,7 @@ struct GenerateView: View {
                 .transition(.blurReplace)
             }
 
-            // While generating, the orb takes center stage as the waiting moment.
+            // Generation gives the orb room to become the waiting moment.
             if phase == .generating {
                 generatingOrb
             }
@@ -352,11 +337,11 @@ struct GenerateView: View {
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
                 }
 
-                // Scheme (generation type) selector sits under the color
+                // Mode selector sits under the color
                 // strip, revealed once at least one base color is chosen.
                 if !selectedColorIDs.isEmpty {
-                    schemeMenu
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    modeSection
+                        .transition(.opacity)
                 }
             }
         }
@@ -412,32 +397,53 @@ struct GenerateView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// Lets the user override the harmony scheme the generator would
-    /// otherwise pick automatically from the selected base colors.
-    private var schemeMenu: some View {
-        Menu {
-            ForEach(HarmonyScheme.allCases) { option in
-                Button {
-                    scheme = option
-                } label: {
-                    if option == scheme {
-                        Label(option.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(option.displayName)
+    /// Lets the user choose how the generator should interpret the selected
+    /// base colors, including UI-specific light and dark utility palettes.
+    private var modeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Mode")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer(minLength: 0)
+
+                Menu {
+                    ForEach(HarmonyScheme.allCases) { option in
+                        Button {
+                            scheme = option
+                        } label: {
+                            if option == scheme {
+                                Label(option.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(option.displayName)
+                            }
+                        }
                     }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "paintpalette")
+                            .font(.body.weight(.semibold))
+
+                        Text(scheme.displayName)
+                            .font(.body.weight(.medium))
+
+                        Spacer(minLength: 12)
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .liquidGlass(.interactive, in: .rect(cornerRadius: 30))
                 }
+                .frame(maxWidth: 360)
+                .accessibilityLabel("Palette mode")
+
+                Spacer(minLength: 0)
             }
-        } label: {
-            HStack(spacing: 6) {
-                Text(scheme.displayName)
-                    .font(.caption.weight(.medium))
-                Image(systemName: "paintpalette")
-                    .font(.caption)
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .liquidGlass(.interactive, in: .capsule)
         }
     }
 
@@ -573,7 +579,7 @@ struct GenerateView: View {
         } label: {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.title3)
-                .frame(width: 44, height: 44)
+                .frame(width: 52, height: 52)
                 .foregroundColor(.accentColor)
                 .contentShape(Circle())
                 .liquidGlass(.interactive, in: .circle)
@@ -641,7 +647,8 @@ struct GenerateView: View {
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
         appData.palettes.append(PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
-            paletteColors: resultPaletteColors
+            paletteColors: resultPaletteColors,
+            isGenerated: true
         ))
 
         // Add any newly generated colors to the Colors library.
@@ -651,7 +658,13 @@ struct GenerateView: View {
             let alreadyExists = appData.colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
             guard !alreadyExists else { continue }
             let name = paletteColor.name.isEmpty ? "Color \(i + 1)" : paletteColor.name
-            appData.colors.append(ColorViewModel(name: name, color: paletteColor.color, HEX: hex, usedInPalette: true))
+            appData.colors.append(ColorViewModel(
+                name: name,
+                color: paletteColor.color,
+                HEX: hex,
+                usedInPalette: true,
+                isGenerated: true
+            ))
         }
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
@@ -729,7 +742,7 @@ private struct GenerateHeaderView: View {
         VStack(alignment: .leading, spacing: 28) {
             // The orb is part of the scroll content, so it moves with the
             // view and is pushed up by the keyboard instead of overlaying.
-            // When generation starts it morphs into the big centered orb.
+            // Its matched counterpart expands into the generation orb.
             ZStack {
                 if showsOrb {
                     GenerationOrbView(colors: colors)

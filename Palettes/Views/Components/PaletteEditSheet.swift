@@ -5,10 +5,6 @@ import SwiftUI
 struct PaletteEditSheet: View {
     let paletteName: String
     let palette: PaletteViewModel
-    /// When set, the tag picker for this color index opens as soon as the
-    /// sheet appears — used by `PaletteDetailView` to route a RoleBadge or
-    /// "Tag…" context-menu tap straight into this view's tagging affordance.
-    var initialTaggingColorIndex: Int? = nil
     @EnvironmentObject var appData: AppData
     @Environment(\.dismiss) var dismiss
 
@@ -73,7 +69,7 @@ struct PaletteEditSheet: View {
                                             .font(.system(size: 16, weight: .semibold))
                                             .foregroundColor(.primary)
 
-                                        HStack(spacing: 6) {
+                                        VStack(alignment: .leading, spacing: 2) {
                                             Text(colorVM.HEX)
                                                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                                             Text(colorVM.color.rgbString)
@@ -175,11 +171,6 @@ struct PaletteEditSheet: View {
                 )
                 .environmentObject(appData)
                 .presentationDetents([.medium, .large])
-            }
-            .onAppear {
-                if let idx = initialTaggingColorIndex, idx < livePalette.paletteColors.count {
-                    taggingColorIndex = idx
-                }
             }
         }
     }

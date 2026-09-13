@@ -13,6 +13,7 @@ struct PaletteCellSearch: View {
     let paletteName: String
     let colors: [Color]
     var highlight: String = ""
+    var isGenerated: Bool = false
     /// When provided, the trailing color-count pill is replaced by a copy button.
     var onCopy: (() -> Void)? = nil
 
@@ -48,11 +49,22 @@ struct PaletteCellSearch: View {
             }
             .padding(8)
         }
-        .frame(height: 96)
+        .overlay(alignment: .topTrailing) {
+            generatedBadge
+                .padding(10)
+        }
+        .frame(height: 108)
         // Card radius = pill capsule radius (~16) + 8pt inset for concentric corners.
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    @ViewBuilder
+    private var generatedBadge: some View {
+        if isGenerated, #available(iOS 26.0, *) {
+            GeneratedBadge(isCompact: true)
+        }
     }
 
     private var countPill: some View {

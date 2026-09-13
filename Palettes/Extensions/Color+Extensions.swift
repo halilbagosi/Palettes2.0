@@ -13,17 +13,17 @@ enum HueCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// Swatch shown in the filter chip.
+    /// Tint used for the matching hue filter label.
     var representativeColor: Color {
         switch self {
-        case .reds: return Color(hue: 0.0, saturation: 0.75, brightness: 0.85)
-        case .oranges: return Color(hue: 0.08, saturation: 0.8, brightness: 0.9)
-        case .yellows: return Color(hue: 0.15, saturation: 0.8, brightness: 0.95)
-        case .greens: return Color(hue: 0.33, saturation: 0.65, brightness: 0.75)
-        case .blues: return Color(hue: 0.6, saturation: 0.7, brightness: 0.85)
-        case .purples: return Color(hue: 0.76, saturation: 0.6, brightness: 0.8)
-        case .pinks: return Color(hue: 0.9, saturation: 0.55, brightness: 0.95)
-        case .neutrals: return Color(hue: 0, saturation: 0, brightness: 0.6)
+        case .reds: return Color(hue: 0.0, saturation: 0.75, brightness: 0.92)
+        case .oranges: return Color(hue: 0.08, saturation: 0.8, brightness: 0.96)
+        case .yellows: return Color(hue: 0.15, saturation: 0.8, brightness: 1.0)
+        case .greens: return Color(hue: 0.33, saturation: 0.65, brightness: 0.84)
+        case .blues: return Color(hue: 0.6, saturation: 0.7, brightness: 0.92)
+        case .purples: return Color(hue: 0.76, saturation: 0.6, brightness: 0.88)
+        case .pinks: return Color(hue: 0.9, saturation: 0.55, brightness: 1.0)
+        case .neutrals: return Color(hue: 0, saturation: 0, brightness: 0.7)
         }
     }
 }

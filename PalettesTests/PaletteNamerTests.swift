@@ -96,6 +96,32 @@ final class PaletteNamerTests: XCTestCase {
         }
     }
 
+    /// Common model clichés should not repeatedly become palette titles. They
+    /// are less descriptive than the color-derived fallback and were showing
+    /// up disproportionately often in generated palettes.
+    func testClichedAINameIsReplaced() {
+        let hexes = ["#2E5F8A", "#3E7FB0", "#1E3F5A"]
+        for cliché in ["Whispering Horizon", "Blue Harmony", "Serene Dream"] {
+            let name = PaletteNamer.resolvedName(aiName: cliché, hexes: hexes, existingNames: [])
+            XCTAssertNotEqual(name.lowercased(), cliché.lowercased())
+            XCTAssertFalse(name.lowercased().contains("whisper"))
+            XCTAssertFalse(name.lowercased().contains("horizon"))
+            XCTAssertFalse(name.lowercased().contains("harmony"))
+        }
+    }
+
+    /// Close palettes should still get varied first-choice titles even when a
+    /// caller has not yet supplied the library's existing names.
+    func testSimilarPalettesVaryTheirDescriptiveTitles() {
+        let palettes = [
+            ["#2E5F8A", "#3E7FB0", "#1E3F5A"],
+            ["#315F89", "#417FAA", "#203E59"],
+            ["#2B628D", "#427EB2", "#1D405D"],
+        ]
+        let names = palettes.map { PaletteNamer.descriptiveName(forHexes: $0, existingNames: []) }
+        XCTAssertGreaterThan(Set(names).count, 1, "similar palettes should not all get \(names.first ?? "the same title")")
+    }
+
     /// An AI name that duplicates an existing palette is replaced.
     func testDuplicateAINameIsReplaced() {
         let name = PaletteNamer.resolvedName(

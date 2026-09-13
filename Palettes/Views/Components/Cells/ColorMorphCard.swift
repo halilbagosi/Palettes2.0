@@ -16,6 +16,9 @@ struct ColorMorphCard: View {
     let hexCode: String
     let color: Color
     var isCompact: Bool
+    var isGenerated: Bool = false
+    var isFavorite: Bool = false
+    var isSelecting: Bool = false
     /// Opens the colour detail view; shown as a "View" pill in the normal layout.
     var onView: (() -> Void)? = nil
     /// Copies the HEX; wired to the copy button in both layouts.
@@ -29,6 +32,30 @@ struct ColorMorphCard: View {
                 namePill
                     .padding(12)
                     .opacity(isCompact ? 0 : 1)
+            }
+            .overlay(alignment: .topLeading) {
+                if isCompact && isFavorite && !isSelecting {
+                    favoriteBadge
+                        .padding(.top, 12)
+                        .padding(.leading, 12)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isCompact {
+                    generatedBadge
+                        .padding(.top, 12)
+                        .padding(.leading, 12)
+                        .padding(.trailing, 12)
+                } else if !isSelecting {
+                    HStack(spacing: 8) {
+                        if isFavorite {
+                            favoriteBadge
+                        }
+                        generatedBadge
+                    }
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
+                }
             }
             .overlay(alignment: .bottom) {
                 regularBottomBar
@@ -44,6 +71,13 @@ struct ColorMorphCard: View {
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 
+    @ViewBuilder
+    private var generatedBadge: some View {
+        if isGenerated && !isSelecting, #available(iOS 26.0, *) {
+            GeneratedBadge(isCompact: isCompact)
+        }
+    }
+
     // MARK: - Normal layout: floating name (top) + hex/View/copy bar (bottom)
 
     private var namePill: some View {
@@ -53,6 +87,14 @@ struct ColorMorphCard: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .liquidGlass(.regular, in: .capsule)
+    }
+
+    private var favoriteBadge: some View {
+        Image(systemName: "star.fill")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .frame(width: 34, height: 34)
+            .liquidGlass(.regular, in: .circle)
     }
 
     private var regularBottomBar: some View {
@@ -81,7 +123,9 @@ struct ColorMorphCard: View {
                     .liquidGlass(.interactive, in: .capsule)
                 }
 
-                copyButton(diameter: 38)
+                if !isSelecting {
+                    copyButton(diameter: 38)
+                }
             }
         }
     }
@@ -105,7 +149,9 @@ struct ColorMorphCard: View {
 
                 Spacer(minLength: 0)
 
-                copyButton(diameter: 40)
+                if !isSelecting {
+                    copyButton(diameter: 40)
+                }
             }
             .padding(8)
         }

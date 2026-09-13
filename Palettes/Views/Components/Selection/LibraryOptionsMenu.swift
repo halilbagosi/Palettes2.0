@@ -12,6 +12,7 @@ struct LibraryOptionsMenu: View {
     @Binding var layout: ListLayout
     @Binding var sort: LibrarySort
     @Binding var favoritesOnly: Bool
+    @Binding var originFilter: LibraryOriginFilter
 
     var body: some View {
         Section {
@@ -24,6 +25,15 @@ struct LibraryOptionsMenu: View {
             Toggle(isOn: $favoritesOnly) {
                 Label("Favorites Only", systemImage: "star")
             }
+        }
+
+        Section("Show") {
+            Picker("Show", selection: $originFilter) {
+                ForEach(LibraryOriginFilter.allCases) { option in
+                    Label(option.label, systemImage: option.systemImage).tag(option)
+                }
+            }
+            .pickerStyle(.inline)
         }
 
         Section("Sort By") {

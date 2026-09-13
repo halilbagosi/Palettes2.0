@@ -16,7 +16,7 @@ Craft, organize, and export color palettes with on-device Apple Intelligence, co
 
 ### 🎼 Harmony-guided generation
 - Pick a base color and Palettes builds a palette around it using real **color theory** — complementary, split-complementary, analogous, triadic, or monochromatic — instead of guesswork.
-- **Auto mode** reads your base color and palette size to choose the right scheme: near-neutral bases get a monochromatic ladder plus an accent; larger palettes reserve a light background and a dark text color the way brand systems do.
+- **Auto mode** reads your base color and palette size to choose the right scheme: near-neutral bases get a monochromatic ladder; larger palettes reserve a light background and a dark text color the way brand systems do.
 - Prefer to drive? Override the scheme yourself from the generate screen.
 - Every generated palette is **validated**: colors that are too perceptually close (< 12 ΔE) or too flat in brightness get repaired automatically, so results are always usable.
 

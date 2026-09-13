@@ -67,6 +67,7 @@ struct ColorInputView: View {
     @State private var showCamera = false
     @State private var didCameraCapture = false
     @State private var showTrueToneAlert = false
+    @AppStorage("didAcknowledgeTrueToneWarning") private var didAcknowledgeTrueToneWarning = false
     @State private var scanName = ""
     @State private var temperatureValue: Double = 0.5
     @State private var saturationValue: Double = 0.5
@@ -127,9 +128,10 @@ struct ColorInputView: View {
             }
             controller?.submit = { submitCurrentSource() }
             controller?.canAdd = canAddCurrentSource
+            presentTrueToneWarningIfNeeded()
         }
         .onChange(of: source) { _, newValue in
-            if newValue == .scan { showTrueToneAlert = true }
+            if newValue == .scan { presentTrueToneWarningIfNeeded() }
         }
         .onChange(of: canAddCurrentSource) { _, newValue in
             controller?.canAdd = newValue
@@ -156,10 +158,15 @@ struct ColorInputView: View {
             CameraPicker(image: $selectedImage, didCapture: $didCameraCapture, isPresented: $showCamera)
         }
         .alert("Turn Off True Tone", isPresented: $showTrueToneAlert) {
-            Button("Got It") {}
+            Button("Got It") { didAcknowledgeTrueToneWarning = true }
         } message: {
             Text("For accurate color scanning, turn off True Tone in Settings → Display & Brightness. True Tone adjusts your screen's warmth, which can affect how scanned colors appear.")
         }
+    }
+
+    private func presentTrueToneWarningIfNeeded() {
+        guard source == .scan, !didAcknowledgeTrueToneWarning else { return }
+        showTrueToneAlert = true
     }
 
     // MARK: - Pick

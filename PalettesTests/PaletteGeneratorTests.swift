@@ -51,6 +51,29 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertEqual(result.colorNames.count, 6)
     }
 
+    /// The generation orb must receive the final resolved colors one at a
+    /// time. It preserves the arrival animation without streaming provisional
+    /// colors that get replaced at reveal time.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testGenerationPreviewMatchesTheFinalPaletteImmediately() async throws {
+        var previews: [[String]] = []
+        let result = try await PaletteGenerator.generate(
+            baseColors: [PaletteGenerator.BaseColor(hex: "#3366CC", name: "Ocean Blue")],
+            size: 6,
+            vibe: nil,
+            scheme: .monochromatic,
+            onPartialColors: { colors in
+                previews.append(colors.map(ColorAdjustment.hexString(from:)))
+            }
+        )
+
+        XCTAssertEqual(previews.count, result.hexCodes.count - 1)
+        for (offset, preview) in previews.enumerated() {
+            XCTAssertEqual(preview, Array(result.hexCodes.prefix(offset + 2)))
+        }
+    }
+
     // MARK: - Bounded repair loop
 
     /// A fixable case: four perceptually-identical dark colors with nothing

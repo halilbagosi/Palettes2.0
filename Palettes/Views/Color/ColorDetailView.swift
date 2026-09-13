@@ -84,7 +84,11 @@ struct ColorDetailView: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 560), spacing: 14)], spacing: 14) {
                             ForEach(containingPalettes) { palette in
                                 NavigationLink(value: palette) {
-                                    PaletteCellSearch(paletteName: palette.name, colors: palette.colors)
+                                    PaletteCellSearch(
+                                        paletteName: palette.name,
+                                        colors: palette.colors,
+                                        isGenerated: palette.isGenerated
+                                    )
                                 }
                                 .buttonStyle(.plain)
                                 .hoverEffect(.lift)

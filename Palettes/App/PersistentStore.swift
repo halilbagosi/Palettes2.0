@@ -20,14 +20,24 @@ final class StoredColor {
     var hex: String = ""
     var usedInPalette: Bool = false
     var isFavorite: Bool = false
+    var isGenerated: Bool = false
     var sortIndex: Int = 0
 
-    init(id: UUID, name: String, hex: String, usedInPalette: Bool, isFavorite: Bool = false, sortIndex: Int) {
+    init(
+        id: UUID,
+        name: String,
+        hex: String,
+        usedInPalette: Bool,
+        isFavorite: Bool = false,
+        isGenerated: Bool = false,
+        sortIndex: Int
+    ) {
         self.id = id
         self.name = name
         self.hex = hex
         self.usedInPalette = usedInPalette
         self.isFavorite = isFavorite
+        self.isGenerated = isGenerated
         self.sortIndex = sortIndex
     }
 }
@@ -40,15 +50,26 @@ final class StoredPalette {
     var colorNames: [String] = []
     var colorRoles: [String] = []
     var isFavorite: Bool = false
+    var isGenerated: Bool = false
     var sortIndex: Int = 0
 
-    init(id: UUID, name: String, hexCodes: [String], colorNames: [String], colorRoles: [String] = [], isFavorite: Bool = false, sortIndex: Int) {
+    init(
+        id: UUID,
+        name: String,
+        hexCodes: [String],
+        colorNames: [String],
+        colorRoles: [String] = [],
+        isFavorite: Bool = false,
+        isGenerated: Bool = false,
+        sortIndex: Int
+    ) {
         self.id = id
         self.name = name
         self.hexCodes = hexCodes
         self.colorNames = colorNames
         self.colorRoles = colorRoles
         self.isFavorite = isFavorite
+        self.isGenerated = isGenerated
         self.sortIndex = sortIndex
     }
 }

@@ -14,6 +14,7 @@ struct ColorCellSearch: View {
     let hexCode: String
     let color: Color
     var highlight: String = ""
+    var isGenerated: Bool = false
     /// When provided, a copy button is shown in the trailing corner.
     var onCopy: (() -> Void)? = nil
 
@@ -44,12 +45,23 @@ struct ColorCellSearch: View {
                 .padding(8)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            generatedBadge
+                .padding(10)
+        }
         .frame(height: 118)
         // Card radius = pill capsule radius (~20) + 8pt inset, so the pill
         // sits concentric with the card corner.
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    @ViewBuilder
+    private var generatedBadge: some View {
+        if isGenerated, #available(iOS 26.0, *) {
+            GeneratedBadge(isCompact: true)
+        }
     }
 
     private func copyButton(_ action: @escaping () -> Void) -> some View {

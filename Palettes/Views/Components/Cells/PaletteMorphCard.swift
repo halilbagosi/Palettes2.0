@@ -15,6 +15,9 @@ struct PaletteMorphCard: View {
     let paletteName: String
     let colors: [Color]
     var isCompact: Bool
+    var isGenerated: Bool = false
+    var isFavorite: Bool = false
+    var isSelecting: Bool = false
     /// Opens the palette; shown as a "View" pill in the normal layout.
     var onView: (() -> Void)? = nil
     /// Copies the palette's HEX codes; wired to the copy button in both layouts.
@@ -36,9 +39,37 @@ struct PaletteMorphCard: View {
             compactBar.opacity(isCompact ? 1 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if isFavorite && !isSelecting {
+                favoriteBadge
+                    .padding(.top, 12)
+                    .padding(.leading, 12)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            generatedBadge
+                .padding(.top, 12)
+                .padding(.leading, 12)
+                .padding(.trailing, 12)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    @ViewBuilder
+    private var generatedBadge: some View {
+        if isGenerated && !isSelecting, #available(iOS 26.0, *) {
+            GeneratedBadge(isCompact: isCompact)
+        }
+    }
+
+    private var favoriteBadge: some View {
+        Image(systemName: "star.fill")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .frame(width: 34, height: 34)
+            .liquidGlass(.regular, in: .circle)
     }
 
     // MARK: - Normal layout: name + View + copy
@@ -69,7 +100,9 @@ struct PaletteMorphCard: View {
                     .liquidGlass(.interactive, in: .capsule)
                 }
 
-                copyButton(diameter: 38)
+                if !isSelecting {
+                    copyButton(diameter: 38)
+                }
             }
         }
         .padding(12)
@@ -89,7 +122,9 @@ struct PaletteMorphCard: View {
 
                 Spacer(minLength: 0)
 
-                copyButton(diameter: 40)
+                if !isSelecting {
+                    copyButton(diameter: 40)
+                }
             }
         }
         .padding(8)

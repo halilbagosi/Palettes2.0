@@ -14,6 +14,38 @@ enum ListLayout: String {
     case compact
 }
 
+enum LibraryOriginFilter: String, CaseIterable, Identifiable {
+    case all
+    case created
+    case generated
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all: "All"
+        case .created: "Created"
+        case .generated: "Generated"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all: "square.grid.2x2"
+        case .created: "plus.circle"
+        case .generated: "sparkles"
+        }
+    }
+
+    func includes(isGenerated: Bool) -> Bool {
+        switch self {
+        case .all: true
+        case .created: !isGenerated
+        case .generated: isGenerated
+        }
+    }
+}
+
 enum LibrarySort: String, CaseIterable, Identifiable {
     case newestFirst
     case oldestFirst

@@ -95,11 +95,63 @@ final class ColorHarmonyTests: XCTestCase {
 
     // MARK: - Auto heuristics
 
-    func testAutoNearNeutralPicksMonochromaticWithOneAccent() {
+    func testAutoNearNeutralPicksMonochromaticWithoutLeavingNeutralFamily() {
         let plan = ColorHarmony.plan(baseHexes: ["#808080"], size: 6, scheme: .auto, seed: 1)
         XCTAssertEqual(plan.resolvedScheme, .monochromatic)
-        let accentSlots = plan.slots.filter { hsb(of: $0.hex).s >= 0.5 }
-        XCTAssertEqual(accentSlots.count, 1)
+        XCTAssertTrue(
+            plan.slots.allSatisfy { hsb(of: $0.hex).s < 0.20 },
+            "a monochromatic plan for a neutral base must not introduce a random saturated accent"
+        )
+    }
+
+    func testMultipleBasesReceiveBalancedMonochromaticToneLadders() {
+        let bases = ["#3366CC", "#CC6633"]
+        let plan = ColorHarmony.plan(baseHexes: bases, size: 8, scheme: .monochromatic, seed: 1)
+        let baseHues = bases.map(hue(of:))
+
+        XCTAssertEqual(plan.slots.count, 6)
+        for (index, slot) in plan.slots.enumerated() {
+            let expectedBase = index % bases.count
+            XCTAssertLessThanOrEqual(
+                angularDelta(hue(of: slot.hex), baseHues[expectedBase]),
+                8,
+                "slot \(index) should be a tone of selected base \(expectedBase)"
+            )
+        }
+
+        let contributions = plan.slots.indices.reduce(into: Array(repeating: 0, count: bases.count)) { counts, index in
+            counts[index % bases.count] += 1
+        }
+        XCTAssertEqual(contributions, [3, 3])
+    }
+
+    func testMultipleBasesStayBalancedAndOnFamilyAcrossConcreteSchemes() {
+        let bases = ["#3366CC", "#CC6633"]
+        let baseHues = bases.map(hue(of:))
+        let offsets: [HarmonyScheme: [CGFloat]] = [
+            .complementary: [180],
+            .splitComplementary: [150, 210],
+            .analogous: [-15, 15, -33, 33],
+            .triadic: [120, 240],
+            .monochromatic: [0],
+        ]
+
+        for scheme in HarmonyScheme.allCases where scheme != .auto && !scheme.isUIMode {
+            let plan = ColorHarmony.plan(baseHexes: bases, size: 10, scheme: scheme, seed: 3)
+            XCTAssertEqual(plan.slots.count, 8)
+
+            for (index, slot) in plan.slots.enumerated() {
+                let baseIndex = index % bases.count
+                let toneIndex = index / bases.count
+                let expectedOffset = offsets[scheme]![toneIndex % offsets[scheme]!.count]
+                let tolerance: CGFloat = scheme == .analogous ? 40 : 8
+                XCTAssertLessThanOrEqual(
+                    angularDelta(hue(of: slot.hex), baseHues[baseIndex] + expectedOffset),
+                    tolerance,
+                    "\(scheme.rawValue) slot \(index) left selected base \(baseIndex)'s family"
+                )
+            }
+        }
     }
 
     func testAutoOppositeBasesPicksComplementaryFamily() {

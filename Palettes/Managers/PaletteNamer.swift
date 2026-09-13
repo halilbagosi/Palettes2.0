@@ -32,6 +32,7 @@ enum PaletteNamer {
         if let candidate = aiName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !candidate.isEmpty,
            !isGeneric(candidate),
+           !usesClichedTitleLanguage(candidate),
            !taken.contains(candidate.lowercased()) {
             return candidate
         }
@@ -47,20 +48,44 @@ enum PaletteNamer {
         let taken = Set(existingNames.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
         let traits = traits(forHexes: hexes)
 
-        // Candidate titles, most specific first. Structure is varied by the
-        // palette's own traits so successive palettes don't all rhyme.
+        // Rotate vocabulary and title structure with the palette's stable
+        // seed. Each word still describes the actual colors, but palettes with
+        // similar traits don't all begin with the same adjective or closer.
         var candidates: [String] = []
-        let character = characterWords(for: traits)
+        let character = rotated(characterWords(for: traits), by: traits.seed)
         let family = familyWord(for: traits)
-        let closers = closerWords(for: traits)
+        let closers = rotated(closerWords(for: traits), by: traits.seed / 7)
 
-        for word in character {
-            candidates.append("\(word) \(family)")
-        }
-        for closer in closers {
-            candidates.append("\(family) \(closer)")
-            for word in character.prefix(2) {
-                candidates.append("\(word) \(family) \(closer)")
+        switch traits.seed % 3 {
+        case 0:
+            for word in character {
+                candidates.append("\(word) \(family)")
+            }
+            for closer in closers {
+                candidates.append("\(family) \(closer)")
+                for word in character.prefix(2) {
+                    candidates.append("\(word) \(family) \(closer)")
+                }
+            }
+        case 1:
+            for closer in closers {
+                candidates.append("\(family) \(closer)")
+            }
+            for word in character {
+                candidates.append("\(word) \(family)")
+                if let closer = closers.first {
+                    candidates.append("\(word) \(family) \(closer)")
+                }
+            }
+        default:
+            for word in character {
+                for closer in closers.prefix(2) {
+                    candidates.append("\(word) \(family) \(closer)")
+                }
+                candidates.append("\(word) \(family)")
+            }
+            for closer in closers {
+                candidates.append("\(family) \(closer)")
             }
         }
 
@@ -69,7 +94,7 @@ enum PaletteNamer {
         }
         // Everything collided (a library already holding these titles): append
         // a deterministic, palette-derived distinguisher rather than a number.
-        let seedWord = seedWords[abs(deterministicSeed(hexes)) % seedWords.count]
+        let seedWord = seedWords[positiveModulo(traits.seed, seedWords.count)]
         let fallback = "\(seedWord) \(family)"
         if !taken.contains(fallback.lowercased()) { return fallback }
         return "\(character.first ?? "Custom") \(seedWord) \(family)"
@@ -156,19 +181,21 @@ enum PaletteNamer {
     private static func characterWords(for t: Traits) -> [String] {
         var words: [String] = []
         if t.isNeutral {
-            words += t.brightness > 0.7 ? ["Pale", "Soft", "Quiet"] : ["Slate", "Smoked", "Shadowed"]
+            words += t.brightness > 0.7
+                ? ["Pale", "Frosted", "Porcelain", "Soft", "Quiet"]
+                : ["Slate", "Graphite", "Smoked", "Shadowed", "Ink"]
         } else {
-            if t.saturation > 0.62 { words += ["Vivid", "Electric", "Bold"] }
-            else if t.saturation < 0.3 { words += ["Muted", "Dusty", "Faded"] }
-            if t.brightness < 0.38 { words += ["Deep", "Midnight", "Dark"] }
-            else if t.brightness > 0.78 { words += ["Bright", "Airy", "Light"] }
+            if t.saturation > 0.62 { words += ["Vivid", "Electric", "Radiant", "Charged", "Bold"] }
+            else if t.saturation < 0.3 { words += ["Muted", "Dusty", "Weathered", "Faded", "Velvet"] }
+            if t.brightness < 0.38 { words += ["Deep", "Midnight", "Inkwell", "Lowlight"] }
+            else if t.brightness > 0.78 { words += ["Bright", "Airy", "Luminous", "Sunwashed"] }
             // A palette spanning many hues isn't "a blue palette with extras" —
             // say so, instead of implying the signature family covers it all.
-            if t.hueSpread > 0.45 { words += ["Prismatic", "Spectrum", "Kaleidoscope"] }
-            if isWarm(t.hue) { words += ["Warm", "Sunlit"] } else { words += ["Cool", "Shaded"] }
-            if t.spread > 0.5 { words += ["Layered", "Contrast"] }
+            if t.hueSpread > 0.45 { words += ["Prismatic", "Spectrum", "Kaleidoscopic"] }
+            if isWarm(t.hue) { words += ["Warm", "Sunlit", "Embered"] } else { words += ["Cool", "Shaded", "Glacial"] }
+            if t.spread > 0.5 { words += ["Layered", "Contrasted", "Tonal"] }
         }
-        words += ["Still", "Woven"]
+        words += ["Textured", "Woven", "Measured"]
         return words
     }
 
@@ -202,16 +229,19 @@ enum PaletteNamer {
     }
 
     /// Evocative closers, chosen by lightness/temperature so the whole title
-    /// reads coherently ("Terracotta Dusk", "Sky Drift").
+    /// reads coherently ("Terracotta Dusk", "Sky Gleam").
     private static func closerWords(for t: Traits) -> [String] {
-        if t.brightness < 0.4 { return ["Dusk", "Nocturne", "Depths"] }
-        if t.brightness > 0.75 { return ["Haze", "Daylight", "Drift"] }
-        return isWarm(t.hue) ? ["Bloom", "Kiln", "Season"] : ["Tide", "Current", "Mist"]
+        if t.brightness < 0.4 { return ["Dusk", "Nocturne", "Afterglow", "Velvet"] }
+        if t.brightness > 0.75 { return ["Haze", "Daylight", "Gleam", "Lustre"] }
+        return isWarm(t.hue)
+            ? ["Bloom", "Kiln", "Saffron", "Solstice"]
+            : ["Tide", "Current", "Mist", "Rain"]
     }
 
     private static let seedWords = [
-        "Atlas", "Cadence", "Ember", "Fathom", "Grove", "Harbor",
-        "Lumen", "Meridian", "Nimbus", "Onyx", "Prairie", "Quarry",
+        "Alder", "Atlas", "Cinder", "Cobalt", "Ember", "Fathom",
+        "Grove", "Lumen", "Marrow", "Nimbus", "Onyx", "Quarry",
+        "Rill", "Sable", "Trellis", "Verdigris",
     ]
 
     // MARK: - Helpers
@@ -236,6 +266,31 @@ enum PaletteNamer {
         let words = normalized.split(separator: " ")
         if words.count == 1, ["palette", "colors", "theme", "scheme"].contains(String(words[0])) { return true }
         return false
+    }
+
+    /// Apple Intelligence often reaches for atmospheric filler words that do
+    /// not distinguish one palette from the next. Reject them as standalone
+    /// title words so the color-derived naming path can provide a useful,
+    /// varied replacement instead.
+    private static func usesClichedTitleLanguage(_ name: String) -> Bool {
+        let clichedWords: Set<String> = [
+            "whisper", "whispers", "whispering", "horizon", "horizons",
+            "harmony", "harmonies", "dream", "dreams", "ethereal",
+            "timeless", "serene", "reverie", "solace", "symphony",
+        ]
+        let words = name.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+        return words.contains { clichedWords.contains($0) }
+    }
+
+    private static func rotated(_ values: [String], by seed: Int) -> [String] {
+        guard !values.isEmpty else { return [] }
+        let offset = positiveModulo(seed, values.count)
+        return values.indices.map { values[($0 + offset) % values.count] }
+    }
+
+    private static func positiveModulo(_ value: Int, _ modulus: Int) -> Int {
+        let remainder = value % modulus
+        return remainder >= 0 ? remainder : remainder + modulus
     }
 
     /// Stable hash of the palette's colors — `hashValue` is randomized per
