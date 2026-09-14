@@ -7,7 +7,7 @@
 //  unit test directly.
 //
 
-import UIKit
+import Foundation
 
 enum PaletteValidation {
     static let minDeltaE: Double = 12
@@ -66,16 +66,13 @@ enum PaletteValidation {
 
     // MARK: - Brightness
 
-    private static func brightness(ofHex hex: String) -> Double {
+    private nonisolated static func brightness(ofHex hex: String) -> Double {
         var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         h.removeAll { $0 == "#" }
         guard h.count == 6, let value = UInt32(h, radix: 16) else { return 0.5 }
         let r = CGFloat((value & 0xFF0000) >> 16) / 255
         let g = CGFloat((value & 0x00FF00) >> 8) / 255
         let b = CGFloat(value & 0x0000FF) / 255
-        let ui = UIColor(red: r, green: g, blue: b, alpha: 1)
-        var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
-        ui.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &alpha)
-        return Double(bri)
+        return Double(Swift.max(r, g, b))
     }
 }

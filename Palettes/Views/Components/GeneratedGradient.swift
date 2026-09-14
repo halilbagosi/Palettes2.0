@@ -57,10 +57,11 @@ enum GeneratedGradient {
     private static func colors(for phase: CGFloat) -> [Color] {
         let normalizedPhase = Double(phase)
         let angle = normalizedPhase * .pi * 2
+        let palettes = (paletteA, paletteB)
 
         // Add small, per-stop waves to make the color travel feel organic
         // while keeping every transition continuous at the cycle endpoints.
-        return zip(paletteA, paletteB).enumerated().map { index, pair in
+        return palettes.0.indices.map { index in
             let offset = Double(index) * 0.73
             let variation = (
                 0.12 * sin(angle * 2 + offset)
@@ -68,8 +69,8 @@ enum GeneratedGradient {
             ) * sin(.pi * normalizedPhase)
             let blend = min(max(normalizedPhase + variation, 0), 1)
 
-            let first = pair.0
-            let second = pair.1
+            let first = palettes.0[index]
+            let second = palettes.1[index]
             return Color(
                 red: first.red + (second.red - first.red) * blend,
                 green: first.green + (second.green - first.green) * blend,
@@ -78,18 +79,18 @@ enum GeneratedGradient {
         }
     }
 
-    // Bright pastel colors with more red and blue, a smaller gold center,
-    // less green, and a more visible violet finish.
+    // Reference spectrum: warm orange and coral across the top, then pink,
+    // cyan, and lavender as the color travels toward the bottom.
     private static let paletteA: [(red: Double, green: Double, blue: Double)] = [
-        (0.92, 0.30, 0.46), (0.96, 0.42, 0.50), (0.96, 0.58, 0.48),
-        (0.88, 0.46, 0.58), (0.92, 0.72, 0.50), (0.68, 0.72, 0.58),
-        (0.44, 0.68, 0.82), (0.38, 0.60, 0.90), (0.58, 0.48, 0.92)
+        (0.99, 0.68, 0.15), (0.98, 0.47, 0.31), (1.00, 0.21, 0.41),
+        (0.93, 0.75, 0.55), (0.80, 0.60, 0.67), (0.98, 0.42, 0.78),
+        (0.64, 0.83, 0.91), (0.22, 0.74, 1.00), (0.83, 0.63, 1.00)
     ]
 
     private static let paletteB: [(red: Double, green: Double, blue: Double)] = [
-        (1.00, 0.38, 0.58), (1.00, 0.50, 0.62), (1.00, 0.66, 0.54),
-        (0.96, 0.54, 0.66), (0.98, 0.80, 0.60), (0.76, 0.80, 0.70),
-        (0.56, 0.78, 0.92), (0.50, 0.70, 0.98), (0.70, 0.60, 1.00)
+        (1.00, 0.59, 0.08), (1.00, 0.32, 0.32), (1.00, 0.06, 0.35),
+        (0.84, 0.64, 0.42), (0.78, 0.42, 0.68), (0.96, 0.20, 0.68),
+        (0.40, 0.72, 0.88), (0.06, 0.66, 0.96), (0.70, 0.40, 1.00)
     ]
 }
 

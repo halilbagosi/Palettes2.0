@@ -120,17 +120,30 @@ enum ColorHarmony {
         return result
     }
 
-    private static func hsb(fromHex hex: String) -> BaseHSB? {
+    private nonisolated static func hsb(fromHex hex: String) -> BaseHSB? {
         var h = hex
         h.removeAll { $0 == "#" }
         guard h.count == 6, let value = UInt32(h, radix: 16) else { return nil }
         let r = CGFloat((value & 0xFF0000) >> 16) / 255
         let g = CGFloat((value & 0x00FF00) >> 8) / 255
         let b = CGFloat(value & 0x0000FF) / 255
-        let ui = UIColor(red: r, green: g, blue: b, alpha: 1)
-        var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, a: CGFloat = 0
-        ui.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &a)
-        return BaseHSB(hue: hue, saturation: sat, brightness: bri)
+        let maximum = Swift.max(r, g, b)
+        let minimum = Swift.min(r, g, b)
+        let delta = maximum - minimum
+
+        let hue: CGFloat
+        if delta == 0 {
+            hue = 0
+        } else if maximum == r {
+            hue = ((g - b) / delta / 6).truncatingRemainder(dividingBy: 1) + (g < b ? 1 : 0)
+        } else if maximum == g {
+            hue = ((b - r) / delta + 2) / 6
+        } else {
+            hue = ((r - g) / delta + 4) / 6
+        }
+
+        let saturation = maximum == 0 ? 0 : delta / maximum
+        return BaseHSB(hue: hue, saturation: saturation, brightness: maximum)
     }
 
     // MARK: - Angular helpers (degrees)
