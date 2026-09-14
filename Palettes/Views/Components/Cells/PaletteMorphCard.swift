@@ -16,6 +16,7 @@ struct PaletteMorphCard: View {
     let colors: [Color]
     var isCompact: Bool
     var isGenerated: Bool = false
+    var isGeneratedBadgeVisible: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
     /// Opens the palette; shown as a "View" pill in the normal layout.
@@ -60,7 +61,10 @@ struct PaletteMorphCard: View {
     @ViewBuilder
     private var generatedBadge: some View {
         if isGenerated && !isSelecting, #available(iOS 26.0, *) {
-            GeneratedBadge(isCompact: isCompact)
+            GeneratedBadge(
+                isCompact: isCompact,
+                isVisible: isGeneratedBadgeVisible
+            )
         }
     }
 

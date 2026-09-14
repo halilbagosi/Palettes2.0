@@ -10,6 +10,7 @@ import SwiftUI
 struct PaletteTabView: View {
 
     @ObservedObject private var appData = AppData.shared
+    @StateObject private var generatedBadgeAnimation = GeneratedBadgeAnimationSource()
 
     var body: some View {
         Group {
@@ -20,7 +21,22 @@ struct PaletteTabView: View {
             }
         }
         .environmentObject(appData)
+        .environment(\.generatedBadgeAnimationSource, generatedBadgeAnimation)
         .background { tabShortcuts }
+        .onAppear {
+            generatedBadgeAnimation.setActiveScope(animationScope(for: appData.activeTab))
+        }
+        .onChange(of: appData.activeTab) { _, newValue in
+            generatedBadgeAnimation.setActiveScope(animationScope(for: newValue))
+        }
+    }
+
+    private func animationScope(for tab: TabValue) -> GeneratedBadgeAnimationScope? {
+        switch tab {
+        case .colors: .colors
+        case .palettes: .palettes
+        case .search, .generate: nil
+        }
     }
 
     // MARK: - iOS 18+ (Tab builder, sidebar-adaptable, Liquid Glass chrome on 26)
