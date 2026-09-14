@@ -18,11 +18,7 @@ struct PaletteView: View {
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
-    @State private var visibleGeneratedPaletteIDs: Set<UUID> = []
     @EnvironmentObject var appData: AppData
-    @Environment(\.generatedBadgeAnimationSource) private var generatedBadgeAnimation
-
-    private static let generatedBadgeCoordinateSpace = GeneratedBadgeVisibility.palettesCoordinateSpace
 
     // MARK: - Display state
 
@@ -139,9 +135,6 @@ struct PaletteView: View {
                     appData.pendingOpenPaletteID = nil
                     path = NavigationPath([palette])
                 }
-                .onChange(of: appData.activeTab) { _, _ in
-                    updateGeneratedBadgeVisibility()
-                }
         }
     }
 
@@ -178,29 +171,19 @@ struct PaletteView: View {
                 description: Text(filteredEmptyMessage)
             )
         } else {
-            GeometryReader { viewport in
-                ScrollView {
-                    MorphingCardGrid(
-                        minColumnWidth: layout == .compact ? 320 : 340,
-                        maxColumnWidth: 560,
-                        rowHeight: layout == .compact ? 108 : 180,
-                        spacing: layout == .compact ? 10 : 20
-                    ) {
-                        ForEach(displayedPalettes) { palette in
-                            paletteCard(palette)
-                        }
+            ScrollView {
+                MorphingCardGrid(
+                    minColumnWidth: layout == .compact ? 320 : 340,
+                    maxColumnWidth: 560,
+                    rowHeight: layout == .compact ? 108 : 180,
+                    spacing: layout == .compact ? 10 : 20
+                ) {
+                    ForEach(displayedPalettes) { palette in
+                        paletteCard(palette)
                     }
-                    .padding()
-                    .padding(.bottom, 88)
                 }
-                .coordinateSpace(name: Self.generatedBadgeCoordinateSpace)
-                .onPreferenceChange(GeneratedBadgeVisibilityPreferenceKey.self) { frames in
-                    visibleGeneratedPaletteIDs = GeneratedBadgeVisibility.visibleIDs(
-                        from: frames,
-                        viewportSize: viewport.size
-                    )
-                    updateGeneratedBadgeVisibility()
-                }
+                .padding()
+                .padding(.bottom, 88)
             }
         }
     }
@@ -218,8 +201,6 @@ struct PaletteView: View {
             colors: palette.colors,
             isCompact: layout == .compact,
             isGenerated: palette.isGenerated,
-            isGeneratedBadgeVisible: appData.activeTab == .palettes
-                && visibleGeneratedPaletteIDs.contains(palette.id),
             isFavorite: palette.isFavorite && !isSelecting,
             isSelecting: isSelecting,
             onView: { if !isSelecting { path.append(palette) } },
@@ -258,18 +239,6 @@ struct PaletteView: View {
                 .frame(width: 360, height: 180)
                 .padding(4)
         }
-        .generatedBadgeVisibility(
-            id: palette.id,
-            in: Self.generatedBadgeCoordinateSpace,
-            isEnabled: palette.isGenerated && !isSelecting
-        )
-    }
-
-    private func updateGeneratedBadgeVisibility() {
-        generatedBadgeAnimation?.updateVisibleIDs(
-            appData.activeTab == .palettes ? visibleGeneratedPaletteIDs : [],
-            for: .palettes
-        )
     }
 
     // MARK: - Context menu

@@ -25,11 +25,7 @@ struct ColorsView: View {
     @AppStorage("colorsSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("colorsOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
-    @State private var visibleGeneratedColorIDs: Set<UUID> = []
     @EnvironmentObject var appData: AppData
-    @Environment(\.generatedBadgeAnimationSource) private var generatedBadgeAnimation
-
-    private static let generatedBadgeCoordinateSpace = GeneratedBadgeVisibility.colorsCoordinateSpace
 
     struct ColorBindingWrapper: Identifiable {
         let id = UUID()
@@ -157,9 +153,6 @@ struct ColorsView: View {
                 } message: {
                     Text("Delete \(selectedIDs.count) color\(selectedIDs.count == 1 ? "" : "s")? They will also be removed from any palettes that use them.")
                 }
-                .onChange(of: appData.activeTab) { _, _ in
-                    updateGeneratedBadgeVisibility()
-                }
         }
     }
 
@@ -196,29 +189,19 @@ struct ColorsView: View {
                 description: Text(filteredEmptyMessage)
             )
         } else {
-            GeometryReader { viewport in
-                ScrollView {
-                    MorphingCardGrid(
-                        minColumnWidth: layout == .compact ? 160 : 340,
-                        maxColumnWidth: layout == .compact ? 280 : 560,
-                        rowHeight: layout == .compact ? 118 : 180,
-                        spacing: layout == .compact ? 12 : 20
-                    ) {
-                        ForEach(displayedColors) { color in
-                            colorCard(color)
-                        }
+            ScrollView {
+                MorphingCardGrid(
+                    minColumnWidth: layout == .compact ? 160 : 340,
+                    maxColumnWidth: layout == .compact ? 280 : 560,
+                    rowHeight: layout == .compact ? 118 : 180,
+                    spacing: layout == .compact ? 12 : 20
+                ) {
+                    ForEach(displayedColors) { color in
+                        colorCard(color)
                     }
-                    .padding()
-                    .padding(.bottom, 88)
                 }
-                .coordinateSpace(name: Self.generatedBadgeCoordinateSpace)
-                .onPreferenceChange(GeneratedBadgeVisibilityPreferenceKey.self) { frames in
-                    visibleGeneratedColorIDs = GeneratedBadgeVisibility.visibleIDs(
-                        from: frames,
-                        viewportSize: viewport.size
-                    )
-                    updateGeneratedBadgeVisibility()
-                }
+                .padding()
+                .padding(.bottom, 88)
             }
         }
     }
@@ -236,8 +219,6 @@ struct ColorsView: View {
             color: color.color,
             isCompact: layout == .compact,
             isGenerated: color.isGenerated,
-            isGeneratedBadgeVisible: appData.activeTab == .colors
-                && visibleGeneratedColorIDs.contains(color.id),
             isFavorite: color.isFavorite && !isSelecting,
             isSelecting: isSelecting,
             onView: { if !isSelecting { path.append(color) } },
@@ -277,18 +258,6 @@ struct ColorsView: View {
             .frame(width: 360, height: 180)
             .padding(4)
         }
-        .generatedBadgeVisibility(
-            id: color.id,
-            in: Self.generatedBadgeCoordinateSpace,
-            isEnabled: color.isGenerated && !isSelecting
-        )
-    }
-
-    private func updateGeneratedBadgeVisibility() {
-        generatedBadgeAnimation?.updateVisibleIDs(
-            appData.activeTab == .colors ? visibleGeneratedColorIDs : [],
-            for: .colors
-        )
     }
 
     // MARK: - Context menu

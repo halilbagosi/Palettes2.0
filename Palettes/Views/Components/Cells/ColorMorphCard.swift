@@ -17,7 +17,6 @@ struct ColorMorphCard: View {
     let color: Color
     var isCompact: Bool
     var isGenerated: Bool = false
-    var isGeneratedBadgeVisible: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
     /// Opens the colour detail view; shown as a "View" pill in the normal layout.
@@ -75,10 +74,7 @@ struct ColorMorphCard: View {
     @ViewBuilder
     private var generatedBadge: some View {
         if isGenerated && !isSelecting, #available(iOS 26.0, *) {
-            GeneratedBadge(
-                isCompact: isCompact,
-                isVisible: isGeneratedBadgeVisible
-            )
+            GeneratedBadge(isCompact: isCompact)
         }
     }
 

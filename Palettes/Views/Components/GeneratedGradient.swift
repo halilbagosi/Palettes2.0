@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 import SwiftUI
 
@@ -6,6 +5,7 @@ import SwiftUI
 ///
 /// Keeping the palette and mesh motion here means generated badges and the
 /// generation form's glyph always share the same visual language.
+@available(iOS 26.0, *)
 enum GeneratedGradient {
     // A slightly shorter half-cycle keeps the movement lively without becoming
     // hectic.
@@ -25,7 +25,6 @@ enum GeneratedGradient {
         return CGFloat(0.5 - 0.5 * cos(progress * .pi))
     }
 
-    @available(iOS 26.0, *)
     static func style(phase: CGFloat) -> AnyShapeStyle {
         let t = Float(phase)
         // Keep the mesh drift subtle so the faster color movement still reads
@@ -55,7 +54,6 @@ enum GeneratedGradient {
         ))
     }
 
-    @available(iOS 26.0, *)
     private static func colors(for phase: CGFloat) -> [Color] {
         let normalizedPhase = Double(phase)
         let angle = normalizedPhase * .pi * 2
@@ -95,200 +93,27 @@ enum GeneratedGradient {
     ]
 }
 
-enum GeneratedBadgeAnimationScope: Hashable {
-    case colors
-    case palettes
-}
-
-/// One shared animation clock for generated badges in the library tabs.
-///
-/// The source only ticks while the active tab has at least one visible
-/// generated card. Individual badges subscribe to the source only while their
-/// own card intersects the tab's scroll viewport.
-@MainActor
-final class GeneratedBadgeAnimationSource: ObservableObject {
-    @Published private(set) var phase: CGFloat = 0.5
-
-    private var activeScope: GeneratedBadgeAnimationScope?
-    private var visibleIDsByScope: [GeneratedBadgeAnimationScope: Set<UUID>] = [:]
-    private var animationTask: Task<Void, Never>?
-
-    func setActiveScope(_ scope: GeneratedBadgeAnimationScope?) {
-        guard activeScope != scope else { return }
-        activeScope = scope
-        updateAnimationTask()
-    }
-
-    func updateVisibleIDs(
-        _ ids: Set<UUID>,
-        for scope: GeneratedBadgeAnimationScope
-    ) {
-        guard visibleIDsByScope[scope] != ids else { return }
-        visibleIDsByScope[scope] = ids
-        updateAnimationTask()
-    }
-
-    private var activeVisibleIDs: Set<UUID> {
-        guard let activeScope else { return [] }
-        return visibleIDsByScope[activeScope] ?? []
-    }
-
-    private func updateAnimationTask() {
-        guard !activeVisibleIDs.isEmpty else {
-            animationTask?.cancel()
-            animationTask = nil
-            return
-        }
-
-        guard animationTask == nil else { return }
-
-        animationTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                self.phase = GeneratedGradient.phase(at: Date())
-                try? await Task.sleep(nanoseconds: 16_666_667)
-            }
-        }
-    }
-
-    deinit {
-        animationTask?.cancel()
-    }
-}
-
-private struct GeneratedBadgeAnimationSourceKey: EnvironmentKey {
-    static let defaultValue: GeneratedBadgeAnimationSource? = nil
-}
-
-extension EnvironmentValues {
-    var generatedBadgeAnimationSource: GeneratedBadgeAnimationSource? {
-        get { self[GeneratedBadgeAnimationSourceKey.self] }
-        set { self[GeneratedBadgeAnimationSourceKey.self] = newValue }
-    }
-}
-
-struct GeneratedBadgeVisibilityFrame: Equatable {
-    let id: UUID
-    let frame: CGRect
-}
-
-struct GeneratedBadgeVisibilityPreferenceKey: PreferenceKey {
-    static let defaultValue: [GeneratedBadgeVisibilityFrame] = []
-
-    static func reduce(
-        value: inout [GeneratedBadgeVisibilityFrame],
-        nextValue: () -> [GeneratedBadgeVisibilityFrame]
-    ) {
-        value.append(contentsOf: nextValue())
-    }
-}
-
-enum GeneratedBadgeVisibility {
-    static let colorsCoordinateSpace = "ColorsView.GeneratedBadgeViewport"
-    static let palettesCoordinateSpace = "PaletteView.GeneratedBadgeViewport"
-
-    static func visibleIDs(
-        from frames: [GeneratedBadgeVisibilityFrame],
-        viewportSize: CGSize
-    ) -> Set<UUID> {
-        let viewport = CGRect(origin: .zero, size: viewportSize)
-        return Set(
-            frames
-                .filter { $0.frame.intersects(viewport) }
-                .map(\.id)
-        )
-    }
-}
-
-struct GeneratedBadgeVisibilityModifier: ViewModifier {
-    let id: UUID
-    let coordinateSpace: String
-    let isEnabled: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: GeneratedBadgeVisibilityPreferenceKey.self,
-                        value: [
-                            GeneratedBadgeVisibilityFrame(
-                                id: id,
-                                frame: proxy.frame(in: .named(coordinateSpace))
-                            )
-                        ]
-                    )
-                }
-            }
-        } else {
-            content
-        }
-    }
-}
-
-extension View {
-    func generatedBadgeVisibility(
-        id: UUID,
-        in coordinateSpace: String,
-        isEnabled: Bool
-    ) -> some View {
-        modifier(
-            GeneratedBadgeVisibilityModifier(
-                id: id,
-                coordinateSpace: coordinateSpace,
-                isEnabled: isEnabled
-            )
-        )
-    }
-}
-
 @available(iOS 26.0, *)
 struct GeneratedBadge: View {
     let isCompact: Bool
-    var isVisible: Bool = false
-
-    @Environment(\.generatedBadgeAnimationSource) private var animationSource
 
     var body: some View {
-        if isVisible, let animationSource {
-            AnimatedGeneratedBadge(isCompact: isCompact, source: animationSource)
-        } else {
-            GeneratedBadgeContent(isCompact: isCompact, phase: 0.5)
-        }
-    }
-}
+        TimelineView(.animation) { timeline in
+            HStack(spacing: isCompact ? 0 : 6) {
+                Image(systemName: "apple.intelligence")
+                    .font(.subheadline.weight(.semibold))
 
-@available(iOS 26.0, *)
-private struct AnimatedGeneratedBadge: View {
-    let isCompact: Bool
-    @ObservedObject var source: GeneratedBadgeAnimationSource
-
-    var body: some View {
-        GeneratedBadgeContent(isCompact: isCompact, phase: source.phase)
-    }
-}
-
-@available(iOS 26.0, *)
-private struct GeneratedBadgeContent: View {
-    let isCompact: Bool
-    let phase: CGFloat
-
-    var body: some View {
-        HStack(spacing: isCompact ? 0 : 6) {
-            Image(systemName: "apple.intelligence")
-                .font(.subheadline.weight(.semibold))
-
-            if !isCompact {
-                Text("Generated")
-                    .font(.caption.weight(.semibold))
+                if !isCompact {
+                    Text("Generated")
+                        .font(.caption.weight(.semibold))
+                }
             }
+            .foregroundStyle(GeneratedGradient.style(phase: GeneratedGradient.phase(at: timeline.date)))
+            .padding(.horizontal, isCompact ? 9 : 10)
+            .padding(.vertical, 7)
+            .frame(minHeight: 34)
+            .liquidGlass(.regular, in: .capsule)
         }
-        .foregroundStyle(GeneratedGradient.style(phase: phase))
-        .padding(.horizontal, isCompact ? 9 : 10)
-        .padding(.vertical, 7)
-        .frame(minHeight: 34)
-        .liquidGlass(.regular, in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Apple Intelligence Generated")
         .allowsHitTesting(false)
