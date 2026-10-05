@@ -51,7 +51,7 @@ struct PaletteCellSearch: View {
         }
         .overlay(alignment: .topTrailing) {
             generatedBadge
-                .padding(10)
+                .padding(8)
         }
         .frame(height: 108)
         // Card radius = pill capsule radius (~16) + 8pt inset for concentric corners.
@@ -63,7 +63,7 @@ struct PaletteCellSearch: View {
     @ViewBuilder
     private var generatedBadge: some View {
         if isGenerated, #available(iOS 26.0, *) {
-            GeneratedBadge(isCompact: true)
+            GeneratedBadge()
         }
     }
 

@@ -36,8 +36,8 @@ struct PaletteTabView: View {
                 ColorsView()
             }
 
-            // AI generation relies on Apple Intelligence (iOS 26 only).
-            if #available(iOS 26.0, *) {
+            // AI generation relies on Apple Intelligence (iOS 26, eligible hardware).
+            if #available(iOS 26.0, *), AppleIntelligence.isDeviceSupported {
                 Tab("Generate", systemImage: "sparkles", value: TabValue.generate) {
                     GenerateView()
                 }
@@ -76,7 +76,7 @@ struct PaletteTabView: View {
                 .keyboardShortcut("1", modifiers: .command)
             Button("") { appData.activeTab = .colors }
                 .keyboardShortcut("2", modifiers: .command)
-            if #available(iOS 26.0, *) {
+            if AppleIntelligence.isDeviceSupported {
                 Button("") { appData.activeTab = .generate }
                     .keyboardShortcut("3", modifiers: .command)
             }

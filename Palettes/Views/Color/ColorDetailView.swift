@@ -238,7 +238,7 @@ struct ColorDetailView: View {
                 .buttonStyle(.plain)
                 .liquidGlass(.interactive, in: .capsule)
 
-                if #available(iOS 26.0, *) {
+                if AppleIntelligence.isDeviceSupported {
                     Button {
                         appData.pendingGenerateColorID = liveColor.id
                         appData.activeTab = .generate
