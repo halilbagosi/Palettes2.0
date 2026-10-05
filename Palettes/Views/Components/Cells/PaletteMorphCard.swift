@@ -47,10 +47,9 @@ struct PaletteMorphCard: View {
             }
         }
         .overlay(alignment: .topTrailing) {
+            // Same size and trailing inset as the copy button below it.
             generatedBadge
-                .padding(.top, 12)
-                .padding(.leading, 12)
-                .padding(.trailing, 12)
+                .padding(isCompact ? 8 : 12)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .compositingGroup()
@@ -60,7 +59,7 @@ struct PaletteMorphCard: View {
     @ViewBuilder
     private var generatedBadge: some View {
         if isGenerated && !isSelecting, #available(iOS 26.0, *) {
-            GeneratedBadge(isCompact: isCompact)
+            GeneratedBadge(diameter: isCompact ? 40 : 38)
         }
     }
 
@@ -71,7 +70,7 @@ struct PaletteMorphCard: View {
                 .foregroundStyle(.yellow)
                 .offset(y: -1)
         }
-        .frame(width: 34, height: 34)
+        .frame(width: 38, height: 38)
         .liquidGlass(.regular, in: .circle)
     }
 

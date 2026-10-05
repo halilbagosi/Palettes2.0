@@ -43,18 +43,17 @@ struct ColorMorphCard: View {
             .overlay(alignment: .topTrailing) {
                 if isCompact {
                     generatedBadge
-                        .padding(.top, 12)
-                        .padding(.leading, 12)
-                        .padding(.trailing, 12)
+                        .padding(8)
                 } else if !isSelecting {
+                    // Generated badge shares the copy button's size and
+                    // trailing inset (38pt @ 12) in the regular layout.
                     HStack(spacing: 8) {
                         if isFavorite {
                             favoriteBadge
                         }
                         generatedBadge
                     }
-                    .padding(.top, 12)
-                    .padding(.trailing, 12)
+                    .padding(12)
                 }
             }
             .overlay(alignment: .bottom) {
@@ -74,7 +73,7 @@ struct ColorMorphCard: View {
     @ViewBuilder
     private var generatedBadge: some View {
         if isGenerated && !isSelecting, #available(iOS 26.0, *) {
-            GeneratedBadge(isCompact: isCompact)
+            GeneratedBadge(diameter: isCompact ? 40 : 38)
         }
     }
 
@@ -96,7 +95,7 @@ struct ColorMorphCard: View {
                 .foregroundStyle(.yellow)
                 .offset(y: -1)
         }
-        .frame(width: 34, height: 34)
+        .frame(width: 38, height: 38)
         .liquidGlass(.regular, in: .circle)
     }
 

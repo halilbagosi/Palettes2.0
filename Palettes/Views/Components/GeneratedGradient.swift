@@ -36,19 +36,21 @@ enum GeneratedGradient {
         return AnyShapeStyle(MeshGradient(
             width: 3,
             height: 3,
+            // Stops sit on the bounds (not outside them) so every color —
+            // including the corners — shows up on small glyphs.
             points: [
-                SIMD2(-0.5, -0.5),
-                SIMD2(0.5 + d * sin(angle + 0.35), -0.5),
-                SIMD2(1.5, -0.5),
-                SIMD2(-0.5, 0.5 + d * cos(secondaryAngle + 1.1)),
+                SIMD2(0, 0),
+                SIMD2(0.5 + d * sin(angle + 0.35), 0),
+                SIMD2(1, 0),
+                SIMD2(0, 0.5 + d * cos(secondaryAngle + 1.1)),
                 SIMD2(
                     0.5 + d * cos(angle * 1.15),
                     0.5 + d * sin(secondaryAngle + 1.4)
                 ),
-                SIMD2(1.5, 0.5 - d * cos(angle * 0.85 + 2.2)),
-                SIMD2(-0.5, 1.5),
-                SIMD2(0.5 - d * sin(secondaryAngle + 1.8), 1.5),
-                SIMD2(1.5, 1.5)
+                SIMD2(1, 0.5 - d * cos(angle * 0.85 + 2.2)),
+                SIMD2(0, 1),
+                SIMD2(0.5 - d * sin(secondaryAngle + 1.8), 1),
+                SIMD2(1, 1)
             ],
             colors: colors(for: phase)
         ))
@@ -79,42 +81,40 @@ enum GeneratedGradient {
         }
     }
 
-    // Reference spectrum: warm orange and coral across the top, then pink,
-    // cyan, and lavender as the color travels toward the bottom.
+    // Reference spectrum: sampled from the lower half of the iOS 27 Siri
+    // icon — muted, metallic tints running diagonally from dusty rose in the
+    // top-leading corner through warm sand and pale butter to misty cyan and
+    // steel blue in the bottom-trailing corner. Palette B is a slightly
+    // lighter pass of the same hues so the animation reads as a sheen rather
+    // than a hue shift.
     private static let paletteA: [(red: Double, green: Double, blue: Double)] = [
-        (0.99, 0.68, 0.15), (0.98, 0.47, 0.31), (1.00, 0.21, 0.41),
-        (0.93, 0.75, 0.55), (0.80, 0.60, 0.67), (0.98, 0.42, 0.78),
-        (0.64, 0.83, 0.91), (0.22, 0.74, 1.00), (0.83, 0.63, 1.00)
+        (0.61, 0.53, 0.49), (0.70, 0.64, 0.54), (0.69, 0.69, 0.57),
+        (0.70, 0.64, 0.54), (0.69, 0.69, 0.57), (0.54, 0.65, 0.70),
+        (0.69, 0.69, 0.57), (0.54, 0.65, 0.70), (0.42, 0.53, 0.64)
     ]
 
     private static let paletteB: [(red: Double, green: Double, blue: Double)] = [
-        (1.00, 0.59, 0.08), (1.00, 0.32, 0.32), (1.00, 0.06, 0.35),
-        (0.84, 0.64, 0.42), (0.78, 0.42, 0.68), (0.96, 0.20, 0.68),
-        (0.40, 0.72, 0.88), (0.06, 0.66, 0.96), (0.70, 0.40, 1.00)
+        (0.70, 0.61, 0.57), (0.79, 0.73, 0.62), (0.78, 0.78, 0.65),
+        (0.79, 0.73, 0.62), (0.78, 0.78, 0.65), (0.62, 0.74, 0.79),
+        (0.78, 0.78, 0.65), (0.62, 0.74, 0.79), (0.50, 0.62, 0.73)
     ]
 }
 
 @available(iOS 26.0, *)
 struct GeneratedBadge: View {
-    let isCompact: Bool
+    /// Match the card's copy button so the two read as one column.
+    var diameter: CGFloat = 40
 
     var body: some View {
         TimelineView(.animation) { timeline in
-            HStack(spacing: isCompact ? 0 : 6) {
-                Image(systemName: "apple.intelligence")
-                    .font(.subheadline.weight(.semibold))
-
-                if !isCompact {
-                    Text("Generated")
-                        .font(.caption.weight(.semibold))
-                }
-            }
-            .foregroundStyle(GeneratedGradient.style(phase: GeneratedGradient.phase(at: timeline.date)))
-            .padding(.horizontal, isCompact ? 9 : 10)
-            .padding(.vertical, 7)
-            .frame(minHeight: 34)
-            .liquidGlass(.regular, in: .capsule)
+            Image(systemName: "apple.intelligence")
+                .font(.body.weight(.semibold))
+                .frame(width: diameter, height: diameter)
+                .foregroundStyle(GeneratedGradient.style(phase: GeneratedGradient.phase(at: timeline.date)))
         }
+        // The muted spectrum washes out on saturated cards; a dark disc
+        // keeps it legible everywhere.
+        .background(Circle().fill(.black.opacity(0.55)))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Apple Intelligence Generated")
         .allowsHitTesting(false)

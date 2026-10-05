@@ -47,7 +47,7 @@ struct ColorCellSearch: View {
         }
         .overlay(alignment: .topTrailing) {
             generatedBadge
-                .padding(10)
+                .padding(8)
         }
         .frame(height: 118)
         // Card radius = pill capsule radius (~20) + 8pt inset, so the pill
@@ -60,7 +60,7 @@ struct ColorCellSearch: View {
     @ViewBuilder
     private var generatedBadge: some View {
         if isGenerated, #available(iOS 26.0, *) {
-            GeneratedBadge(isCompact: true)
+            GeneratedBadge()
         }
     }
 
