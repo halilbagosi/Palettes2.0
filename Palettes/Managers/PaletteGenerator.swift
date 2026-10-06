@@ -188,8 +188,10 @@ enum PaletteGenerator {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            // Type name only: the error's description can echo prompt or
+            // model content, which must never reach device logs.
             Logger(subsystem: "com.halilbagosi.Palettes", category: "generation")
-                .error("Palette generation failed: \(String(describing: error), privacy: .public)")
+                .error("Palette generation failed: \(String(describing: type(of: error)), privacy: .public)")
             throw AppError.generationFailed
         }
 

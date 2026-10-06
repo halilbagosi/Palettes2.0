@@ -440,4 +440,37 @@ final class PaletteExporterTests: XCTestCase {
         XCTAssertTrue(text.contains("Ocean"), "PDF text should contain display name: \(text)")
         XCTAssertFalse(text.contains("Primary"), "PDF text should not contain role name: \(text)")
     }
+
+    // MARK: - Escaping hardening
+
+    func testJSONEscapesControlCharactersAndParsesStrictly() throws {
+        let hostile = "Line\nBreak\t\"q\" \\ \r\u{01}"
+        let palette = PaletteViewModel(
+            name: "Hostile",
+            colors: [.red, .blue],
+            hexCodes: ["#FF0000", "#0000FF"],
+            colorNames: [hostile, "Émoji 🎨"]
+        )
+        let output = PaletteExporter.export(palette, as: .json)
+        let parsed = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(output.utf8)) as? [[String: String]]
+        )
+        XCTAssertEqual(parsed[0]["name"], hostile)
+        XCTAssertEqual(parsed[1]["name"], "Émoji 🎨")
+        XCTAssertEqual(parsed[1]["hex"], "#0000FF")
+    }
+
+    func testSVGStripsInvalidXMLControlCharactersAndParses() {
+        let palette = PaletteViewModel(
+            name: "Hostile",
+            colors: [.red],
+            hexCodes: ["#FF0000"],
+            colorNames: ["A<b>&\"c\"\u{01}\u{0B}"]
+        )
+        let output = PaletteExporter.export(palette, as: .svg)
+        XCTAssertFalse(output.contains("\u{01}"))
+        XCTAssertFalse(output.contains("\u{0B}"))
+        let parser = XMLParser(data: Data(output.utf8))
+        XCTAssertTrue(parser.parse(), "SVG must be well-formed XML: \(String(describing: parser.parserError))")
+    }
 }

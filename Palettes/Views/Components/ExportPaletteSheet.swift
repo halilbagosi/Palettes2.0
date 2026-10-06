@@ -107,48 +107,22 @@ struct ExportPaletteSheet: View {
     private func shareCurrentFormat() {
         switch selectedFormat {
         case .svg:
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(slugifiedPaletteName).svg")
-            do {
-                try output.write(to: fileURL, atomically: true, encoding: .utf8)
-                presentShare(items: [fileURL])
-            } catch {
-                presentShare(items: [output])
+            if let url = try? ExportFiles.write(Data(output.utf8), baseName: slugifiedPaletteName, ext: "svg") {
+                ShareSheetPresenter.present(items: [url], cleanup: url)
+            } else {
+                ShareSheetPresenter.present(items: [output])
             }
         case .ase:
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(slugifiedPaletteName).ase")
-            do {
-                try PaletteExporter.aseData(palette).write(to: fileURL)
-                presentShare(items: [fileURL])
-            } catch {
-                // No text fallback for binary formats; nothing to share.
+            // No text fallback for binary formats; nothing to share on failure.
+            if let url = try? ExportFiles.write(PaletteExporter.aseData(palette), baseName: slugifiedPaletteName, ext: "ase") {
+                ShareSheetPresenter.present(items: [url], cleanup: url)
             }
         case .pdf:
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("\(slugifiedPaletteName).pdf")
-            do {
-                try PaletteExporter.pdfData(palette).write(to: fileURL)
-                presentShare(items: [fileURL])
-            } catch {
-                // No text fallback for binary formats; nothing to share.
+            if let url = try? ExportFiles.write(PaletteExporter.pdfData(palette), baseName: slugifiedPaletteName, ext: "pdf") {
+                ShareSheetPresenter.present(items: [url], cleanup: url)
             }
         default:
-            presentShare(items: [output])
-        }
-    }
-
-    private func presentShare(items: [Any]) {
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            var topVC = rootVC
-            while let presented = topVC.presentedViewController {
-                topVC = presented
-            }
-            activityVC.popoverPresentationController?.sourceView = topVC.view
-            activityVC.popoverPresentationController?.sourceRect = CGRect(x: topVC.view.bounds.maxX - 50, y: 0, width: 1, height: 1)
-            topVC.present(activityVC, animated: true)
+            ShareSheetPresenter.present(items: [output])
         }
     }
 }
