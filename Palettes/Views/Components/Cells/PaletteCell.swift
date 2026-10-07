@@ -75,10 +75,11 @@ struct PaletteCell: View {
             Image(systemName: "doc.on.doc")
                 .font(.subheadline.weight(.semibold))
                 .frame(width: 38, height: 38)
+                .liquidGlass(.interactive, in: .circle)
+                .frame(width: 44, height: 44)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .liquidGlass(.interactive, in: .circle)
         .accessibilityLabel("Copy HEX")
     }
 }

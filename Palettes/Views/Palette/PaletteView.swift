@@ -354,6 +354,7 @@ struct PaletteView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Done Selecting")
                     optionsMenu
                 }
                 SelectionBottomBar(

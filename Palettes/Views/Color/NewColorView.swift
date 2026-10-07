@@ -40,6 +40,7 @@ struct NewColorView: View {
                         Image(systemName: "xmark")
                             .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { inputController.submit() }
