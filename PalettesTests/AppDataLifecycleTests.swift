@@ -45,6 +45,7 @@ final class AppDataLifecycleTests: XCTestCase {
 
     func testDeleteAllRemovesEverythingIncludingUnknownRemoteRecords() throws {
         let appData = AppData(inMemory: true)
+        appData.addColor(name: "Ocean", hex: "#0077BE")
         _ = appData.addCustomTag("Brand")
         appData.flushPendingChanges()
         // Simulate a record imported from another device that AppData hasn't loaded yet.
@@ -66,11 +67,26 @@ final class AppDataLifecycleTests: XCTestCase {
 
     func testDeleteAllStaysEmptyAfterDebounceWindow() async throws {
         let appData = AppData(inMemory: true)
+        appData.addColor(name: "Ocean", hex: "#0077BE")
+        appData.addPalette(name: "Coast", paletteColors: [
+            PaletteColor(color: .blue, hex: "#0077BE", name: "Ocean"),
+            PaletteColor(color: .yellow, hex: "#C2B280", name: "Sand"),
+        ])
+        _ = appData.addCustomTag("Brand")
+        // An unflushed edit: a dirty flag is set and a debounced persist is pending.
+        appData.palettes[0].isFavorite = true
+        appData.colors.append(ColorViewModel(name: "Pending", color: .red, HEX: "#FF0003", usedInPalette: false))
+
         XCTAssertTrue(appData.deleteAllLibraryData())
         try await Task.sleep(for: .seconds(1))
+
         let context = try XCTUnwrap(appData.testContext)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<StoredColor>()), 0)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<StoredPalette>()), 0)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<StoredTag>()), 0)
+        XCTAssertTrue(appData.colors.isEmpty)
         XCTAssertTrue(appData.palettes.isEmpty)
+        XCTAssertTrue(appData.customTags.isEmpty)
     }
 
     func testLibraryExportRoundTripsAllUserData() throws {

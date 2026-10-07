@@ -521,6 +521,7 @@ class AppData: ObservableObject {
         colors = []
         palettes = []
         customTags = []
+        // Must be cleared after the `[]` assignments: the dirty-marking sinks fire synchronously on assignment.
         isDirtyColors = false
         isDirtyPalettes = false
         isDirtyTags = false
