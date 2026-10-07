@@ -229,14 +229,20 @@ enum ColorHarmony {
     ]
 
     /// Monochromatic sweeps a 2D grid instead: brightness cycles fast, the
-    /// saturation scale advances once per full brightness lap. 10 × 4 = 40
+    /// saturation scale advances once per full brightness lap. 10 × 5 = 50
     /// combinations, so even a 12-color single-hue palette has enough
     /// candidates left after the caller's perceptual gate rejects the ones
     /// that read the same as a color already placed.
+    ///
+    /// The last (0.12) lap supplies near-neutral tints and greys of the hue.
+    /// Without it the grid never goes below ~0.3 saturation, and once the
+    /// jittered saturated tones crowd each other a 6-color palette could find
+    /// no candidate a full deltaE 12 from everything placed — even though
+    /// a pale tint or a hue-tinted grey was still 20+ away.
     private static let monochromaticBrightnessLadder: [CGFloat] = [
         0.22, 0.42, 0.62, 0.82, 0.95, 0.14, 0.32, 0.52, 0.72, 0.88,
     ]
-    private static let monochromaticSaturationScales: [CGFloat] = [1.00, 0.60, 0.84, 0.38]
+    private static let monochromaticSaturationScales: [CGFloat] = [1.00, 0.60, 0.84, 0.38, 0.12]
 
     // MARK: - Role assignment
 
