@@ -25,6 +25,7 @@ final class EntityIndexerTests: XCTestCase {
 
     override func tearDown() async throws {
         await waitUntilIdle()
+        XCTAssertTrue(EntityIndexer.isIdle, "indexer worker still running at tearDown")
         EntityIndexer.applier = originalApplier
     }
 
@@ -54,9 +55,11 @@ final class EntityIndexerTests: XCTestCase {
     /// older snapshot can re-add entities after it.
     func testRemoveAllAfterPendingSnapshotWins() async {
         EntityIndexer.reindex(palettes: palettes(5), colors: [])
+        // The stub applier sleeps 100 ms, so job 1 is in flight after this.
+        try? await Task.sleep(for: .milliseconds(30))
         EntityIndexer.reindex(palettes: palettes(4), colors: [])
         EntityIndexer.removeAll()
         await waitUntilIdle()
-        XCTAssertEqual(applied.last, 0)
+        XCTAssertEqual(applied, [5, 0])
     }
 }
