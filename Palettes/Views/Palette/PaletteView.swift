@@ -7,6 +7,7 @@ struct PaletteView: View {
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
     @State private var paletteToExport: PaletteViewModel?
+    @State private var showSettings = false
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
@@ -108,6 +109,10 @@ struct PaletteView: View {
                 .sheet(item: $paletteToExport) { palette in
                     ExportPaletteSheet(palette: palette)
                         .presentationDetents([.medium, .large])
+                }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView()
+                        .environmentObject(appData)
                 }
                 .alert("Delete Palette", isPresented: $showDeleteAlert, presenting: paletteToDelete) { palette in
                     Button("Delete", role: .destructive) {
@@ -326,6 +331,16 @@ struct PaletteView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if !isSelecting {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("Settings")
+            }
+        }
         if !appData.palettes.isEmpty {
             if isSelecting {
                 ToolbarItem(placement: .topBarLeading) {
