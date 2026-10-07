@@ -73,6 +73,9 @@ class AppData: ObservableObject {
             }
         }
 
+        // Obsolete: sample data is no longer seeded.
+        UserDefaults.standard.removeObject(forKey: "didSeedSampleData")
+
         load()
 
         // Persist whenever the arrays change, debounced so bursts of edits
@@ -166,6 +169,13 @@ class AppData: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.reloadFromStore() }
             .store(in: &cancellables)
+
+        // Write edits still inside the 300 ms debounce before the app can be
+        // suspended or killed.
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.flushPendingChanges() }
+            .store(in: &cancellables)
     }
 
     // MARK: - Load
@@ -197,8 +207,8 @@ class AppData: ObservableObject {
 
     private func load() {
         guard let context = container?.mainContext else {
-            colors = Self.sampleColors
-            palettes = Self.samplePalettes
+            colors = []
+            palettes = []
             return
         }
 
@@ -216,51 +226,36 @@ class AppData: ObservableObject {
         lastPersistedPaletteIDs = Set(storedPalettes.map(\.id))
         lastPersistedTagNames = Set(storedTags.map { $0.name.lowercased() })
 
-        // Independent of the colors/palettes seeding below: no sample tags
-        // are seeded, so an empty store just yields an empty tag library.
         var seenTagNames = Set<String>()
         customTags = storedTags.filter { seenTagNames.insert($0.name.lowercased()).inserted }.map(\.name)
 
-        let didSeed = UserDefaults.standard.bool(forKey: "didSeedSampleData")
-        if storedColors.isEmpty && storedPalettes.isEmpty && !didSeed {
-            // First launch with an empty store: seed the sample library. On a
-            // new device whose iCloud data hasn't downloaded yet this may run
-            // once; the flag prevents repeats and synced records merge in on
-            // the next import event.
-            colors = Self.sampleColors
-            palettes = Self.samplePalettes
-            UserDefaults.standard.set(true, forKey: "didSeedSampleData")
-            persistColors(colors)
-            persistPalettes(palettes)
-        } else {
-            var seenColorIDs = Set<UUID>()
-            let uniqueColors = storedColors.filter { seenColorIDs.insert($0.id).inserted }
-            var seenPaletteIDs = Set<UUID>()
-            let uniquePalettes = storedPalettes.filter { seenPaletteIDs.insert($0.id).inserted }
+        var seenColorIDs = Set<UUID>()
+        let uniqueColors = storedColors.filter { seenColorIDs.insert($0.id).inserted }
+        var seenPaletteIDs = Set<UUID>()
+        let uniquePalettes = storedPalettes.filter { seenPaletteIDs.insert($0.id).inserted }
 
-            colors = uniqueColors.map {
-                ColorViewModel(
-                    id: $0.id,
-                    name: $0.name,
-                    color: Color(hex: $0.hex) ?? .gray,
-                    HEX: $0.hex,
-                    usedInPalette: $0.usedInPalette,
-                    isFavorite: $0.isFavorite,
-                    isGenerated: $0.isGenerated
-                )
-            }
-            palettes = uniquePalettes.map { stored in
-                PaletteViewModel(
-                    id: stored.id,
-                    name: stored.name,
-                    colors: stored.hexCodes.map { Color(hex: $0) ?? .gray },
-                    hexCodes: stored.hexCodes,
-                    colorNames: stored.colorNames,
-                    colorRoles: stored.colorRoles,
-                    isFavorite: stored.isFavorite,
-                    isGenerated: stored.isGenerated
-                )
-            }
+        colors = uniqueColors.map {
+            ColorViewModel(
+                id: $0.id,
+                name: $0.name,
+                color: Color(hex: $0.hex) ?? .gray,
+                HEX: $0.hex,
+                usedInPalette: $0.usedInPalette,
+                isFavorite: $0.isFavorite,
+                isGenerated: $0.isGenerated
+            )
+        }
+        palettes = uniquePalettes.map { stored in
+            PaletteViewModel(
+                id: stored.id,
+                name: stored.name,
+                colors: stored.hexCodes.map { Color(hex: $0) ?? .gray },
+                hexCodes: stored.hexCodes,
+                colorNames: stored.colorNames,
+                colorRoles: stored.colorRoles,
+                isFavorite: stored.isFavorite,
+                isGenerated: stored.isGenerated
+            )
         }
     }
 
@@ -487,6 +482,80 @@ class AppData: ObservableObject {
         return color
     }
 
+    // MARK: - Data lifecycle
+
+    static let recentSearchesKey = "recentSearches"
+
+    /// Persists any edits still waiting on the debounce. Safe to call any
+    /// time: each persist is an idempotent upsert.
+    func flushPendingChanges() {
+        if isDirtyColors { persistColors(colors) }
+        if isDirtyPalettes { persistPalettes(palettes) }
+        if isDirtyTags { persistTags(customTags) }
+    }
+
+    /// Deletes every color, palette and custom tag (with CloudKit on, the
+    /// deletions sync to the user's other devices), plus recent searches,
+    /// Spotlight/Siri entities, and leftover temp exports. Objects are
+    /// deleted one by one rather than batch-deleted so
+    /// CloudKit mirroring sees each deletion. Returns false (library left as
+    /// it was) if the store can't be saved.
+    @discardableResult
+    func deleteAllLibraryData() -> Bool {
+        if let context = container?.mainContext {
+            do {
+                for item in try context.fetch(FetchDescriptor<StoredColor>()) { context.delete(item) }
+                for item in try context.fetch(FetchDescriptor<StoredPalette>()) { context.delete(item) }
+                for item in try context.fetch(FetchDescriptor<StoredTag>()) { context.delete(item) }
+                try context.save()
+            } catch {
+                context.rollback()
+                ToastManager.shared.show("Couldn't delete your data.", icon: "exclamationmark.triangle.fill")
+                return false
+            }
+        }
+
+        lastPersistedColorIDs = []
+        lastPersistedPaletteIDs = []
+        lastPersistedTagNames = []
+        colors = []
+        palettes = []
+        customTags = []
+        isDirtyColors = false
+        isDirtyPalettes = false
+        isDirtyTags = false
+
+        UserDefaults.standard.removeObject(forKey: Self.recentSearchesKey)
+        ExportFiles.removeAll()
+        if #available(iOS 26.0, *) {
+            EntityIndexer.removeAll()
+        }
+        return true
+    }
+
+    /// Snapshot of the whole library for "Export Library".
+    func libraryExport(now: Date = .now) -> LibraryExport {
+        LibraryExport(
+            exportedAt: now,
+            colors: colors.map {
+                LibraryExport.Color(id: $0.id, name: $0.name, hex: $0.HEX,
+                                    isFavorite: $0.isFavorite, isGenerated: $0.isGenerated)
+            },
+            palettes: palettes.map { palette in
+                LibraryExport.Palette(
+                    id: palette.id,
+                    name: palette.name,
+                    isFavorite: palette.isFavorite,
+                    isGenerated: palette.isGenerated,
+                    colors: palette.paletteColors.map {
+                        LibraryExport.Swatch(name: $0.name, hex: $0.hex, role: $0.role)
+                    }
+                )
+            },
+            customTags: customTags
+        )
+    }
+
     // MARK: - Duplicate checks
 
     /// Returns an existing palette containing the same colors (hex codes,
@@ -599,77 +668,4 @@ class AppData: ObservableObject {
             }
         }
     }
-
-    // MARK: - Sample Data (first launch only)
-
-    private static let sampleColors: [ColorViewModel] = [
-        ColorViewModel(name: "Maroon", color: Color(hex: "800000")!, HEX: "#800000", usedInPalette: true),
-        ColorViewModel(name: "Electric Blue", color: Color(hex: "007AFF")!, HEX: "#007AFF", usedInPalette: false),
-        ColorViewModel(name: "Sunset Orange", color: Color(hex: "FF5D00")!, HEX: "#FF5D00", usedInPalette: true),
-        ColorViewModel(name: "Neon Lime", color: Color(hex: "CCFF00")!, HEX: "#CCFF00", usedInPalette: true),
-        ColorViewModel(name: "Hot Pink", color: Color(hex: "FF0080")!, HEX: "#FF0080", usedInPalette: true),
-        ColorViewModel(name: "Pastel Mint", color: Color(hex: "99FA99")!, HEX: "#99FA99", usedInPalette: true),
-        ColorViewModel(name: "Soft Lavender", color: Color(hex: "E6E6FA")!, HEX: "#E6E6FA", usedInPalette: true),
-        ColorViewModel(name: "Peach", color: Color(hex: "FFCC99")!, HEX: "#FFCC99", usedInPalette: false),
-        ColorViewModel(name: "Midnight", color: Color(hex: "1A1A70")!, HEX: "#1A1A70", usedInPalette: true),
-        ColorViewModel(name: "Charcoal", color: Color(hex: "333333")!, HEX: "#333333", usedInPalette: true),
-        ColorViewModel(name: "Forest Green", color: Color(hex: "1B4D1B")!, HEX: "#1B4D1B", usedInPalette: true),
-    ]
-
-    private static let samplePalettes: [PaletteViewModel] = [
-        PaletteViewModel(
-            name: "Midnight Ocean",
-            colors: [
-                Color(hex: "1A1A70")!,
-                Color(hex: "007AFF")!,
-                Color(hex: "99FA99")!,
-                Color(hex: "E6E6FA")!
-            ],
-            hexCodes: ["#1A1A70", "#007AFF", "#99FA99", "#E6E6FA"],
-            colorNames: ["Midnight", "Electric Blue", "Pastel Mint", "Soft Lavender"]
-        ),
-        PaletteViewModel(
-            name: "Sunset Glow",
-            colors: [
-                Color(hex: "FF5D00")!,
-                Color(hex: "FF0080")!,
-                Color(hex: "CCFF00")!,
-                Color(hex: "FFCC99")!
-            ],
-            hexCodes: ["#FF5D00", "#FF0080", "#CCFF00", "#FFCC99"],
-            colorNames: ["Sunset Orange", "Hot Pink", "Neon Lime", "Peach"]
-        ),
-        PaletteViewModel(
-            name: "Forest Floor",
-            colors: [
-                Color(hex: "1B4D1B")!,
-                Color(hex: "99FA99")!,
-                Color(hex: "333333")!
-            ],
-            hexCodes: ["#1B4D1B", "#99FA99", "#333333"],
-            colorNames: ["Forest Green", "Pastel Mint", "Charcoal"]
-        ),
-        PaletteViewModel(
-            name: "Warm Dusk",
-            colors: [
-                Color(hex: "D4456A")!,
-                Color(hex: "FF8C42")!,
-                Color(hex: "FBD87F")!,
-                Color(hex: "2E1A47")!
-            ],
-            hexCodes: ["#D4456A", "#FF8C42", "#FBD87F", "#2E1A47"],
-            colorNames: ["Crimson", "Dark Orange", "Khaki", "Indigo"]
-        ),
-        PaletteViewModel(
-            name: "Bold Contrast",
-            colors: [
-                Color(hex: "800000")!,
-                Color(hex: "333333")!,
-                Color(hex: "E6E6FA")!,
-                Color(hex: "CCFF00")!
-            ],
-            hexCodes: ["#800000", "#333333", "#E6E6FA", "#CCFF00"],
-            colorNames: ["Maroon", "Charcoal", "Soft Lavender", "Neon Lime"]
-        ),
-    ]
 }
