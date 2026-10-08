@@ -104,16 +104,19 @@ enum OnboardingPaletteMaker {
 
 enum OnboardingPaletteSaver {
     /// Creates the palette through `AppData` and reports completion with the
-    /// saved palette's id. Returns that id.
+    /// saved palette's id. Returns that id, or nil when onboarding already
+    /// finished (a double tap), so a palette is never saved twice.
     @MainActor
     @discardableResult
-    static func save(_ palette: PaletteViewModel, appData: AppData, model: OnboardingModel) -> UUID {
+    static func save(_ palette: PaletteViewModel, appData: AppData, model: OnboardingModel) -> UUID? {
+        guard !model.isFinished else { return nil }
         let trimmed = palette.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let saved = appData.addPalette(
             name: trimmed.isEmpty ? "My First Palette" : trimmed,
             paletteColors: palette.paletteColors,
             isGenerated: palette.isGenerated
         )
+        appData.addPaletteColorsToLibrary(palette.paletteColors, isGenerated: palette.isGenerated)
         model.finish(.completed(paletteID: saved.id))
         return saved.id
     }

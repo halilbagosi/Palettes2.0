@@ -65,10 +65,10 @@
 - [ ] Verify on the iPhone 17 Pro simulator (Dynamic Island position); check a notch-less device size for sensible fallback.
 
 ### Task 3: Camera in the orb (step 2)
-- [ ] `OrbCameraPreview`: `AVCaptureVideoPreviewLayer` in a `UIViewRepresentable`, masked to a circle with a radial gradient mask so edges fade into the glass.
-- [ ] Permission pre-prompt line, then `AVCaptureDevice.requestAccess`. Handle `.denied`/`.restricted` by showing "Use a photo instead" (PhotosPicker) and the sample image.
-- [ ] Scan button captures a still (`AVCapturePhotoOutput`), freezes it in the orb, ripple, medium haptic.
-- [ ] Stop the session when leaving the step or backgrounding.
+- [x] `OrbCameraPreview`: `AVCaptureVideoPreviewLayer` in a `UIViewRepresentable`, masked to a circle with a radial gradient mask so edges fade into the glass.
+- [x] Permission pre-prompt line, then `AVCaptureDevice.requestAccess`. Handle `.denied`/`.restricted` by showing "Use a photo instead" (PhotosPicker) and the sample image.
+- [x] Scan button captures a still (`AVCapturePhotoOutput`), freezes it in the orb, ripple, medium haptic.
+- [x] Stop the session when leaving the step or backgrounding.
 
 ### Task 4: Sample, adjust, generate (steps 3–4)
 - [x] Sample the center color of the still using `ImageColorExtractor`. Animate it dropping out of the orb into the selected color.
@@ -109,6 +109,8 @@
 - In-cover steps end at `.generate`; the detail coach mark and extras cards run after the cover dismisses, with their own `@AppStorage` keys.
 - `OnboardingModel` has no persistence: it reports `OnboardingFinishReason` (`.skipped` / `.completed(paletteID:)`) through `onFinish`, and `PaletteTabView` sets the flag and (Task 5) selects the palette.
 - Replay: Settings signals `OnboardingReplayCoordinator`; `PaletteView` clears the flag in the Settings sheet's `onDismiss`.
+
+- `isGenerated` on the onboarding palette (and its library colors) means AI-made: the deterministic builder path saves `false`.
 
 ## Open questions
 

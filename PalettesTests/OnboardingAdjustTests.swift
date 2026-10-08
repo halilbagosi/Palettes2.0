@@ -111,9 +111,41 @@ final class OnboardingAdjustTests: XCTestCase {
 
         XCTAssertEqual(appData.palettes.count, 1)
         XCTAssertEqual(appData.palettes.first?.id, id)
+        XCTAssertNotNil(id)
         XCTAssertEqual(appData.palettes.first?.hexCodes, palette.hexCodes)
         XCTAssertEqual(appData.palettes.first?.colorRoles, palette.colorRoles)
-        XCTAssertEqual(reasons, [.completed(paletteID: id)])
+        XCTAssertEqual(reasons, [.completed(paletteID: id!)])
         XCTAssertTrue(model.isFinished)
+    }
+
+    func testSavingTwiceCreatesOnePalette() throws {
+        let model = OnboardingModel()
+        let appData = AppData(inMemory: true)
+        let palette = try OnboardingPaletteMaker.deterministicPalette(anchorHex: "#3A6EA5", seed: 3)
+
+        let first = OnboardingPaletteSaver.save(palette, appData: appData, model: model)
+        let second = OnboardingPaletteSaver.save(palette, appData: appData, model: model)
+
+        XCTAssertNotNil(first)
+        XCTAssertNil(second)
+        XCTAssertEqual(appData.palettes.count, 1)
+    }
+
+    func testSaveAddsColorsToLibraryWithoutDuplicates() throws {
+        let appData = AppData(inMemory: true)
+        let palette = try OnboardingPaletteMaker.deterministicPalette(anchorHex: "#3A6EA5", seed: 3)
+        appData.addColor(name: "Mine", hex: palette.hexCodes[0].lowercased())
+        let before = appData.colors.count
+
+        OnboardingPaletteSaver.save(palette, appData: appData, model: OnboardingModel())
+
+        // The pre-existing color (different case) is not duplicated.
+        XCTAssertEqual(appData.colors.count, before + palette.hexCodes.count - 1)
+        let added = appData.colors.last!
+        XCTAssertTrue(added.usedInPalette)
+        XCTAssertFalse(added.isGenerated)
+        // Idempotent.
+        appData.addPaletteColorsToLibrary(palette.paletteColors, isGenerated: true)
+        XCTAssertEqual(appData.colors.count, before + palette.hexCodes.count - 1)
     }
 }

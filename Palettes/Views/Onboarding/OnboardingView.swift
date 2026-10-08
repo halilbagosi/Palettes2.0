@@ -52,6 +52,7 @@ struct OnboardingView: View {
     @State private var genState = GenState.generating
     @State private var genColors: [Color] = []
     @State private var genTask: Task<Void, Never>?
+    @State private var isSaving = false
 
     private static let islandDiameter: CGFloat = 37
     private static let maxOrbDiameter: CGFloat = 260
@@ -699,8 +700,10 @@ extension OnboardingView {
     private func generate() {
         guard model.selectedHex != nil else { return }
         dropTask?.cancel()
-        dropActive = false
-        withAnimation(.easeInOut(duration: 0.4)) { model.advance() }
+        withAnimation(.easeInOut(duration: 0.4)) {
+            dropActive = false
+            model.advance()
+        }
         startGeneration()
     }
 
@@ -756,6 +759,8 @@ extension OnboardingView {
                 .accessibilityLabel("Palette colors")
                 .accessibilityValue(made.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; "))
                 Button {
+                    guard !isSaving else { return }
+                    isSaving = true
                     OnboardingPaletteSaver.save(made.palette, appData: appData, model: model)
                 } label: {
                     Label("See my palette", systemImage: "arrow.right")
@@ -763,6 +768,7 @@ extension OnboardingView {
                         .padding(.horizontal, 12)
                 }
                 .glassCapsuleButton()
+                .disabled(isSaving)
             }
             .frame(maxWidth: 420)
             .transition(.opacity)

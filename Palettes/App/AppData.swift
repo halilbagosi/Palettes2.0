@@ -472,6 +472,27 @@ class AppData: ObservableObject {
         return palette
     }
 
+    /// Adds a palette's colors to the Colors library, skipping any hex already
+    /// there (case-insensitive). Shared by Generate and onboarding so the two
+    /// save paths can't drift. Does not persist synchronously: the normal
+    /// debounced write-back handles it.
+    func addPaletteColorsToLibrary(_ paletteColors: [PaletteColor], isGenerated: Bool) {
+        for (i, paletteColor) in paletteColors.enumerated() {
+            let hex = paletteColor.hex
+            guard !hex.isEmpty else { continue }
+            let alreadyExists = colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
+            guard !alreadyExists else { continue }
+            let name = paletteColor.name.isEmpty ? "Color \(i + 1)" : paletteColor.name
+            colors.append(ColorViewModel(
+                name: name,
+                color: paletteColor.color,
+                HEX: hex,
+                usedInPalette: true,
+                isGenerated: isGenerated
+            ))
+        }
+    }
+
     /// Appends a standalone color and persists it synchronously before returning.
     ///
     /// Same headless-intent durability concern as `addPalette`: without a
