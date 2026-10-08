@@ -18,13 +18,18 @@ struct AdjustmentSlider: View {
             HStack {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+                    .accessibilityHidden(true)
                 Spacer()
                 Text(valueLabel)
                     .font(.caption2.weight(.medium))
                     .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
             }
             Slider(value: $value)
                 .tint(.accentColor)
+                .accessibilityLabel(title)
+                .accessibilityValue(valueLabel)
+                .accessibilityHint("Adjusts from \(leftLabel) to \(rightLabel)")
             HStack {
                 Text(leftLabel)
                     .font(.caption2)
@@ -34,6 +39,7 @@ struct AdjustmentSlider: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
+            .accessibilityHidden(true)
         }
     }
 }

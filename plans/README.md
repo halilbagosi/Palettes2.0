@@ -22,6 +22,7 @@ without `xcodebuild` do the file work and report verification as pending.
 | 009 | Coolors-style palette export (code/URL/SVG, then ASE/PDF) | P2 | L | 001; adapt if 003 landed | DONE (both phases; worktree-agent-a032e1cf140d53a21 @ d56eaec; xcodebuild pending) |
 | 006 | Cache ColorNamer Lab table | P3 | S | 001 | DONE (worktree-agent-a0e618002875b070e @ 322c991; xcodebuild pending) |
 | 007 | Generation error handling (cancellation vs failure) | P3 | S | — (tests need 001) | DONE (compile check pending Xcode machine; worktree-agent-a147a0d71621e02df) |
+| 012 | App Store readiness (iCloud v1): privacy manifest, export hardening, Spotlight queue, delete-all/export, Settings + privacy policy, accessibility | P0/P1 | L | — | DONE (feature/app-store-readiness @ d1f5ec9; PR #2) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

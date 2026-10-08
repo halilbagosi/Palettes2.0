@@ -188,8 +188,10 @@ enum PaletteGenerator {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            // Type name only: the error's description can echo prompt or
+            // model content, which must never reach device logs.
             Logger(subsystem: "com.halilbagosi.Palettes", category: "generation")
-                .error("Palette generation failed: \(String(describing: error), privacy: .public)")
+                .error("Palette generation failed: \(String(describing: type(of: error)), privacy: .public)")
             throw AppError.generationFailed
         }
 
@@ -556,7 +558,11 @@ enum PaletteGenerator {
 
             // Shortfall: continue this plan's ladder. Candidates are drawn
             // generously (the perceptual gate rejects most of them by design)
-            // and bounded, so this never spins.
+            // and bounded, so this never spins. The minimum of 64 covers at
+            // least one full period of every scheme's tone ladder (50 for
+            // monochromatic, 36 for a single-offset scheme): with a small
+            // shortfall, a shorter draw never reached the ladder's later laps
+            // and relaxed the floor while a distinct in-family tone existed.
             //
             // The distinctness floor steps down across attempts. A tight
             // family genuinely runs out of room — a single hue can only
@@ -571,7 +577,7 @@ enum PaletteGenerator {
             // below always hold the full floor.
             for floor in [PaletteValidation.minDeltaE, 9, 6] where target > colors.count {
                 let shortfall = target - colors.count
-                let extras = ColorHarmony.extraSlots(for: plan, count: min(160, max(24, shortfall * 16)))
+                let extras = ColorHarmony.extraSlots(for: plan, count: min(160, max(64, shortfall * 16)))
                 // Role-less by construction: an extension slot is a top-up,
                 // not part of the deliberate plan.
                 consume(extras, inheritRoles: false, minDistance: floor)

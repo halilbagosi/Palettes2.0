@@ -13,7 +13,7 @@ struct SearchView: View {
     @State private var scope: SearchScope = .all
     @State private var selectedHues: Set<HueCategory> = []
     @State private var selectedTags: Set<String> = []
-    @AppStorage("recentSearches") private var recentSearchesJSON: String = "[]"
+    @AppStorage(AppData.recentSearchesKey) private var recentSearchesJSON: String = "[]"
 
     // MARK: - Query
 

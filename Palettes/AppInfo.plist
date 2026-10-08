@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSCameraUsageDescription</key>
-    <string>This app uses the camera to scan colors from photos.</string>
+    <string>Palettes uses the camera to take a photo you can pick colors from. The photo is processed on your device and isn't saved or uploaded.</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>remote-notification</string>

@@ -25,6 +25,7 @@ struct SelectionBottomBar: ToolbarContent {
             }
             .tint(.red)
             .disabled(count == 0)
+            .accessibilityLabel(count == 1 ? "Delete 1 item" : "Delete \(count) items")
 
             Spacer()
 
@@ -32,6 +33,7 @@ struct SelectionBottomBar: ToolbarContent {
                 Image(systemName: "square.and.arrow.up")
             }
             .disabled(count == 0)
+            .accessibilityLabel(count == 1 ? "Share 1 item" : "Share \(count) items")
 
             Spacer()
 
@@ -39,6 +41,7 @@ struct SelectionBottomBar: ToolbarContent {
                 Image(systemName: favoriteFilled ? "star.fill" : "star")
             }
             .disabled(count == 0)
+            .accessibilityLabel(favoriteFilled ? "Remove from Favorites" : "Add to Favorites")
         }
     }
 }

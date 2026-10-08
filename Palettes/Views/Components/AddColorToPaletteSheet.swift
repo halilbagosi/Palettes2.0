@@ -40,6 +40,7 @@ struct AddColorToPaletteSheet: View {
                         Image(systemName: "xmark")
                             .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Close")
                 }
             }
         }

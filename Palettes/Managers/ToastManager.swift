@@ -19,25 +19,28 @@ class ToastManager: ObservableObject {
         self.icon = icon
         self.undoAction = undo
 
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.75)) {
             isShowing = true
         }
+        UIAccessibility.post(notification: .announcement, argument: message)
 
         let work = DispatchWorkItem { [weak self] in
-            withAnimation(.easeOut(duration: 0.3)) {
+            withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.3)) {
                 self?.isShowing = false
             }
         }
         hideWork = work
-        // Undoable toasts linger longer so there's time to react.
-        DispatchQueue.main.asyncAfter(deadline: .now() + (undo == nil ? 1.8 : 4.0), execute: work)
+        // Undoable toasts linger longer so there's time to react; longer still
+        // under VoiceOver so Undo is reachable.
+        let delay: Double = undo == nil ? 1.8 : (UIAccessibility.isVoiceOverRunning ? 8.0 : 4.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     func performUndo() {
         let action = undoAction
         undoAction = nil
         hideWork?.cancel()
-        withAnimation(.easeOut(duration: 0.25)) {
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.25)) {
             isShowing = false
         }
         action?()
@@ -47,6 +50,7 @@ class ToastManager: ObservableObject {
 /// A view modifier that overlays the toast pill at the top of the screen.
 struct ToastOverlay: ViewModifier {
     @StateObject private var manager = ToastManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     func body(content: Content) -> some View {
         content
@@ -75,7 +79,7 @@ struct ToastOverlay: ViewModifier {
                     .liquidGlass(.regular, in: .capsule)
                     .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
                     .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     .zIndex(999)
                 }
             }

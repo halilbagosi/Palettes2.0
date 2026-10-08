@@ -129,8 +129,13 @@ enum PaletteExporter {
         return (r, g, b)
     }
 
+    /// XML 1.0 forbids most C0 control characters even when escaped, so drop
+    /// them (keeping tab/newline/CR) before entity-escaping markup characters.
     private static func xmlEscape(_ text: String) -> String {
-        var result = text
+        let allowed = String(String.UnicodeScalarView(text.unicodeScalars.filter {
+            $0.value >= 0x20 || $0 == "\t" || $0 == "\n" || $0 == "\r"
+        }))
+        var result = allowed
         result = result.replacingOccurrences(of: "&", with: "&amp;")
         result = result.replacingOccurrences(of: "<", with: "&lt;")
         result = result.replacingOccurrences(of: ">", with: "&gt;")
@@ -138,11 +143,17 @@ enum PaletteExporter {
         return result
     }
 
+    /// Escapes through JSONEncoder so quotes, backslashes and every control
+    /// character follow RFC 8259; the surrounding quotes are stripped because
+    /// callers lay out the JSON themselves (keeping the one-object-per-line
+    /// format the tests pin).
     private static func jsonEscape(_ text: String) -> String {
-        var result = text
-        result = result.replacingOccurrences(of: "\\", with: "\\\\")
-        result = result.replacingOccurrences(of: "\"", with: "\\\"")
-        return result
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? encoder.encode(text),
+              let quoted = String(data: data, encoding: .utf8),
+              quoted.count >= 2 else { return "" }
+        return String(quoted.dropFirst().dropLast())
     }
 
     // MARK: - Format generators
@@ -205,7 +216,7 @@ enum PaletteExporter {
         for (index, pair) in pairs.enumerated() {
             let comma = index == pairs.count - 1 ? "" : ","
             let roleField = pair.hasRole ? " \"role\": \"\(jsonEscape(slugs[index]))\"," : ""
-            lines.append("  { \"name\": \"\(jsonEscape(pair.displayName))\",\(roleField) \"hex\": \"\(pair.hex)\" }\(comma)")
+            lines.append("  { \"name\": \"\(jsonEscape(pair.displayName))\",\(roleField) \"hex\": \"\(jsonEscape(pair.hex))\" }\(comma)")
         }
         lines.append("]")
         return lines.joined(separator: "\n")
