@@ -149,3 +149,13 @@ final class OnboardingAdjustTests: XCTestCase {
         XCTAssertEqual(appData.colors.count, before + palette.hexCodes.count - 1)
     }
 }
+
+final class OnboardingCoachMarkLogicTests: XCTestCase {
+    func testShowsOnlyForTargetPaletteAndOnlyOnce() {
+        let id = UUID()
+        XCTAssertTrue(OnboardingCoachMarkLogic.shouldShow(target: id, paletteID: id, alreadyShown: false))
+        XCTAssertFalse(OnboardingCoachMarkLogic.shouldShow(target: id, paletteID: id, alreadyShown: true))
+        XCTAssertFalse(OnboardingCoachMarkLogic.shouldShow(target: id, paletteID: UUID(), alreadyShown: false))
+        XCTAssertFalse(OnboardingCoachMarkLogic.shouldShow(target: nil, paletteID: id, alreadyShown: false))
+    }
+}

@@ -25,6 +25,9 @@ class AppData: ObservableObject {
 
     /// Palette id an Open intent asked to show; PaletteView consumes it.
     @Published var pendingOpenPaletteID: UUID?
+    /// Transient (never persisted): the palette that should show the
+    /// onboarding coach mark when its detail screen appears.
+    @Published var coachMarkPaletteID: UUID?
 
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []

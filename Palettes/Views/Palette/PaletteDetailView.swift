@@ -109,6 +109,8 @@ struct PaletteDetailView: View {
                             )
                             .frame(width: 360, height: 180)
                             .padding(4)
+                            // The menu opening is the long press the onboarding hint teaches.
+                            .onAppear { appData.coachMarkPaletteID = nil }
                         }
                     }
                 }
@@ -117,6 +119,7 @@ struct PaletteDetailView: View {
             .padding(.bottom, 24)
         }
         .navigationTitle(livePalette.name)
+        .onboardingCoachMark(for: palette.id)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

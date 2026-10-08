@@ -79,8 +79,8 @@
 - [x] Create the palette through `AppData`; keep `colors`/`hexCodes`/`colorNames` aligned.
 
 ### Task 5: Detail handoff and coach mark (step 5)
-- [ ] Dismiss onboarding and have `PaletteTabView` push `PaletteDetailView` for the new palette.
-- [ ] `OnboardingCoachMark`: non-modal overlay "Long press a color for options, or tag it." Dismiss on first long press or a tap on the hint; once shown, never again.
+- [x] Dismiss onboarding and have `PaletteTabView` push `PaletteDetailView` for the new palette.
+- [x] `OnboardingCoachMark`: non-modal overlay "Long press a color for options, or tag it." Dismiss on first long press or a tap on the hint; once shown, never again.
 
 ### Task 6: Extras cards (step 6, optional)
 - [ ] Share card: render with `PaletteImageRenderer`, button opens `ExportPaletteSheet`.

@@ -22,6 +22,8 @@ enum OnboardingStep: Int, CaseIterable {
 enum OnboardingKeys {
     /// Per-device flag read by `PaletteTabView` via `@AppStorage`.
     static let didComplete = "didCompleteOnboarding"
+    /// Set once the detail-screen coach mark has been shown; it never returns.
+    static let didShowCoachMark = "didShowOnboardingCoachMark"
 }
 
 enum OnboardingFinishReason: Equatable {

@@ -30,8 +30,14 @@ struct PaletteTabView: View {
             get: { !didCompleteOnboarding },
             set: { _ in }
         )) {
-            OnboardingView { _ in
-                // Later tasks also select the generated palette here.
+            OnboardingView { reason in
+                if case .completed(let id) = reason {
+                    // PaletteView pushes the detail under the cover, so it is
+                    // already in place when the cover finishes dismissing.
+                    appData.activeTab = .palettes
+                    appData.coachMarkPaletteID = id
+                    appData.pendingOpenPaletteID = id
+                }
                 didCompleteOnboarding = true
             }
             .environmentObject(appData)
