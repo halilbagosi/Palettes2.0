@@ -12,6 +12,12 @@ struct PaletteTabView: View {
     @ObservedObject private var appData = AppData.shared
     @StateObject private var replay = OnboardingReplayCoordinator()
     @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
+    /// DEBUG `-onboardingStart` presents onboarding regardless of the flag, once.
+    @State private var debugOnboardingFinished = false
+
+    private var showsOnboarding: Bool {
+        OnboardingDebug.isActive ? !debugOnboardingFinished : !didCompleteOnboarding
+    }
 
     var body: some View {
         Group {
@@ -27,7 +33,7 @@ struct PaletteTabView: View {
         // Attached after the environment objects so onboarding (and the views
         // it reuses) can read AppData. The only way out is `onFinish`.
         .fullScreenCover(isPresented: Binding(
-            get: { !didCompleteOnboarding },
+            get: { showsOnboarding },
             set: { _ in }
         )) {
             OnboardingView { reason in
@@ -39,6 +45,7 @@ struct PaletteTabView: View {
                     appData.pendingOpenPaletteID = id
                 }
                 didCompleteOnboarding = true
+                debugOnboardingFinished = true
             }
             .environmentObject(appData)
             .toastOverlay()

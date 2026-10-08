@@ -24,6 +24,26 @@ final class OnboardingModelTests: XCTestCase {
         XCTAssertEqual(makeModel().step, .pull)
     }
 
+    func testCanStartAtALaterStep() {
+        XCTAssertEqual(OnboardingModel(startingAt: .camera).step, .camera)
+    }
+
+    func testPickedStateIsTheCameraStepWithAFrozenPhoto() {
+        let model = makeModel()
+        XCTAssertFalse(model.isPhotoFrozen)
+        model.advance()
+        model.advance()
+        XCTAssertEqual(model.step, .camera)
+        XCTAssertFalse(model.isPhotoFrozen)
+        model.capturedImage = OnboardingSampleImage.make(size: CGSize(width: 8, height: 8))
+        XCTAssertTrue(model.isPhotoFrozen)
+        model.capturedImage = nil
+        XCTAssertFalse(model.isPhotoFrozen)
+        model.capturedImage = OnboardingSampleImage.make(size: CGSize(width: 8, height: 8))
+        model.advance()
+        XCTAssertFalse(model.isPhotoFrozen, "Only the camera step has a picked state")
+    }
+
     func testInCoverStepsEndAtGenerate() {
         XCTAssertEqual(OnboardingStep.allCases, [.pull, .orb, .camera, .adjust, .generate])
     }
@@ -165,17 +185,30 @@ final class OnboardingModelTests: XCTestCase {
         }
     }
 
-    func testCommitThreshold() {
-        XCTAssertFalse(OnboardingPull.shouldCommit(translation: OnboardingPull.commitThreshold - 1))
-        XCTAssertTrue(OnboardingPull.shouldCommit(translation: OnboardingPull.commitThreshold))
+    func testRubberBandIsLinearThenResists() {
+        XCTAssertEqual(OnboardingPull.rubberBand(50), 50)
+        XCTAssertEqual(OnboardingPull.rubberBand(OnboardingPull.linearZone), OnboardingPull.linearZone)
+        XCTAssertLessThan(OnboardingPull.rubberBand(200), 200)
     }
 
-    func testFastFlickCommitsOnPredictedEnd() {
-        let short = OnboardingPull.commitThreshold / 3
-        XCTAssertFalse(OnboardingPull.shouldCommit(translation: short, predictedEnd: short))
+    func testInverseRubberBandRoundTrips() {
+        for t in [0.0, 30, 90, 130, 300, 800] {
+            XCTAssertEqual(OnboardingPull.inverseRubberBand(OnboardingPull.rubberBand(t)), t, accuracy: 0.01)
+        }
+    }
+
+    func testCommitUsesProjectedEnd() {
+        XCTAssertFalse(OnboardingPull.shouldCommit(projectedEnd: OnboardingPull.commitDistance - 1))
+        XCTAssertTrue(OnboardingPull.shouldCommit(projectedEnd: OnboardingPull.commitDistance))
+    }
+
+    func testSlowPullBelowThresholdCancelsAndFlickCommits() {
+        // A slow drag that stalls at 60 points of stretch.
+        XCTAssertFalse(OnboardingPull.shouldCommit(
+            projectedEnd: OnboardingPull.projectedEnd(stretch: 60, velocity: 20)))
+        // A fast flick from the same place.
         XCTAssertTrue(OnboardingPull.shouldCommit(
-            translation: short, predictedEnd: OnboardingPull.commitThreshold * 2
-        ))
+            projectedEnd: OnboardingPull.projectedEnd(stretch: 60, velocity: 400)))
     }
 }
 

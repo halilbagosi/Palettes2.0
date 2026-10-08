@@ -61,27 +61,46 @@ enum OnboardingCameraUIState: Equatable {
 
 /// Pull-down gesture math for step 0.
 enum OnboardingPull {
-    /// The rubber-banded stretch approaches this but never reaches it.
+    /// The stretch approaches this but never reaches it.
     static let maxStretch: Double = 220
-    /// Raw finger travel (points) at which the orb detaches.
-    static let commitThreshold: Double = 130
+    /// The blob follows the finger 1:1 up to here, then resists.
+    static let linearZone: Double = 90
+    /// Released with a projected end at or beyond this (points of stretch), the
+    /// orb detaches; short of it, the pull springs back.
+    static let commitDistance: Double = 120
 
-    /// Maps raw finger travel to a resisted on-screen stretch.
+    /// Maps raw finger travel to the on-screen stretch: 1:1 at first, then an
+    /// exponential approach to `maxStretch`.
     static func rubberBand(_ translation: Double) -> Double {
         guard translation > 0 else { return 0 }
-        return maxStretch * (1 - 1 / (translation / maxStretch * 0.55 + 1))
+        if translation <= linearZone { return translation }
+        let soft = maxStretch - linearZone
+        return linearZone + soft * (1 - exp(-(translation - linearZone) / soft))
     }
 
-    /// A fast flick commits even when the finger travel is short: the
-    /// predicted end translation counts at half weight.
-    static func shouldCommit(translation: Double, predictedEnd: Double = 0) -> Bool {
-        max(translation, predictedEnd * 0.5) >= commitThreshold
+    /// The finger travel that produces `stretch`, so a new drag can pick up a
+    /// blob that is still retracting without a jump.
+    static func inverseRubberBand(_ stretch: Double) -> Double {
+        guard stretch > 0 else { return 0 }
+        if stretch <= linearZone { return stretch }
+        let soft = maxStretch - linearZone
+        let ratio = min((stretch - linearZone) / soft, 0.999_999)
+        return linearZone - soft * log(1 - ratio)
+    }
+
+    /// Where a release would come to rest, from the stretch and its velocity (points per second).
+    static func projectedEnd(stretch: Double, velocity: Double) -> Double {
+        Easing.project(position: stretch, velocity: velocity)
+    }
+
+    static func shouldCommit(projectedEnd: Double) -> Bool {
+        projectedEnd >= commitDistance
     }
 }
 
 @MainActor
 final class OnboardingModel: ObservableObject {
-    @Published private(set) var step: OnboardingStep = .pull
+    @Published private(set) var step: OnboardingStep
     @Published private(set) var isFinished = false
     @Published var cameraAccess: OnboardingCameraAccess = .notDetermined
     /// The frozen scan (or chosen photo) shown inside the orb after Scan.
@@ -110,9 +129,14 @@ final class OnboardingModel: ObservableObject {
     private let onFinish: (OnboardingFinishReason) -> Void
 
     /// `onFinish` fires exactly once and is the presenter's only cue to dismiss.
-    init(onFinish: @escaping (OnboardingFinishReason) -> Void = { _ in }) {
+    init(startingAt step: OnboardingStep = .pull, onFinish: @escaping (OnboardingFinishReason) -> Void = { _ in }) {
+        self.step = step
         self.onFinish = onFinish
     }
+
+    /// The camera step after Scan: the photo is frozen in the orb's window and
+    /// waiting for the user to choose a spot. There is no separate step for it.
+    var isPhotoFrozen: Bool { step == .camera && capturedImage != nil }
 
     var cameraUIState: OnboardingCameraUIState {
         switch cameraAccess {

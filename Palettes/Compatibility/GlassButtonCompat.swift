@@ -53,3 +53,37 @@ extension View {
         }
     }
 }
+
+/// Full-width capsule with a quiet press: a thin material, a hairline rim and a
+/// 0.97 scale on touch-down. Used before iOS 26; the label supplies its text only.
+private struct PressableCapsuleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.thinMaterial, in: Capsule())
+            .overlay { Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.75) }
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 1), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    /// The onboarding primary button: a 54 pt, full-width (up to 340) glass capsule.
+    /// `.glass` on iOS 26 (never `.glassProminent`, which is always accent-tinted),
+    /// `PressableCapsuleStyle` on earlier systems.
+    @ViewBuilder
+    func glassPrimaryButton() -> some View {
+        if #available(iOS 26.0, *) {
+            buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.extraLarge)
+                .frame(maxWidth: 340)
+                .frame(height: 54)
+        } else {
+            buttonStyle(PressableCapsuleStyle())
+                .frame(maxWidth: 340)
+                .frame(height: 54)
+        }
+    }
+}
