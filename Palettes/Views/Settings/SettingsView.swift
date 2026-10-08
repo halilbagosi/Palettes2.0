@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
+    @EnvironmentObject private var replay: OnboardingReplayCoordinator
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
@@ -103,13 +104,9 @@ struct SettingsView: View {
     }
 
     private func replayOnboarding() {
+        // The presenter restarts onboarding in the sheet's onDismiss.
+        replay.request()
         dismiss()
-        // The onboarding cover is presented from the app root, so wait for
-        // this sheet to finish dismissing before raising it.
-        // Written to defaults directly: this view is gone by the time it fires.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            UserDefaults.standard.set(false, forKey: OnboardingModel.completionKey)
-        }
     }
 
     private func deleteAll() {
@@ -123,4 +120,5 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
         .environmentObject(AppData(inMemory: true))
+        .environmentObject(OnboardingReplayCoordinator())
 }

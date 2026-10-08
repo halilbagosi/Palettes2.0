@@ -10,6 +10,8 @@ import SwiftUI
 struct PaletteTabView: View {
 
     @ObservedObject private var appData = AppData.shared
+    @StateObject private var replay = OnboardingReplayCoordinator()
+    @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
 
     var body: some View {
         Group {
@@ -20,7 +22,21 @@ struct PaletteTabView: View {
             }
         }
         .environmentObject(appData)
+        .environmentObject(replay)
         .background { tabShortcuts }
+        // Attached after the environment objects so onboarding (and the views
+        // it reuses) can read AppData. The only way out is `onFinish`.
+        .fullScreenCover(isPresented: Binding(
+            get: { !didCompleteOnboarding },
+            set: { _ in }
+        )) {
+            OnboardingView { _ in
+                // Later tasks also select the generated palette here.
+                didCompleteOnboarding = true
+            }
+            .environmentObject(appData)
+            .toastOverlay()
+        }
     }
 
     // MARK: - iOS 18+ (Tab builder, sidebar-adaptable, Liquid Glass chrome on 26)

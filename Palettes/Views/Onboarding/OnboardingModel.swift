@@ -3,15 +3,30 @@
 //  Palettes
 //
 //  Pure state for the first-launch onboarding: the step machine, camera
-//  permission fallback, and the color the user scans. No UI or framework
-//  dependencies beyond UserDefaults, so it is fully unit-testable.
+//  permission fallback, and the color the user scans. No UI, persistence, or
+//  framework dependencies, so it is fully unit-testable. The presenter owns
+//  the completion flag and navigation; the model only reports how it ended.
 //
 
 import Foundation
 import Combine
 
+/// Steps shown inside the full-screen cover. The detail-screen coach mark and
+/// the extras cards happen after the cover dismisses, so they are not steps
+/// here (TODO: track them with their own `@AppStorage` keys in `OnboardingKeys`).
 enum OnboardingStep: Int, CaseIterable {
-    case pull, orb, camera, adjust, generate, detail, extras
+    case pull, orb, camera, adjust, generate
+}
+
+enum OnboardingKeys {
+    /// Per-device flag read by `PaletteTabView` via `@AppStorage`.
+    static let didComplete = "didCompleteOnboarding"
+}
+
+enum OnboardingFinishReason: Equatable {
+    case skipped
+    /// The user generated a palette; the presenter can navigate to it.
+    case completed(paletteID: UUID)
 }
 
 /// Camera availability as onboarding sees it, decoupled from AVFoundation.
@@ -34,29 +49,29 @@ enum OnboardingPull {
         return maxStretch * (1 - 1 / (translation / maxStretch * 0.55 + 1))
     }
 
-    static func shouldCommit(translation: Double) -> Bool {
-        translation >= commitThreshold
+    /// A fast flick commits even when the finger travel is short: the
+    /// predicted end translation counts at half weight.
+    static func shouldCommit(translation: Double, predictedEnd: Double = 0) -> Bool {
+        max(translation, predictedEnd * 0.5) >= commitThreshold
     }
 }
 
 @MainActor
 final class OnboardingModel: ObservableObject {
-    /// Per-device flag read by `MyApp` via `@AppStorage`.
-    static let completionKey = "didCompleteOnboarding"
-
     @Published private(set) var step: OnboardingStep = .pull
     @Published private(set) var isFinished = false
     @Published var cameraAccess: OnboardingCameraAccess = .notDetermined
     /// Sampled color, 0...255 per channel; set once the user scans.
     @Published var scannedRGB: (r: Double, g: Double, b: Double)?
-    /// Adjustment slider positions, 0.5 = unchanged.
+    /// Adjustment slider positions in `ColorAdjustment`'s convention (0...1, 0.5 neutral).
     @Published var brightness = 0.5
     @Published var saturation = 0.5
 
-    private let defaults: UserDefaults
+    private let onFinish: (OnboardingFinishReason) -> Void
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+    /// `onFinish` fires exactly once and is the presenter's only cue to dismiss.
+    init(onFinish: @escaping (OnboardingFinishReason) -> Void = { _ in }) {
+        self.onFinish = onFinish
     }
 
     /// Denied, restricted, or missing cameras route to the photo/sample fallback.
@@ -67,22 +82,20 @@ final class OnboardingModel: ObservableObject {
         }
     }
 
+    /// Moves to the next step. The last step has no successor: it ends through
+    /// `finish(_:)` because completing needs the generated palette's id.
     func advance() {
-        guard !isFinished else { return }
-        if let next = OnboardingStep(rawValue: step.rawValue + 1) {
-            step = next
-        } else {
-            finish()
-        }
+        guard !isFinished, let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
+        step = next
     }
 
     func skip() {
-        finish()
+        finish(.skipped)
     }
 
-    private func finish() {
+    func finish(_ reason: OnboardingFinishReason) {
         guard !isFinished else { return }
-        defaults.set(true, forKey: Self.completionKey)
         isFinished = true
+        onFinish(reason)
     }
 }

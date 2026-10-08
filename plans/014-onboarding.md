@@ -26,7 +26,7 @@
 - **New files:** auto-included by synchronized groups. Never edit `Palettes.xcodeproj/project.pbxproj`.
 - **Persistence:** read/write palettes only through `AppData`. Onboarding state is `@AppStorage("didCompleteOnboarding")` (a per-device flag; fine for v1).
 - **Parallel arrays:** `PaletteViewModel`'s `colors`, `hexCodes`, `colorNames`, `colorRoles` stay index-aligned (CLAUDE.md caveat).
-- **Camera permission:** add `NSCameraUsageDescription` (check whether it already exists for `CameraPicker` before adding). Ask only at step 2, after the orb settles. A denial or restriction routes to the photo/sample fallback, never a dead end.
+- **Camera permission:** add `NSCameraUsageDescription` (already present in `Palettes/AppInfo.plist`, used by `CameraPicker`; nothing to add). Ask only at step 2, after the orb settles. A denial or restriction routes to the photo/sample fallback, never a dead end.
 - **Simulator:** no camera. `OrbCameraPreview` must fall back to a bundled sample image under `#if targetEnvironment(simulator)` or when no capture device exists.
 - **Accessibility:** every step has Skip. Reduce Motion replaces the detach/bloom with a cross-fade. VoiceOver labels on the orb, Scan and Skip. Dynamic Type must not clip captions.
 - **Haptics:** one light impact per step change, one medium on Scan.
@@ -103,8 +103,15 @@
 5. iOS 17 simulator (if available): material orb renders; no iOS 26 API is called.
 6. `xcodebuild test` passes, including `OnboardingModelTests`.
 
+## Implementation notes (Tasks 1-2)
+
+- The cover is presented from `PaletteTabView` (after the environment objects, so reused views get `AppData`), not `MyApp`.
+- In-cover steps end at `.generate`; the detail coach mark and extras cards run after the cover dismisses, with their own `@AppStorage` keys.
+- `OnboardingModel` has no persistence: it reports `OnboardingFinishReason` (`.skipped` / `.completed(paletteID:)`) through `onFinish`, and `PaletteTabView` sets the flag and (Task 5) selects the palette.
+- Replay: Settings signals `OnboardingReplayCoordinator`; `PaletteView` clears the flag in the Settings sheet's `onDismiss`.
+
 ## Open questions
 
 - Should the orb camera use the front or back camera? Default: back.
-- Is "Replay onboarding" user-facing in Settings or debug-only? Default: user-facing.
+- ~~Is "Replay onboarding" user-facing in Settings or debug-only?~~ Resolved: user-facing (Settings > About > Replay Onboarding).
 - Free-tier generation size for the onboarding palette (default 4; keep within the free sizes from plan 013).

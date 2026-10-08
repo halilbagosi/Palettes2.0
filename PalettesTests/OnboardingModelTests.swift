@@ -9,80 +9,90 @@ import XCTest
 @MainActor
 final class OnboardingModelTests: XCTestCase {
 
-    private var defaults: UserDefaults!
+    private var finishes: [OnboardingFinishReason] = []
 
-    override func setUp() {
-        super.setUp()
-        defaults = UserDefaults(suiteName: "OnboardingModelTests")!
-        defaults.removePersistentDomain(forName: "OnboardingModelTests")
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: "OnboardingModelTests")
-        defaults = nil
-        super.tearDown()
+    private func makeModel() -> OnboardingModel {
+        finishes = []
+        return OnboardingModel { [unowned self] in finishes.append($0) }
     }
 
     // MARK: - Progression
 
     func testStartsAtPull() {
-        XCTAssertEqual(OnboardingModel(defaults: defaults).step, .pull)
+        XCTAssertEqual(makeModel().step, .pull)
+    }
+
+    func testInCoverStepsEndAtGenerate() {
+        XCTAssertEqual(OnboardingStep.allCases, [.pull, .orb, .camera, .adjust, .generate])
     }
 
     func testAdvanceWalksStepsInOrder() {
-        let model = OnboardingModel(defaults: defaults)
+        let model = makeModel()
         var visited = [model.step]
-        while !model.isFinished {
+        for _ in 0..<10 {
             model.advance()
-            if !model.isFinished { visited.append(model.step) }
+            if visited.last != model.step { visited.append(model.step) }
         }
-        XCTAssertEqual(visited, [.pull, .orb, .camera, .adjust, .generate, .detail, .extras])
+        XCTAssertEqual(visited, OnboardingStep.allCases)
     }
 
-    func testAdvancePastLastStepFinishes() {
-        let model = OnboardingModel(defaults: defaults)
-        for _ in OnboardingStep.allCases.dropLast() { model.advance() }
-        XCTAssertEqual(model.step, .extras)
+    func testAdvancePastLastStepDoesNotFinish() {
+        let model = makeModel()
+        for _ in 0..<10 { model.advance() }
+        XCTAssertEqual(model.step, .generate)
         XCTAssertFalse(model.isFinished)
-        model.advance()
-        XCTAssertTrue(model.isFinished)
+        XCTAssertTrue(finishes.isEmpty)
     }
 
     func testAdvanceAfterFinishIsNoOp() {
-        let model = OnboardingModel(defaults: defaults)
+        let model = makeModel()
         model.skip()
         model.advance()
-        XCTAssertTrue(model.isFinished)
         XCTAssertEqual(model.step, .pull)
     }
 
-    // MARK: - Skip and completion flag
+    // MARK: - Finish reasons
 
-    func testSkipEndsFlowAndSetsFlag() {
-        let model = OnboardingModel(defaults: defaults)
-        model.advance()
+    func testSkipFromPullReportsSkipped() {
+        let model = makeModel()
         model.skip()
         XCTAssertTrue(model.isFinished)
-        XCTAssertTrue(defaults.bool(forKey: OnboardingModel.completionKey))
+        XCTAssertEqual(finishes, [.skipped])
     }
 
-    func testFlagNotSetUntilFinished() {
-        let model = OnboardingModel(defaults: defaults)
+    func testSkipMidFlowReportsSkipped() {
+        let model = makeModel()
         model.advance()
-        XCTAssertFalse(defaults.bool(forKey: OnboardingModel.completionKey))
+        model.advance()
+        model.skip()
+        XCTAssertEqual(finishes, [.skipped])
     }
 
-    func testFinishingLastStepSetsFlag() {
-        let model = OnboardingModel(defaults: defaults)
-        for _ in 0...OnboardingStep.allCases.count { model.advance() }
-        XCTAssertTrue(model.isFinished)
-        XCTAssertTrue(defaults.bool(forKey: OnboardingModel.completionKey))
+    func testCompletedCarriesPaletteID() {
+        let model = makeModel()
+        let id = UUID()
+        model.finish(.completed(paletteID: id))
+        XCTAssertEqual(finishes, [.completed(paletteID: id)])
+    }
+
+    func testFinishIsIdempotent() {
+        let model = makeModel()
+        model.skip()
+        model.skip()
+        model.finish(.completed(paletteID: UUID()))
+        XCTAssertEqual(finishes, [.skipped])
+    }
+
+    func testNothingFiresBeforeFinish() {
+        let model = makeModel()
+        model.advance()
+        XCTAssertTrue(finishes.isEmpty)
     }
 
     // MARK: - Camera fallback
 
     func testPhotoFallbackLogic() {
-        let model = OnboardingModel(defaults: defaults)
+        let model = makeModel()
         model.cameraAccess = .notDetermined
         XCTAssertFalse(model.usesPhotoFallback)
         model.cameraAccess = .authorized
@@ -112,5 +122,27 @@ final class OnboardingModelTests: XCTestCase {
     func testCommitThreshold() {
         XCTAssertFalse(OnboardingPull.shouldCommit(translation: OnboardingPull.commitThreshold - 1))
         XCTAssertTrue(OnboardingPull.shouldCommit(translation: OnboardingPull.commitThreshold))
+    }
+
+    func testFastFlickCommitsOnPredictedEnd() {
+        let short = OnboardingPull.commitThreshold / 3
+        XCTAssertFalse(OnboardingPull.shouldCommit(translation: short, predictedEnd: short))
+        XCTAssertTrue(OnboardingPull.shouldCommit(
+            translation: short, predictedEnd: OnboardingPull.commitThreshold * 2
+        ))
+    }
+}
+
+@MainActor
+final class OnboardingReplayCoordinatorTests: XCTestCase {
+    func testConsumeWithoutRequestIsFalse() {
+        XCTAssertFalse(OnboardingReplayCoordinator().consume())
+    }
+
+    func testRequestIsConsumedOnce() {
+        let coordinator = OnboardingReplayCoordinator()
+        coordinator.request()
+        XCTAssertTrue(coordinator.consume())
+        XCTAssertFalse(coordinator.consume())
     }
 }
