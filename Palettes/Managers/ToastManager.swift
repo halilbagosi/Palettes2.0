@@ -22,6 +22,7 @@ class ToastManager: ObservableObject {
         withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.75)) {
             isShowing = true
         }
+        UIAccessibility.post(notification: .announcement, argument: message)
 
         let work = DispatchWorkItem { [weak self] in
             withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.3)) {
@@ -29,8 +30,10 @@ class ToastManager: ObservableObject {
             }
         }
         hideWork = work
-        // Undoable toasts linger longer so there's time to react.
-        DispatchQueue.main.asyncAfter(deadline: .now() + (undo == nil ? 1.8 : 4.0), execute: work)
+        // Undoable toasts linger longer so there's time to react; longer still
+        // under VoiceOver so Undo is reachable.
+        let delay: Double = undo == nil ? 1.8 : (UIAccessibility.isVoiceOverRunning ? 8.0 : 4.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     func performUndo() {

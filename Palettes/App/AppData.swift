@@ -56,7 +56,14 @@ class AppData: ObservableObject {
     /// remote" diffing role as the ID sets above.
     private var lastPersistedTagNames: Set<String> = []
 
+    /// False for in-memory (preview/test) instances, and for the test host's
+    /// own `shared` instance, so tests never touch (or wait on) the real
+    /// Spotlight index.
+    private let indexesSpotlight: Bool
+
     init(inMemory: Bool = false) {
+        indexesSpotlight = !inMemory
+            && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         if inMemory {
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
             container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: config)
@@ -109,23 +116,25 @@ class AppData: ObservableObject {
 
         // Keep Spotlight's copy of the library current so Siri can find it.
         // (No dropFirst() — the initial load should also be indexed.)
-        $palettes.combineLatest($colors)
-            .debounce(for: .seconds(2), scheduler: RunLoop.main)
-            .sink { palettes, colors in
-                // `PaletteEntity.init`/`ColorEntity.init` are @MainActor; the
-                // sink closure itself isn't isolated, so hop explicitly
-                // (matching the persistence sinks above) rather than relying
-                // on RunLoop.main scheduling to satisfy the compiler.
-                Task { @MainActor in
-                    if #available(iOS 26.0, *) {
-                        EntityIndexer.reindex(
-                            palettes: palettes.map(PaletteEntity.init),
-                            colors: colors.map(ColorEntity.init)
-                        )
+        if indexesSpotlight {
+            $palettes.combineLatest($colors)
+                .debounce(for: .seconds(2), scheduler: RunLoop.main)
+                .sink { palettes, colors in
+                    // `PaletteEntity.init`/`ColorEntity.init` are @MainActor; the
+                    // sink closure itself isn't isolated, so hop explicitly
+                    // (matching the persistence sinks above) rather than relying
+                    // on RunLoop.main scheduling to satisfy the compiler.
+                    Task { @MainActor in
+                        if #available(iOS 26.0, *) {
+                            EntityIndexer.reindex(
+                                palettes: palettes.map(PaletteEntity.init),
+                                colors: colors.map(ColorEntity.init)
+                            )
+                        }
                     }
                 }
-            }
-            .store(in: &cancellables)
+                .store(in: &cancellables)
+        }
 
         // Mark edits dirty immediately (not debounced) so a reload that
         // lands mid-debounce knows there's unpersisted work to flush/retry.
@@ -528,7 +537,7 @@ class AppData: ObservableObject {
 
         UserDefaults.standard.removeObject(forKey: Self.recentSearchesKey)
         ExportFiles.removeAll()
-        if #available(iOS 26.0, *) {
+        if indexesSpotlight, #available(iOS 26.0, *) {
             EntityIndexer.removeAll()
         }
         return true

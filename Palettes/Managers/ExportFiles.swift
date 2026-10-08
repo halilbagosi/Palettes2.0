@@ -16,10 +16,10 @@ enum ExportFiles {
 
     /// Writes `data` to `<directory>/<baseName>.<ext>`. `baseName` is reduced
     /// to letters, numbers, `-` and `_`, so a palette name can never escape
-    /// `directory`; an empty result falls back to "palette".
+    /// `directory`; the result is capped at 80 characters; an empty result falls back to "palette".
     static func write(_ data: Data, baseName: String, ext: String) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let safe = String(baseName.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
+        let safe = String(String(baseName.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }).prefix(80))
         let url = directory
             .appendingPathComponent(safe.isEmpty ? "palette" : safe)
             .appendingPathExtension(ext)

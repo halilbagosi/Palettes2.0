@@ -31,6 +31,12 @@ final class ExportFilesTests: XCTestCase {
         XCTAssertEqual(url.lastPathComponent, "café-noir.ase")
     }
 
+    func testVeryLongNameIsCappedAndWrites() throws {
+        let url = try ExportFiles.write(Data("x".utf8), baseName: String(repeating: "a", count: 300), ext: "json")
+        XCTAssertLessThanOrEqual(url.deletingPathExtension().lastPathComponent.count, 80)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
     func testRemoveAllDeletesEverything() throws {
         let url = try ExportFiles.write(Data("x".utf8), baseName: "a", ext: "json")
         ExportFiles.removeAll()

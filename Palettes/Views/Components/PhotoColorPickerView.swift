@@ -45,10 +45,11 @@ struct PhotoColorPickerView: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: geo.size.width, height: geo.size.height)
                         .accessibilityLabel("Photo")
-                        .accessibilityHint("Drag to pick a color. Or use the actions to pick the center or the suggested color.")
+                        .accessibilityHint("Use the actions to pick the center or the suggested color, or double-tap and hold, then drag.")
                         .accessibilityAction(named: "Pick Color at Center") {
                             sample(at: CGPoint(x: rect.midX, y: rect.midY), in: rect)
                             currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+                            UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
                         }
                         .accessibilityActions {
                             if let seed = initialRGB {
@@ -57,6 +58,7 @@ struct PhotoColorPickerView: View {
                                     hasSample = true
                                     marker = nil
                                     currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+                                    UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
                                 }
                             }
                         }

@@ -48,6 +48,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Delete All Data", systemImage: "trash")
                     }
+                    .confirmationDialog("Delete all data?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+                        Button("Delete All Data", role: .destructive) { deleteAll() }
+                    } message: {
+                        Text("This permanently deletes every color, palette, and tag, your recent searches, and Siri and Spotlight suggestions. If iCloud sync is on, they're also removed from your other devices. This can't be undone.")
+                    }
                 } header: {
                     Text("Your Data")
                 } footer: {
@@ -75,11 +80,6 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
-            }
-            .confirmationDialog("Delete all data?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
-                Button("Delete All Data", role: .destructive) { deleteAll() }
-            } message: {
-                Text("This permanently deletes every color, palette, and tag, your recent searches, and Siri and Spotlight suggestions. If iCloud sync is on, they're also removed from your other devices. This can't be undone.")
             }
             .alert("Couldn't export your library.", isPresented: $showExportError) {
                 Button("OK", role: .cancel) {}

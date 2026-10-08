@@ -78,6 +78,7 @@ struct PaletteCell: View {
                 .liquidGlass(.interactive, in: .circle)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
+                .padding(-3)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Copy HEX")

@@ -16,6 +16,14 @@ final class EntityIndexerTests: XCTestCase {
 
     override func setUp() async throws {
         originalApplier = EntityIndexer.applier
+        // Drain anything queued by other AppData instances in the test host
+        // (their real Spotlight reindexes can outlast a short wait) before
+        // installing the recording stub.
+        EntityIndexer.applier = { _, _ in }
+        for _ in 0..<600 where !EntityIndexer.isIdle {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(EntityIndexer.isIdle, "indexer worker never went idle in setUp")
         applied = []
         EntityIndexer.applier = { [weak self] palettes, _ in
             try? await Task.sleep(for: .milliseconds(100))
