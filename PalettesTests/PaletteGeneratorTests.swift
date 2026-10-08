@@ -228,4 +228,22 @@ final class PaletteGeneratorTests: XCTestCase {
         )
         XCTAssertEqual(accepted, [3: "Fern", 2: "Morning Frost"])
     }
+
+    /// A base color the builder can't use (short or alpha hex) must not
+    /// count toward the palette: the result still reaches the requested size.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testUnusableBaseHexDoesNotShrinkThePalette() async throws {
+        let result = try await PaletteGenerator.generate(
+            baseColors: [
+                PaletteGenerator.BaseColor(hex: "#ABC", name: "Short"),
+                PaletteGenerator.BaseColor(hex: "#3366CC", name: "Ocean Blue"),
+            ],
+            size: 4,
+            vibe: nil
+        )
+        XCTAssertEqual(result.hexCodes.count, 4)
+        XCTAssertEqual(result.hexCodes.first, "#3366CC")
+        XCTAssertEqual(result.colorNames.first, "Ocean Blue")
+    }
 }

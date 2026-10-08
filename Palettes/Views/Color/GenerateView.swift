@@ -719,7 +719,7 @@ struct GenerateView: View {
             // padded out with synthesized harmony colors.
             let needed = max(1, paletteSize - baseColors.count)
             let extracted = try ImageColorExtractor.extractColors(from: image, count: needed)
-            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
+            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: "") }
         }
 
         // Without a vibe, an image (or hand-picked colors + image) must yield

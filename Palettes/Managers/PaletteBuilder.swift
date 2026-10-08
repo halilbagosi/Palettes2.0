@@ -425,7 +425,8 @@ enum PaletteBuilder {
 
     /// The first candidate at least `floor` (CIEDE2000) from every placed
     /// color, trying each floor in turn. If none clears even the lowest,
-    /// the candidate farthest from everything placed.
+    /// the not-yet-placed candidate farthest from everything placed (an
+    /// already-placed hex only if every candidate is placed).
     private static func pick(_ candidates: [OKLCH], placed: [String], floors: [Double]) -> String {
         let hexes = candidates.map(\.hex)
         for floor in floors {
@@ -433,7 +434,10 @@ enum PaletteBuilder {
                 return hex
             }
         }
-        return hexes.max { minDistance($0, to: placed) < minDistance($1, to: placed) } ?? hexes[0]
+        let fresh = hexes.filter { !placed.contains($0) }
+        let pool = fresh.isEmpty ? hexes : fresh
+        // Candidates are never empty, so `max` always finds one.
+        return pool.max { minDistance($0, to: placed) < minDistance($1, to: placed) }!
     }
 
     private static func minDistance(_ hex: String, to placed: [String]) -> Double {

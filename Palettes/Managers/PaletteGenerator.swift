@@ -226,7 +226,7 @@ enum PaletteGenerator {
         for base in baseColors {
             var hex = base.hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             if !hex.hasPrefix("#") { hex = "#" + hex }
-            guard Color(hex: hex) != nil, seen.insert(hex).inserted else { continue }
+            guard OKLCH(hex: hex) != nil, seen.insert(hex).inserted else { continue }
             let name = base.name.trimmingCharacters(in: .whitespacesAndNewlines)
             result.append(LockedColor(hex: hex, name: name))
         }
