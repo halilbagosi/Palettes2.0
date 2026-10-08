@@ -200,19 +200,26 @@ final class SchemeFidelityTests: XCTestCase {
     /// relaxes toward 6 rather than reaching outside the family, so the
     /// universal guarantee is the lower floor: always a visible step, never
     /// a repeat.
+    ///
+    /// Sampled repeatedly because the plan seed is random per generation: a
+    /// single sample let a ~14% monochromatic size-6 failure (the fill
+    /// relaxing to 9 when its candidate ladder had no pale tints) pass most
+    /// runs and fail some.
     func testInFamilyFillsStayPerceptuallyDistinct() async throws {
         for scheme in HarmonyScheme.allCases {
             for size in sizes {
-                let palette = try await generate(scheme: scheme, size: size)
-                let hexes = palette.hexCodes
-                let floor: Double = size <= 6 ? PaletteValidation.minDeltaE : 6
-                for i in 0..<hexes.count {
-                    for j in (i + 1)..<hexes.count {
-                        XCTAssertGreaterThanOrEqual(
-                            ColorNamer.perceptualDistance(hex1: hexes[i], hex2: hexes[j]),
-                            floor,
-                            "\(scheme.rawValue) size \(size) shipped near-duplicates \(hexes[i])/\(hexes[j])"
-                        )
+                for run in 0..<20 {
+                    let palette = try await generate(scheme: scheme, size: size)
+                    let hexes = palette.hexCodes
+                    let floor: Double = size <= 6 ? PaletteValidation.minDeltaE : 6
+                    for i in 0..<hexes.count {
+                        for j in (i + 1)..<hexes.count {
+                            XCTAssertGreaterThanOrEqual(
+                                ColorNamer.perceptualDistance(hex1: hexes[i], hex2: hexes[j]),
+                                floor,
+                                "\(scheme.rawValue) size \(size) run \(run) shipped near-duplicates \(hexes[i])/\(hexes[j])"
+                            )
+                        }
                     }
                 }
             }

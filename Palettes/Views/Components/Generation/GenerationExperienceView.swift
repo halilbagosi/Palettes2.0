@@ -186,7 +186,7 @@ struct GenerationResultView: View {
     private func removeColor(at index: Int) {
         guard paletteColors.count > 2, index < paletteColors.count else { return }
         let removed = paletteColors[index]
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+        _ = withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             paletteColors.remove(at: index)
         }
         ToastManager.shared.show("Color removed", icon: "trash.fill") {

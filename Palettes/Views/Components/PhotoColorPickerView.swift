@@ -14,6 +14,7 @@ struct PhotoColorPickerView: View {
     let onUse: (_ rgb: (r: Double, g: Double, b: Double)) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var currentRGB: (r: Double, g: Double, b: Double) = (128, 128, 128)
     @State private var currentName = ""
@@ -43,6 +44,24 @@ struct PhotoColorPickerView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: geo.size.width, height: geo.size.height)
+                        .accessibilityLabel("Photo")
+                        .accessibilityHint("Use the actions to pick the center or the suggested color, or double-tap and hold, then drag.")
+                        .accessibilityAction(named: "Pick Color at Center") {
+                            sample(at: CGPoint(x: rect.midX, y: rect.midY), in: rect)
+                            currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+                            UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
+                        }
+                        .accessibilityActions {
+                            if let seed = initialRGB {
+                                Button("Use Suggested Color") {
+                                    currentRGB = seed
+                                    hasSample = true
+                                    marker = nil
+                                    currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+                                    UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
+                                }
+                            }
+                        }
 
                     if let m = marker {
                         markerView.position(m)
@@ -75,6 +94,7 @@ struct PhotoColorPickerView: View {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark").foregroundStyle(.white)
                     }
+                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use") {
@@ -154,13 +174,13 @@ struct PhotoColorPickerView: View {
         }
         // Stretch toward the direction of travel, thinning on the cross axis.
         .scaleEffect(
-            x: 1 + abs(vx) * 0.45 - abs(vy) * 0.12,
-            y: 1 + abs(vy) * 0.45 - abs(vx) * 0.12
+            x: reduceMotion ? 1 : 1 + abs(vx) * 0.45 - abs(vy) * 0.12,
+            y: reduceMotion ? 1 : 1 + abs(vy) * 0.45 - abs(vx) * 0.12
         )
         .shadow(radius: 4)
         // Under-damped spring → the squish overshoots and bounces as speed
         // changes and when the finger lifts.
-        .animation(.spring(response: 0.32, dampingFraction: 0.5), value: dragVelocity)
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.5), value: dragVelocity)
         .allowsHitTesting(false)
     }
 
@@ -189,6 +209,8 @@ struct PhotoColorPickerView: View {
         }
         .padding(18)
         .liquidGlass(.regular, in: .rect(cornerRadius: 24))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(hasSample ? "Selected color \(currentName.isEmpty ? currentHex : currentName), \(currentHex)" : "No color selected")
     }
 }
 
