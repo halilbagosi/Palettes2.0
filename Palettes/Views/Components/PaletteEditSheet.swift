@@ -10,10 +10,15 @@ struct PaletteEditSheet: View {
 
     @State private var isAddingColor = false
     @State private var editColorIndex: Int?
+    @State private var taggingColorIndex: Int?
 
     struct ColorBindingWrapper: Identifiable {
         let id: Int
     }
+
+    /// Identifiable wrapper so `.sheet(item:)` can present the tag picker
+    /// for a specific swatch index (mirrors `ColorBindingWrapper`).
+    private struct TaggingTarget: Identifiable { let id: Int }
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == palette.id })
@@ -46,34 +51,41 @@ struct PaletteEditSheet: View {
                         .font(.system(size: 18, weight: .medium))
                 }
                 
-                Section(footer: Text("Tap a color to edit it. Swipe left to delete.")) {
+                Section(footer: Text("Tap a color to edit it, or its tag to assign a role. Swipe left to delete.")) {
                     ForEach(Array(livePalette.colors.enumerated()), id: \.offset) { index, _ in
                         let colorVM = colorViewModel(at: index, from: livePalette)
-                        Button {
-                            editColorIndex = index
-                        } label: {
-                            HStack(spacing: 14) {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(colorVM.color.gradient)
-                                    .frame(width: 50, height: 50)
-                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.primary.opacity(0.1), lineWidth: 1))
-                                    .shadow(color: colorVM.color.opacity(0.3), radius: 5, x: 0, y: 3)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(colorVM.name)
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(.primary)
-                                    
-                                    HStack(spacing: 6) {
-                                        Text(colorVM.HEX)
-                                            .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                        Text(colorVM.color.rgbString)
-                                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        HStack(spacing: 14) {
+                            Button {
+                                editColorIndex = index
+                            } label: {
+                                HStack(spacing: 14) {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(colorVM.color.gradient)
+                                        .frame(width: 50, height: 50)
+                                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.primary.opacity(0.1), lineWidth: 1))
+                                        .shadow(color: colorVM.color.opacity(0.3), radius: 5, x: 0, y: 3)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(colorVM.name)
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.primary)
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(colorVM.HEX)
+                                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                            Text(colorVM.color.rgbString)
+                                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                        }
+                                        .foregroundColor(.secondary)
                                     }
-                                    .foregroundColor(.secondary)
                                 }
                             }
-                            .padding(.vertical, 4)
+                            .buttonStyle(.plain)
+
+                            Spacer(minLength: 8)
+
+                            roleControl(for: index)
                         }
+                        .padding(.vertical, 4)
                     }
                     .onDelete { offsets in
                         removeColors(at: offsets)
@@ -81,6 +93,8 @@ struct PaletteEditSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // Sheets cover the app-root toast overlay, so host one here too.
+            .toastOverlay()
             .navigationTitle("Edit Palette")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -94,7 +108,7 @@ struct PaletteEditSheet: View {
                         Image(systemName: "plus")
                             .fontWeight(.semibold)
                     }
-                    .buttonStyle(.glassProminent)
+                    .glassButton(prominent: true)
                     .tint(.accentColor)
                 }
             }
@@ -118,14 +132,14 @@ struct PaletteEditSheet: View {
             )) { wrapper in
                 if let paletteIdx = paletteIndex {
                     ColorEditView(
-                        colorName: $appData.palettes[paletteIdx].colorNames[wrapper.id],
-                        hexCode: $appData.palettes[paletteIdx].hexCodes[wrapper.id],
-                        colorValue: $appData.palettes[paletteIdx].colors[wrapper.id],
+                        colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
+                        hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
+                        colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
                         promptOnNameMatch: true,
                         onSaveWithAction: { isOverwrite in
-                            let updatedHex = appData.palettes[paletteIdx].hexCodes[wrapper.id]
-                            let updatedName = appData.palettes[paletteIdx].colorNames[wrapper.id]
-                            let updatedColor = appData.palettes[paletteIdx].colors[wrapper.id]
+                            let updatedHex = appData.palettes[paletteIdx].paletteColors[wrapper.id].hex
+                            let updatedName = appData.palettes[paletteIdx].paletteColors[wrapper.id].name
+                            let updatedColor = appData.palettes[paletteIdx].paletteColors[wrapper.id].color
                             
                             if isOverwrite {
                                 if let existingIndex = appData.colors.firstIndex(where: { $0.name == updatedName }) {
@@ -146,16 +160,75 @@ struct PaletteEditSheet: View {
                     .presentationDetents([.large])
                 }
             }
+            .sheet(item: Binding(
+                get: { taggingColorIndex.map { TaggingTarget(id: $0) } },
+                set: { newValue in taggingColorIndex = newValue?.id }
+            )) { target in
+                RolePickerSheet(
+                    currentRole: target.id < livePalette.paletteColors.count ? livePalette.paletteColors[target.id].role : nil,
+                    palette: livePalette,
+                    colorIndex: target.id
+                )
+                .environmentObject(appData)
+                .presentationDetents([.medium, .large])
+            }
         }
+    }
+
+    /// Visible, opaque role indicator/control for a color row — deliberately
+    /// not a translucent `.liquidGlass` chip (that's what made the role hard
+    /// to read where it's shown elsewhere, on `RoleBadge`/the color card).
+    /// On a plain list row a solid capsule fill already has good contrast in
+    /// both light and dark mode with a real text label, so no glass effect
+    /// is needed here. Tapping it opens `RolePickerSheet` (built-in roles,
+    /// custom tags, tag creation, and removal) for this color.
+    @ViewBuilder
+    private func roleControl(for index: Int) -> some View {
+        let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
+        Button {
+            taggingColorIndex = index
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "tag.fill")
+                    .font(.caption2)
+                Text(role ?? "Add Tag")
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            // Tagged: white label on a solid dark capsule — legible in both
+            // light and dark mode (a fixed dark fill keeps white text high
+            // contrast regardless of appearance). Untagged: muted "Add Tag"
+            // affordance on the system fill.
+            .foregroundStyle(role != nil ? Color.white : Color.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(role != nil ? AnyShapeStyle(Color(white: 0.22)) : AnyShapeStyle(Color(.secondarySystemFill))))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func removeColors(at offsets: IndexSet) {
         guard let idx = paletteIndex else { return }
-        appData.palettes[idx].colors.remove(atOffsets: offsets)
-        let hexValid = offsets.filter { $0 < appData.palettes[idx].hexCodes.count }
-        appData.palettes[idx].hexCodes.remove(atOffsets: IndexSet(hexValid))
-        let nameValid = offsets.filter { $0 < appData.palettes[idx].colorNames.count }
-        appData.palettes[idx].colorNames.remove(atOffsets: IndexSet(nameValid))
+        let paletteID = palette.id
+        // Capture each removed entry (ascending indices) so Undo can reinsert
+        // them at their original spots.
+        let removed: [(index: Int, entry: PaletteColor)] = offsets.sorted().map { i in
+            (i, appData.palettes[idx].paletteColors[i])
+        }
+        appData.palettes[idx].paletteColors.remove(atOffsets: offsets)
+
+        let count = removed.count
+        ToastManager.shared.show(count == 1 ? "Color removed" : "\(count) colors removed", icon: "trash.fill") { [weak appData] in
+            guard let appData,
+                  let idx = appData.palettes.firstIndex(where: { $0.id == paletteID }) else { return }
+            withAnimation(.spring()) {
+                for (index, entry) in removed {
+                    appData.palettes[idx].paletteColors.insert(entry, at: min(index, appData.palettes[idx].paletteColors.count))
+                }
+            }
+        }
     }
 
     private func colorViewModel(at index: Int, from pal: PaletteViewModel) -> ColorViewModel {

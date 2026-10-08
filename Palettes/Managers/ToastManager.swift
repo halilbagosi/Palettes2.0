@@ -9,31 +9,48 @@ class ToastManager: ObservableObject {
     @Published var message: String = ""
     @Published var icon: String = "checkmark.circle.fill"
     @Published var isShowing: Bool = false
-    
+    @Published var undoAction: (() -> Void)?
+
     private var hideWork: DispatchWorkItem?
-    
-    func show(_ message: String, icon: String = "doc.on.doc.fill") {
+
+    func show(_ message: String, icon: String = "doc.on.doc.fill", undo: (() -> Void)? = nil) {
         hideWork?.cancel()
         self.message = message
         self.icon = icon
-        
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+        self.undoAction = undo
+
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.75)) {
             isShowing = true
         }
-        
+        UIAccessibility.post(notification: .announcement, argument: message)
+
         let work = DispatchWorkItem { [weak self] in
-            withAnimation(.easeOut(duration: 0.3)) {
+            withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.3)) {
                 self?.isShowing = false
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
+        // Undoable toasts linger longer so there's time to react; longer still
+        // under VoiceOver so Undo is reachable.
+        let delay: Double = undo == nil ? 1.8 : (UIAccessibility.isVoiceOverRunning ? 8.0 : 4.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    func performUndo() {
+        let action = undoAction
+        undoAction = nil
+        hideWork?.cancel()
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.25)) {
+            isShowing = false
+        }
+        action?()
     }
 }
 
 /// A view modifier that overlays the toast pill at the top of the screen.
 struct ToastOverlay: ViewModifier {
     @StateObject private var manager = ToastManager.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     func body(content: Content) -> some View {
         content
@@ -47,13 +64,22 @@ struct ToastOverlay: ViewModifier {
                         Text(manager.message)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.primary)
+
+                        if manager.undoAction != nil {
+                            Button("Undo") {
+                                manager.performUndo()
+                            }
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.tint)
+                            .padding(.leading, 4)
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)
-                    .glassEffect(.regular, in: .capsule)
+                    .liquidGlass(.regular, in: .capsule)
                     .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
                     .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     .zIndex(999)
                 }
             }

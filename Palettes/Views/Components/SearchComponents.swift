@@ -37,22 +37,16 @@ struct SearchSectionHeader: View {
 
 struct HueChip: View {
     let title: String
-    let swatch: Color?
+    let tint: Color?
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                if let swatch {
-                    Circle()
-                        .fill(swatch.gradient)
-                        .frame(width: 12, height: 12)
-                        .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
-                }
                 Text(title)
                     .font(.subheadline.weight(isSelected ? .semibold : .medium))
-                if isSelected, swatch != nil {
+                if isSelected, tint != nil {
                     Image(systemName: "checkmark")
                         .font(.caption2.weight(.bold))
                         .transition(.scale.combined(with: .opacity))
@@ -60,15 +54,29 @@ struct HueChip: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .background {
-                if isSelected {
-                    Capsule().fill(Color.accentColor)
-                }
-            }
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .foregroundStyle(isSelected ? selectedForeground : (tint ?? Color.primary))
+            .background(
+                Capsule()
+                    .fill((tint ?? Color.accentColor).opacity(isSelected ? 1 : 0))
+            )
+            .liquidGlass(.interactive, in: .capsule)
         }
         .buttonStyle(.plain)
+    }
+
+    private var selectedForeground: Color {
+        guard let tint else { return .white }
+
+        let rgb = tint.rgbComponents
+        let normalized = [rgb.r, rgb.g, rgb.b].map { $0 / 255.0 }
+        let linear = normalized.map { component in
+            component <= 0.03928
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        return luminance > 0.45 ? .black : .white
     }
 }
 
@@ -106,7 +114,7 @@ struct RecentSearchesRow: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .glassEffect(.regular.interactive(), in: .capsule)
+                            .liquidGlass(.interactive, in: .capsule)
                         }
                         .buttonStyle(.plain)
                     }
@@ -145,7 +153,7 @@ struct SearchEmptyLibraryView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
             }
-            .buttonStyle(.glassProminent)
+            .glassButton(prominent: true)
             .tint(.accentColor)
         }
         .frame(maxWidth: .infinity)

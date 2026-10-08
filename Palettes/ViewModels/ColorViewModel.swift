@@ -13,6 +13,8 @@ struct ColorViewModel: Identifiable, Sendable, Hashable {
     var color: Color
     var HEX: String
     var usedInPalette: Bool
+    var isFavorite: Bool = false
+    var isGenerated: Bool = false
 
     static func == (lhs: ColorViewModel, rhs: ColorViewModel) -> Bool {
         lhs.id == rhs.id

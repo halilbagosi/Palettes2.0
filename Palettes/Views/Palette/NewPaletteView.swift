@@ -13,6 +13,10 @@ struct NewPaletteView: View {
 
     @State private var editColorIndex: Int?
 
+    @State private var showDuplicateAlert = false
+    @State private var showNameDuplicateAlert = false
+    @State private var duplicateOfName = ""
+
     struct ColorBindingWrapper: Identifiable {
         let id: Int // Index
     }
@@ -27,12 +31,29 @@ struct NewPaletteView: View {
 
     var body: some View {
         NavigationStack {
+            scrollContent
+                .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
+                    Button("Save Anyway") { performCreate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("A palette with these colors already exists as \"\(duplicateOfName)\".")
+                }
+                .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
+                    Button("Save Anyway") { performCreate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("A palette named \"\(duplicateOfName)\" already exists.")
+                }
+        }
+    }
+
+    private var scrollContent: some View {
             ScrollView {
                 VStack(spacing: 0) {
                     TextField("Palette Name", text: $paletteName)
                         .font(.system(size: 18, weight: .medium))
                         .padding()
-                        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
                         .padding(.horizontal)
                         .padding(.top, 16)
 
@@ -83,10 +104,11 @@ struct NewPaletteView: View {
                         Image(systemName: "xmark")
                             .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { createPalette() }
-                        .buttonStyle(.glassProminent)
+                        .glassButton(prominent: true)
                         .fontWeight(.semibold)
                         .disabled(!canCreate)
                 }
@@ -117,7 +139,6 @@ struct NewPaletteView: View {
                     appendToDraft(ColorInputEntry(name: color.name, hex: color.HEX, color: color.color))
                 }
             }
-        }
     }
 
     // MARK: - Palette Preview
@@ -138,7 +159,7 @@ struct NewPaletteView: View {
                     Spacer()
                 }
                 .frame(height: 70)
-                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
                 .padding(.horizontal)
                 .padding(.top, 12)
                 // Vanish instantly when the first color arrives — a fading
@@ -223,7 +244,7 @@ struct NewPaletteView: View {
             .accessibilityLabel("Remove color")
         }
         .padding(10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
     }
 
     private func colorNameBinding(for index: Int) -> Binding<String> {
@@ -288,6 +309,21 @@ struct NewPaletteView: View {
         let name = paletteName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, !paletteColors.isEmpty else { return }
 
+        if let existing = appData.existingPalette(matching: paletteHexCodes) {
+            duplicateOfName = existing.name
+            showDuplicateAlert = true
+            return
+        }
+        if let existing = appData.existingPalette(named: name) {
+            duplicateOfName = existing.name
+            showNameDuplicateAlert = true
+            return
+        }
+        performCreate()
+    }
+
+    private func performCreate() {
+        let name = paletteName.trimmingCharacters(in: .whitespaces)
         let newPalette = PaletteViewModel(
             name: name,
             colors: paletteColors,

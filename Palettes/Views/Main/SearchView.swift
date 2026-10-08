@@ -12,7 +12,8 @@ struct SearchView: View {
     @State private var searchText: String = ""
     @State private var scope: SearchScope = .all
     @State private var selectedHues: Set<HueCategory> = []
-    @AppStorage("recentSearches") private var recentSearchesJSON: String = "[]"
+    @State private var selectedTags: Set<String> = []
+    @AppStorage(AppData.recentSearchesKey) private var recentSearchesJSON: String = "[]"
 
     // MARK: - Query
 
@@ -42,15 +43,17 @@ struct SearchView: View {
 
     var filteredPalettes: [PaletteViewModel] {
         appData.palettes.filter { palette in
-            palette.name.localizedCaseInsensitiveContains(query) ||
-            palette.colorNames.contains(where: { $0.localizedCaseInsensitiveContains(query) }) ||
-            (!hexQuery.isEmpty && palette.hexCodes.contains(where: { $0.localizedCaseInsensitiveContains(hexQuery) }))
+            SearchMatching.paletteMatchesQuery(palette, query: query, hexQuery: hexQuery)
         }
     }
 
     private var showColorResults: Bool { scope != .palettes && !filteredColors.isEmpty }
     private var showPaletteResults: Bool { scope != .colors && !filteredPalettes.isEmpty }
     private var hasResults: Bool { showColorResults || showPaletteResults }
+
+    private var browseResultIDs: [UUID] {
+        browseColors.map(\.id) + browsePalettes.map(\.id)
+    }
 
     // MARK: - Browse (idle) Filtering
 
@@ -60,9 +63,9 @@ struct SearchView: View {
     }
 
     private var browsePalettes: [PaletteViewModel] {
-        guard !selectedHues.isEmpty else { return appData.palettes }
-        return appData.palettes.filter { palette in
-            palette.colors.contains(where: { selectedHues.contains($0.hueCategory) })
+        appData.palettes.filter { palette in
+            (selectedHues.isEmpty || palette.colors.contains(where: { selectedHues.contains($0.hueCategory) })) &&
+            SearchMatching.paletteMatchesTags(palette, tags: selectedTags)
         }
     }
 
@@ -71,6 +74,11 @@ struct SearchView: View {
         let present = Set(appData.colors.map { $0.color.hueCategory })
             .union(appData.palettes.flatMap { $0.colors.map { $0.hueCategory } })
         return HueCategory.allCases.filter { present.contains($0) }
+    }
+
+    /// Only offer chips for color-role tags that actually exist in the library's palettes.
+    private var availableTags: [String] {
+        SearchMatching.tagsInUse(palettes: appData.palettes)
     }
 
     // MARK: - Recent Searches
@@ -126,6 +134,7 @@ struct SearchView: View {
             recordRecentSearch()
         }
         .sensoryFeedback(.selection, trigger: selectedHues)
+        .sensoryFeedback(.selection, trigger: selectedTags)
         .sensoryFeedback(.selection, trigger: scope)
     }
 
@@ -145,7 +154,8 @@ struct SearchView: View {
                                 colorName: color.name,
                                 hexCode: color.HEX,
                                 color: color.color,
-                                highlight: query
+                                highlight: query,
+                                isGenerated: color.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
@@ -166,7 +176,8 @@ struct SearchView: View {
                             PaletteCellSearch(
                                 paletteName: palette.name,
                                 colors: palette.colors,
-                                highlight: query
+                                highlight: query,
+                                isGenerated: palette.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
@@ -199,6 +210,14 @@ struct SearchView: View {
 
             hueChips
 
+            browseResultSections
+        }
+        .padding()
+    }
+
+    private var browseResultSections: some View {
+        VStack(alignment: .leading, spacing: 20) {
+
             if !browseColors.isEmpty {
                 SearchSectionHeader(title: "Colors", count: browseColors.count)
 
@@ -210,13 +229,19 @@ struct SearchView: View {
                             ColorCellSearch(
                                 colorName: color.name,
                                 hexCode: color.HEX,
-                                color: color.color
+                                color: color.color,
+                                isGenerated: color.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
                         .hoverEffect(.lift)
+                        .transition(.opacity)
                     }
                 }
+            }
+
+            if !availableTags.isEmpty {
+                tagChips
             }
 
             if !browsePalettes.isEmpty {
@@ -229,26 +254,28 @@ struct SearchView: View {
                         NavigationLink(value: palette) {
                             PaletteCellSearch(
                                 paletteName: palette.name,
-                                colors: palette.colors
+                                colors: palette.colors,
+                                isGenerated: palette.isGenerated
                             )
                         }
                         .buttonStyle(.plain)
                         .hoverEffect(.lift)
+                        .transition(.opacity)
                     }
                 }
             }
 
-            if browseColors.isEmpty && browsePalettes.isEmpty, !selectedHues.isEmpty {
+            if browseColors.isEmpty && browsePalettes.isEmpty, (!selectedHues.isEmpty || !selectedTags.isEmpty) {
                 ContentUnavailableView(
                     "No matches",
                     systemImage: "paintpalette",
-                    description: Text("Nothing in your library falls in the selected hue range\(selectedHues.count == 1 ? "" : "s").")
+                    description: Text("Nothing in your library matches the selected filters.")
                 )
                 .padding(.top, 40)
+                .transition(.opacity)
             }
         }
-        .padding()
-        .animation(.spring(response: 0.3), value: selectedHues)
+        .animation(.spring(response: 0.24, dampingFraction: 1), value: browseResultIDs)
     }
 
     private var hueChips: some View {
@@ -256,29 +283,61 @@ struct SearchView: View {
             HStack(spacing: 8) {
                 HueChip(
                     title: "All",
-                    swatch: nil,
+                    tint: nil,
                     isSelected: selectedHues.isEmpty
                 ) {
-                    withAnimation(.spring(response: 0.3)) { selectedHues.removeAll() }
+                    selectedHues.removeAll()
                 }
 
                 ForEach(availableHues) { hue in
                     HueChip(
                         title: hue.rawValue,
-                        swatch: hue.representativeColor,
+                        tint: hue.representativeColor,
                         isSelected: selectedHues.contains(hue)
                     ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            if selectedHues.contains(hue) {
-                                selectedHues.remove(hue)
-                            } else {
-                                selectedHues.insert(hue)
-                            }
+                        if selectedHues.contains(hue) {
+                            selectedHues.remove(hue)
+                        } else {
+                            selectedHues.insert(hue)
                         }
                     }
                 }
             }
             .padding(.vertical, 2)
+            .padding(.trailing, 18)
+            .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedHues)
+        }
+        .scrollClipDisabled()
+    }
+
+    private var tagChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                HueChip(
+                    title: "All",
+                    tint: nil,
+                    isSelected: selectedTags.isEmpty
+                ) {
+                    selectedTags.removeAll()
+                }
+
+                ForEach(availableTags, id: \.self) { tag in
+                    HueChip(
+                        title: tag,
+                        tint: nil,
+                        isSelected: selectedTags.contains(tag)
+                    ) {
+                        if selectedTags.contains(tag) {
+                            selectedTags.remove(tag)
+                        } else {
+                            selectedTags.insert(tag)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+            .padding(.trailing, 18)
+            .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedTags)
         }
         .scrollClipDisabled()
     }

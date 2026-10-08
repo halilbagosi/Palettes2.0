@@ -1,7 +1,9 @@
 import SwiftUI
 import PhotosUI
 import FoundationModels
+import Foundation
 
+@available(iOS 26.0, *)
 struct GenerateView: View {
     @EnvironmentObject var appData: AppData
 
@@ -14,46 +16,35 @@ struct GenerateView: View {
     @State private var colorsFadeLeading = false
     @State private var colorsFadeTrailing = true
     @State private var selectedColorIDs: Set<UUID> = []
+    @State private var scheme: HarmonyScheme = .auto
     @State private var vibeDescription = ""
     @State private var glowPhase: CGFloat = 0
     @State private var selectedImage: UIImage?
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var showCamera = false
+    @State private var showPhotoPicker = false
     @FocusState private var vibeFocused: Bool
 
     // Generation state
     @State private var arrivedColors: [Color] = []
     @State private var generationTask: Task<Void, Never>?
 
-    // Result state (editable draft)
+    // Result state (editable draft). A single `PaletteColor` array is the
+    // sole source of truth here — no parallel colors/hexCodes/colorNames
+    // arrays to keep aligned by index, and roles ride along for free.
     @State private var resultName = ""
-    @State private var resultColors: [Color] = []
-    @State private var resultHexes: [String] = []
-    @State private var resultColorNames: [String] = []
+    @State private var resultPaletteColors: [PaletteColor] = []
     @State private var pendingRefinement = ""
+    @State private var showDuplicateAlert = false
+    @State private var showNameDuplicateAlert = false
+    @State private var duplicateOfName = ""
 
     private let sizeOptions = [2, 4, 6, 8, 10, 12]
     private let formOrbDiameter: CGFloat = 150
 
     /// Iridescent tint reserved for the Apple Intelligence glyph.
     private var glowGradient: AnyShapeStyle {
-        let t = Float(glowPhase)
-        let d: Float = 0.18
-        return AnyShapeStyle(MeshGradient(width: 3, height: 3, points: [
-            SIMD2(-0.5, -0.5),
-            SIMD2(0.5 + d * sin(t * .pi * 2), -0.5),
-            SIMD2(1.5, -0.5),
-            SIMD2(-0.5, 0.5 + d * cos(t * .pi * 2 + 1)),
-            SIMD2(0.5 + d * cos(t * .pi * 2), 0.5 + d * sin(t * .pi * 2)),
-            SIMD2(1.5, 0.5 - d * cos(t * .pi * 2 + 2)),
-            SIMD2(-0.5, 1.5),
-            SIMD2(0.5 - d * sin(t * .pi * 2 + 1.5), 1.5),
-            SIMD2(1.5, 1.5)
-        ], colors: [
-            .yellow,  .orange, .pink,
-            .orange,  .purple, .indigo,
-            .pink,    .indigo, .blue
-        ]))
+        GeneratedGradient.style(phase: glowPhase)
     }
 
     /// The simulator can't run Apple Intelligence; show the form there so the
@@ -84,7 +75,7 @@ struct GenerateView: View {
                 LiquidGradientView(
                     speed: 0.25,
                     intensity: phase == .result ? 0.22 : 0.10,
-                    colors: phase == .result ? resultColors : []
+                    colors: phase == .result ? resultPaletteColors.map(\.color) : []
                 )
                 .blur(radius: 60)
                 .ignoresSafeArea()
@@ -93,7 +84,7 @@ struct GenerateView: View {
             .toolbar(phase == .generating ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
-                withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
+                withAnimation(.easeInOut(duration: GeneratedGradient.cycleDuration).repeatForever(autoreverses: true)) {
                     glowPhase = 1
                 }
                 consumePendingColor()
@@ -107,6 +98,22 @@ struct GenerateView: View {
     // MARK: - Stage (form / generating / result)
 
     private var stage: some View {
+        stageContent
+            .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
+                Button("Save Anyway") { performSave() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A palette with these colors already exists as \"\(duplicateOfName)\".")
+            }
+            .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
+                Button("Save Anyway") { performSave() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A palette named \"\(duplicateOfName)\" already exists.")
+            }
+    }
+
+    private var stageContent: some View {
         ZStack {
             formContent
                 .opacity(phase == .form ? 1 : 0)
@@ -115,9 +122,7 @@ struct GenerateView: View {
             if phase == .result {
                 GenerationResultView(
                     name: $resultName,
-                    colors: $resultColors,
-                    hexCodes: $resultHexes,
-                    colorNames: $resultColorNames,
+                    paletteColors: $resultPaletteColors,
                     onBack: { withAnimation(.smooth(duration: 0.5)) { phase = .form } },
                     onRegenerate: {
                         pendingRefinement = ""
@@ -133,7 +138,7 @@ struct GenerateView: View {
                 .transition(.blurReplace)
             }
 
-            // While generating, the orb takes center stage as the waiting moment.
+            // Generation gives the orb room to become the waiting moment.
             if phase == .generating {
                 generatingOrb
             }
@@ -149,7 +154,7 @@ struct GenerateView: View {
             showsProgress: true
         )
         .matchedGeometryEffect(id: "orb", in: orbNamespace)
-        .frame(width: 340, height: 340)
+        .frame(width: 260, height: 260)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
@@ -220,6 +225,13 @@ struct GenerateView: View {
                 }
             }
         }
+        .onChange(of: selectedColorIDs) { _, ids in
+            // The scheme menu only makes sense while base colors are
+            // selected; once the last one is deselected (one at a time, not
+            // just via resetForm), drop back to Auto so a stale override
+            // can't silently apply to a vibe- or photo-only generation.
+            if ids.isEmpty { scheme = .auto }
+        }
         }
     }
 
@@ -276,7 +288,20 @@ struct GenerateView: View {
                         Text("· \(selectedColorIDs.count) selected")
                             .font(.subheadline)
                             .foregroundStyle(.tint)
+
+                        Spacer(minLength: 0)
+
+                        Button("Clear") {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                selectedColorIDs.removeAll()
+                            }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tint)
                     }
+
+                    Spacer(minLength: 8)
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -310,6 +335,13 @@ struct GenerateView: View {
                     }
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+                }
+
+                // Mode selector sits under the color
+                // strip, revealed once at least one base color is chosen.
+                if !selectedColorIDs.isEmpty {
+                    modeSection
+                        .transition(.opacity)
                 }
             }
         }
@@ -365,6 +397,56 @@ struct GenerateView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    /// Lets the user choose how the generator should interpret the selected
+    /// base colors, including UI-specific light and dark utility palettes.
+    private var modeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Mode")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer(minLength: 0)
+
+                Menu {
+                    ForEach(HarmonyScheme.allCases) { option in
+                        Button {
+                            scheme = option
+                        } label: {
+                            if option == scheme {
+                                Label(option.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(option.displayName)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "paintpalette")
+                            .font(.body.weight(.semibold))
+
+                        Text(scheme.displayName)
+                            .font(.body.weight(.medium))
+
+                        Spacer(minLength: 12)
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .liquidGlass(.interactive, in: .rect(cornerRadius: 30))
+                }
+                .frame(maxWidth: 360)
+                .accessibilityLabel("Palette mode")
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
     // MARK: - Vibe
 
     private var vibeField: some View {
@@ -394,7 +476,7 @@ struct GenerateView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .liquidGlass(.interactive, in: .capsule)
 
             if !vibeFocused {
                 imageMenuButton
@@ -428,7 +510,7 @@ struct GenerateView: View {
     // MARK: - Generate Button
 
     private var generateBar: some View {
-        GlassEffectContainer(spacing: 16) {
+        GlassContainer(spacing: 16) {
             HStack(spacing: 16) {
                 Button {
                     startGeneration()
@@ -438,7 +520,7 @@ struct GenerateView: View {
                         .padding(.horizontal, 24)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.glassProminent)
+                .glassButton(prominent: true)
                 .disabled(!hasInput)
                 .keyboardShortcut(.return, modifiers: .command)
             }
@@ -473,7 +555,7 @@ struct GenerateView: View {
             }
         }
         .padding(8)
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
         .transition(.scale.combined(with: .opacity))
     }
 
@@ -486,18 +568,24 @@ struct GenerateView: View {
                 Label("Take Photo", systemImage: "camera")
             }
 
-            PhotosPicker(selection: $photosPickerItem, matching: .images) {
+            // A PhotosPicker nested directly in a Menu never presents, so the
+            // menu item just flips a flag and the picker is driven by the
+            // `.photosPicker(isPresented:)` modifier below.
+            Button {
+                showPhotoPicker = true
+            } label: {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
             }
         } label: {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.title3)
-                .frame(width: 44, height: 44)
+                .frame(width: 52, height: 52)
                 .foregroundColor(.accentColor)
                 .contentShape(Circle())
-                .glassEffect(.regular.interactive(), in: .circle)
+                .liquidGlass(.interactive, in: .circle)
         }
         .clipShape(Circle())
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photosPickerItem, matching: .images)
         .onChange(of: photosPickerItem) { _, newItem in
             Task {
                 if let data = try? await newItem?.loadTransferable(type: Data.self),
@@ -526,12 +614,12 @@ struct GenerateView: View {
                     arrivedColors = colors
                 }
                 resultName = palette.name
-                resultColors = palette.colors
-                resultHexes = palette.hexCodes
-                resultColorNames = palette.colorNames
+                resultPaletteColors = palette.paletteColors
                 // Let the last drop settle before revealing the result
                 try? await Task.sleep(for: .milliseconds(900))
                 withAnimation(.smooth(duration: 0.7)) { phase = .result }
+            } catch is CancellationError {
+                withAnimation(.smooth(duration: 0.5)) { phase = .form }
             } catch {
                 ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
                 withAnimation(.smooth(duration: 0.5)) { phase = .form }
@@ -540,23 +628,43 @@ struct GenerateView: View {
     }
 
     private func saveResult() {
-        guard resultColors.count >= 2 else { return }
+        guard resultPaletteColors.count >= 2 else { return }
+        if let existing = appData.existingPalette(matching: resultPaletteColors.map(\.hex)) {
+            duplicateOfName = existing.name
+            showDuplicateAlert = true
+            return
+        }
+        let trimmed = resultName.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty, let existing = appData.existingPalette(named: trimmed) {
+            duplicateOfName = existing.name
+            showNameDuplicateAlert = true
+            return
+        }
+        performSave()
+    }
+
+    private func performSave() {
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
         appData.palettes.append(PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
-            colors: resultColors,
-            hexCodes: resultHexes,
-            colorNames: resultColorNames
+            paletteColors: resultPaletteColors,
+            isGenerated: true
         ))
 
         // Add any newly generated colors to the Colors library.
-        for i in resultColors.indices {
-            let hex = i < resultHexes.count ? resultHexes[i] : ""
+        for (i, paletteColor) in resultPaletteColors.enumerated() {
+            let hex = paletteColor.hex
             guard !hex.isEmpty else { continue }
             let alreadyExists = appData.colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
             guard !alreadyExists else { continue }
-            let name = i < resultColorNames.count && !resultColorNames[i].isEmpty ? resultColorNames[i] : "Color \(i + 1)"
-            appData.colors.append(ColorViewModel(name: name, color: resultColors[i], HEX: hex, usedInPalette: true))
+            let name = paletteColor.name.isEmpty ? "Color \(i + 1)" : paletteColor.name
+            appData.colors.append(ColorViewModel(
+                name: name,
+                color: paletteColor.color,
+                HEX: hex,
+                usedInPalette: true,
+                isGenerated: true
+            ))
         }
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
@@ -570,6 +678,7 @@ struct GenerateView: View {
     private func resetForm() {
         paletteSize = 4
         selectedColorIDs = []
+        scheme = .auto
         vibeDescription = ""
         selectedImage = nil
         photosPickerItem = nil
@@ -582,26 +691,47 @@ struct GenerateView: View {
             .filter { selectedColorIDs.contains($0.id) }
             .map { PaletteGenerator.BaseColor(hex: $0.HEX, name: $0.name) }
 
-        if let image = selectedImage {
-            let extracted = try ImageColorExtractor.extractColors(from: image, count: 4)
-            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
-        }
-
         let combinedVibe = [vibeDescription, pendingRefinement]
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: ". ")
+        let hasVibe = !combinedVibe.isEmpty
+
+        if let image = selectedImage {
+            // Pull enough colors straight from the image to fill the whole
+            // palette (not a fixed handful), so an image-based palette is
+            // built FROM the image rather than seeded with a few colors and
+            // padded out with synthesized harmony colors.
+            let needed = max(1, paletteSize - baseColors.count)
+            let extracted = try ImageColorExtractor.extractColors(from: image, count: needed)
+            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
+        }
+
+        // Without a vibe, an image (or hand-picked colors + image) must yield
+        // ONLY the colors actually supplied — never invented ones. Clamping
+        // the target to what we have makes the generator lock them verbatim
+        // and synthesize nothing; an image with few distinct colors simply
+        // produces a smaller palette. With a vibe, keep the full requested
+        // size so the AI may expand to fill whatever the image didn't cover.
+        // The pure color-seed path (colors selected, no image) is unchanged:
+        // it still builds a harmony palette around the seeds.
+        let targetSize = (selectedImage != nil && !hasVibe)
+            ? min(paletteSize, baseColors.count)
+            : paletteSize
 
         return try await PaletteGenerator.generate(
             baseColors: baseColors,
-            size: paletteSize,
+            size: targetSize,
             vibe: combinedVibe,
+            scheme: scheme,
+            existingNames: appData.palettes.map { $0.name },
             onPartialColors: onColors
         )
     }
 }
 
 /// Orb + description text at the top of the form.
+@available(iOS 26.0, *)
 private struct GenerateHeaderView: View {
     let showsOrb: Bool
     let orbDiameter: CGFloat
@@ -612,7 +742,7 @@ private struct GenerateHeaderView: View {
         VStack(alignment: .leading, spacing: 28) {
             // The orb is part of the scroll content, so it moves with the
             // view and is pushed up by the keyboard instead of overlaying.
-            // When generation starts it morphs into the big centered orb.
+            // Its matched counterpart expands into the generation orb.
             ZStack {
                 if showsOrb {
                     GenerationOrbView(colors: colors)
@@ -633,6 +763,8 @@ private struct GenerateHeaderView: View {
 }
 
 #Preview {
-    GenerateView()
-        .environmentObject(AppData())
+    if #available(iOS 26.0, *) {
+        GenerateView()
+            .environmentObject(AppData())
+    }
 }

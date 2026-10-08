@@ -16,8 +16,19 @@ struct PaletteDetailView: View {
     let palette: PaletteViewModel
     @EnvironmentObject var appData: AppData
     @State private var isEditingPalette = false
+    @State private var editColorIndex: Int?
+    @State private var taggingColorIndex: Int?
     @State private var showDeleteAlert = false
+    @State private var isExporting = false
     @Environment(\.dismiss) var dismiss
+
+    private struct ColorBindingWrapper: Identifiable {
+        let id: Int
+    }
+
+    private struct TaggingTarget: Identifiable {
+        let id: Int
+    }
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == palette.id })
@@ -68,12 +79,37 @@ struct PaletteDetailView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)], spacing: 20) {
                     ForEach(Array(livePalette.colors.enumerated()), id: \.offset) { index, _ in
                         let colorVM = colorViewModel(at: index, from: livePalette)
+                        let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
                         ColorCellBig(
                             colorName: colorVM.name,
                             hexCode: colorVM.HEX,
                             color: colorVM.color,
-                            isUsedInPalette: true
+                            isUsedInPalette: true,
+                            onCardTap: { editColorIndex = index }
                         )
+                        .overlay(alignment: .topTrailing) {
+                            if let role {
+                                Button {
+                                    openTagging(for: index)
+                                } label: {
+                                    RoleBadge(role: role)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(ColorCellBig.overlayInset)
+                                .transition(.scale(scale: 0.8).combined(with: .opacity))
+                            }
+                        }
+                        .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
+                        .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
+                            ColorMorphCard(
+                                colorName: colorVM.name,
+                                hexCode: colorVM.HEX,
+                                color: colorVM.color,
+                                isCompact: false
+                            )
+                            .frame(width: 360, height: 180)
+                            .padding(4)
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -88,6 +124,7 @@ struct PaletteDetailView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
+                .accessibilityLabel("Export palette as PNG")
             }
             
             ToolbarItem(placement: .topBarTrailing) {
@@ -97,7 +134,33 @@ struct PaletteDetailView: View {
                     } label: {
                         Label("Edit Palette", systemImage: "pencil")
                     }
-                    
+
+                    Button {
+                        toggleFavorite()
+                    } label: {
+                        Label(livePalette.isFavorite ? "Remove Favorite" : "Favorite",
+                              systemImage: livePalette.isFavorite ? "star.slash" : "star")
+                    }
+
+                    Button {
+                        let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
+                        presentShare(items: [textToShare])
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button {
+                        isExporting = true
+                    } label: {
+                        Label("Export…", systemImage: "square.and.arrow.up.on.square")
+                    }
+
+                    Button {
+                        savePaletteAsPNG()
+                    } label: {
+                        Label("Export as PNG", systemImage: "photo")
+                    }
+
                     Button {
                         let hexes = livePalette.hexCodes.joined(separator: ", ")
                         copyToClipboard(hexes, label: "Copied HEX")
@@ -127,7 +190,7 @@ struct PaletteDetailView: View {
                     } label: {
                         Label("Export as CSS", systemImage: "curlybraces.square")
                     }
-                    
+
                     Divider()
                     
                     Button(role: .destructive) {
@@ -143,7 +206,53 @@ struct PaletteDetailView: View {
         .sheet(isPresented: $isEditingPalette) {
             PaletteEditSheet(paletteName: livePalette.name, palette: palette)
                 .environmentObject(appData)
-                .presentationSizing(.form)
+                .formPresentationSizing()
+        }
+        .sheet(item: Binding(
+            get: {
+                if let index = editColorIndex,
+                   index < livePalette.paletteColors.count {
+                    return ColorBindingWrapper(id: index)
+                }
+                return nil
+            },
+            set: { newValue in
+                if newValue == nil {
+                    editColorIndex = nil
+                }
+            }
+        )) { wrapper in
+            if let paletteIdx = paletteIndex,
+               wrapper.id < appData.palettes[paletteIdx].paletteColors.count {
+                ColorEditView(
+                    colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
+                    hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
+                    colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
+                    promptOnNameMatch: true,
+                    onSaveWithAction: { isOverwrite in
+                        syncEditedPaletteColor(at: wrapper.id, isOverwrite: isOverwrite)
+                    }
+                )
+                .environmentObject(appData)
+                .presentationDetents([.large])
+                .formPresentationSizing()
+            }
+        }
+        .sheet(item: Binding(
+            get: { taggingColorIndex.map { TaggingTarget(id: $0) } },
+            set: { newValue in taggingColorIndex = newValue?.id }
+        )) { target in
+            RolePickerSheet(
+                currentRole: target.id < livePalette.paletteColors.count ? livePalette.paletteColors[target.id].role : nil,
+                palette: livePalette,
+                colorIndex: target.id
+            )
+            .environmentObject(appData)
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $isExporting) {
+            ExportPaletteSheet(palette: livePalette)
+                .presentationDetents([.medium, .large])
         }
         .alert("Delete Palette", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -158,24 +267,124 @@ struct PaletteDetailView: View {
         }
     }
 
+    // MARK: - Color context menu
+
+    /// Same actions as the Colors tab's card menu, minus edit/delete — those
+    /// belong to the library; here the card may be a transient palette color.
+    @ViewBuilder
+    private func colorContextMenu(_ color: ColorViewModel, index: Int) -> some View {
+        if appData.colors.contains(where: { $0.id == color.id }) {
+            Button {
+                toggleColorFavorite(color)
+            } label: {
+                Label(color.isFavorite ? "Remove Favorite" : "Favorite",
+                      systemImage: color.isFavorite ? "star.slash" : "star")
+            }
+        }
+
+        Button {
+            openTagging(for: index)
+        } label: {
+            Label("Tag…", systemImage: "tag")
+        }
+
+        Button {
+            copyToClipboard(color.HEX, label: "Copied HEX")
+        } label: {
+            Label("Copy as HEX", systemImage: "number")
+        }
+
+        Button {
+            copyToClipboard(color.color.rgbString, label: "Copied RGB")
+        } label: {
+            Label("Copy as RGB", systemImage: "paintpalette")
+        }
+
+        Button {
+            let cssName = color.name.lowercased().replacingOccurrences(of: " ", with: "-")
+            copyToClipboard("--\(cssName): \(color.HEX);", label: "Copied CSS")
+        } label: {
+            Label("Export for CSS", systemImage: "curlybraces.square")
+        }
+
+        Button {
+            presentShare(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func toggleColorFavorite(_ color: ColorViewModel) {
+        if let idx = appData.colors.firstIndex(where: { $0.id == color.id }) {
+            appData.colors[idx].isFavorite.toggle()
+        }
+    }
+
+    // MARK: - Actions
+
+    private func openTagging(for index: Int) {
+        taggingColorIndex = index
+    }
+
+    private func syncEditedPaletteColor(at index: Int, isOverwrite: Bool) {
+        guard let paletteIdx = paletteIndex,
+              index < appData.palettes[paletteIdx].paletteColors.count else { return }
+
+        let updatedColor = appData.palettes[paletteIdx].paletteColors[index]
+
+        if isOverwrite {
+            if let existingIndex = appData.colors.firstIndex(where: { $0.name == updatedColor.name }) {
+                appData.colors[existingIndex].HEX = updatedColor.hex
+                appData.colors[existingIndex].color = updatedColor.color
+            }
+        } else if let existingIndex = appData.colors.firstIndex(where: {
+            $0.HEX.caseInsensitiveCompare(updatedColor.hex) == .orderedSame
+        }) {
+            appData.colors[existingIndex].name = updatedColor.name
+            appData.colors[existingIndex].color = updatedColor.color
+        } else {
+            appData.colors.append(
+                ColorViewModel(
+                    name: updatedColor.name,
+                    color: updatedColor.color,
+                    HEX: updatedColor.hex,
+                    usedInPalette: true
+                )
+            )
+        }
+    }
+
+    private func toggleFavorite() {
+        if let idx = paletteIndex {
+            appData.palettes[idx].isFavorite.toggle()
+        }
+    }
+
+    private func presentShare(items: [Any]) {
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+            activityVC.popoverPresentationController?.sourceView = topVC.view
+            activityVC.popoverPresentationController?.sourceRect = CGRect(x: topVC.view.bounds.maxX - 50, y: 0, width: 1, height: 1)
+            topVC.present(activityVC, animated: true)
+        }
+    }
+
     // MARK: - Save as PNG
 
     @MainActor
     private func savePaletteAsPNG() {
         let colorVMs = livePalette.colors.indices.map { colorViewModel(at: $0, from: livePalette) }
-        if let uiImage = PaletteImageRenderer.renderImage(for: livePalette, colors: colorVMs) {
-            let activityVC = UIActivityViewController(activityItems: [uiImage], applicationActivities: nil)
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let rootVC = windowScene.windows.first?.rootViewController {
-                // Find the topmost presented VC to present from
-                var topVC = rootVC
-                while let presented = topVC.presentedViewController {
-                    topVC = presented
-                }
-                activityVC.popoverPresentationController?.sourceView = topVC.view
-                activityVC.popoverPresentationController?.sourceRect = CGRect(x: topVC.view.bounds.maxX - 50, y: 0, width: 1, height: 1)
-                topVC.present(activityVC, animated: true)
-            }
+        if let image = PaletteImageRenderer.renderImage(for: livePalette, colors: colorVMs) {
+            // Passing the UIImage keeps the existing share flow and exposes iOS's
+            // built-in "Save Image" action in the activity sheet.
+            presentShare(items: [image])
+        } else {
+            ToastManager.shared.show("Unable to create PNG", icon: "exclamationmark.triangle")
         }
     }
 }
