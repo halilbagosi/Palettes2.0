@@ -95,16 +95,25 @@ final class OnboardingModelTests: XCTestCase {
 
     func testPhotoFallbackLogic() {
         let model = makeModel()
-        model.cameraAccess = .notDetermined
-        XCTAssertFalse(model.usesPhotoFallback)
-        model.cameraAccess = .authorized
-        XCTAssertFalse(model.usesPhotoFallback)
-        model.cameraAccess = .denied
-        XCTAssertTrue(model.usesPhotoFallback)
-        model.cameraAccess = .restricted
-        XCTAssertTrue(model.usesPhotoFallback)
-        model.cameraAccess = .unavailable
-        XCTAssertTrue(model.usesPhotoFallback)
+        let fallback: [(OnboardingCameraAccess, Bool)] = [
+            (.notDetermined, false), (.authorized, false),
+            (.denied, true), (.restricted, true), (.unavailable, true),
+        ]
+        for (access, expected) in fallback {
+            model.cameraAccess = access
+            XCTAssertEqual(model.cameraUIState == .photoFallback, expected)
+        }
+    }
+
+    func testReplayResetsAllOnboardingFlags() {
+        let defaults = UserDefaults(suiteName: "OnboardingModelTests.\(UUID().uuidString)")!
+        for key in [OnboardingKeys.didComplete, OnboardingKeys.didShowCoachMark, OnboardingKeys.didShowExtras] {
+            defaults.set(true, forKey: key)
+        }
+        OnboardingKeys.resetForReplay(defaults)
+        for key in [OnboardingKeys.didComplete, OnboardingKeys.didShowCoachMark, OnboardingKeys.didShowExtras] {
+            XCTAssertFalse(defaults.bool(forKey: key), key)
+        }
     }
 
     // MARK: - Camera permission mapping
@@ -134,7 +143,6 @@ final class OnboardingModelTests: XCTestCase {
         for (access, state) in expected {
             model.cameraAccess = access
             XCTAssertEqual(model.cameraUIState, state)
-            XCTAssertEqual(model.usesPhotoFallback, state == .photoFallback)
         }
     }
 

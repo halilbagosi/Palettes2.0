@@ -3,8 +3,9 @@
 //  Palettes
 //
 //  Pure state for the first-launch onboarding: the step machine, camera
-//  permission fallback, and the color the user scans. No UI, persistence, or
-//  framework dependencies, so it is fully unit-testable. The presenter owns
+//  permission fallback, and the color the user scans. No views or persistence
+//  (it imports UIKit/Combine only for `UIImage` and `ObservableObject`), so it
+//  is fully unit-testable. The presenter owns
 //  the completion flag and navigation; the model only reports how it ended.
 //
 
@@ -14,7 +15,7 @@ import UIKit
 
 /// Steps shown inside the full-screen cover. The detail-screen coach mark and
 /// the extras cards happen after the cover dismisses, so they are not steps
-/// here (TODO: track them with their own `@AppStorage` keys in `OnboardingKeys`).
+/// here; they track themselves with the `OnboardingKeys` flags below.
 enum OnboardingStep: Int, CaseIterable {
     case pull, orb, camera, adjust, generate
 }
@@ -26,6 +27,14 @@ enum OnboardingKeys {
     static let didShowCoachMark = "didShowOnboardingCoachMark"
     /// Set once the post-onboarding extras sheet has been shown.
     static let didShowExtras = "didShowOnboardingExtras"
+
+    /// Replay from Settings: the whole experience runs again, including the
+    /// one-time coach mark and extras sheet.
+    static func resetForReplay(_ defaults: UserDefaults = .standard) {
+        defaults.set(false, forKey: didComplete)
+        defaults.set(false, forKey: didShowCoachMark)
+        defaults.set(false, forKey: didShowExtras)
+    }
 }
 
 enum OnboardingFinishReason: Equatable {
@@ -103,14 +112,6 @@ final class OnboardingModel: ObservableObject {
     /// `onFinish` fires exactly once and is the presenter's only cue to dismiss.
     init(onFinish: @escaping (OnboardingFinishReason) -> Void = { _ in }) {
         self.onFinish = onFinish
-    }
-
-    /// Denied, restricted, or missing cameras route to the photo/sample fallback.
-    var usesPhotoFallback: Bool {
-        switch cameraAccess {
-        case .denied, .restricted, .unavailable: true
-        case .notDetermined, .authorized: false
-        }
     }
 
     var cameraUIState: OnboardingCameraUIState {

@@ -21,7 +21,6 @@ struct PaletteView: View {
     @State private var favoritesOnly = false
     @EnvironmentObject var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
-    @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
 
     // MARK: - Display state
 
@@ -115,7 +114,7 @@ struct PaletteView: View {
                         .presentationDetents([.medium, .large])
                 }
                 .sheet(isPresented: $showSettings, onDismiss: {
-                    if replay.consume() { didCompleteOnboarding = false }
+                    if replay.consume() { OnboardingKeys.resetForReplay() }
                 }) {
                     SettingsView()
                         .environmentObject(appData)

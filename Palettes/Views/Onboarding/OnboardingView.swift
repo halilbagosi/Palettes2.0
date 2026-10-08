@@ -2,9 +2,10 @@
 //  OnboardingView.swift
 //  Palettes
 //
-//  First-launch onboarding. A step machine over `OnboardingModel`; steps
-//  after the orb are placeholders until their tasks land. The presenter
-//  dismisses the cover in response to `onFinish`.
+//  First-launch onboarding. A step machine over `OnboardingModel`: pull, orb,
+//  camera (or sample/photo fallback), adjust, and generate. Finishing saves the
+//  palette through `AppData`; the presenter dismisses the cover in response to
+//  `onFinish`.
 //
 
 import SwiftUI

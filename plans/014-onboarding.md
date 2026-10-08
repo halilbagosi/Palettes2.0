@@ -98,6 +98,8 @@
 **Polish fixes (Task 7):** Skip capped at xxxLarge (it overlapped the orb at AX sizes); orb shrinks on accessibility sizes and short screens; captions capped at accessibility1 (no mid-word breaks in sliders and buttons); Generate button pinned below the scrolling captions; coach-mark banner capped at xxxLarge.
 
 **Needs on-device verification:** real camera (preview, capture, rotation coordinator, interruption and runtime-error handling, permission prompts), the Apple Intelligence generation path (gradient name, `isGenerated` badge), VoiceOver and the Actions rotor, landscape, iOS 17/18 runtime behavior (input could not be driven on the 17.5 simulator), notch-less hardware (SE walked in simulator only).
+- GenerateView orb on iOS 17/18 now has an ultraThinMaterial body behind the liquid (visual change); check it.
+- Library colors are saved on the debounce, like GenerateView; killing the app within ~300ms of saving can drop them.
 
 ## Verification
 

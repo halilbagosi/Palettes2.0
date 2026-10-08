@@ -55,7 +55,9 @@ private struct OnboardingCoachMarkModifier: ViewModifier {
             }
             .onDisappear {
                 presentTask?.cancel()
-                if visible { dismiss(arm: false) }
+                // Left before the hint showed: drop the target so the hint
+                // can't appear on a later visit. Replay sets it again.
+                if visible { dismiss(arm: false) } else { appData.coachMarkPaletteID = nil }
             }
     }
 
