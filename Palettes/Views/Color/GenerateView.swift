@@ -40,7 +40,7 @@ struct GenerateView: View {
     @State private var duplicateOfName = ""
 
     private let sizeOptions = [2, 4, 6, 8, 10, 12]
-    private let formOrbDiameter: CGFloat = 150
+    private let formOrbDiameter: CGFloat = 138
 
     /// Iridescent tint reserved for the Apple Intelligence glyph.
     private var glowGradient: AnyShapeStyle {
@@ -172,7 +172,7 @@ struct GenerateView: View {
                 )
                 .zIndex(1)
 
-                sizeSection
+                generationOptionsSection
                 colorsSection
 
                 Color.clear
@@ -198,7 +198,7 @@ struct GenerateView: View {
                     vibeField
 
                     // While typing, the field's send arrow takes over — hide the bar.
-                    if !vibeFocused {
+                    if !vibeFocused && canGenerateFromSource {
                         generateBar
                             .padding(.top, 8)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -256,21 +256,92 @@ struct GenerateView: View {
         }
     }
 
-    // MARK: - Size
+    // MARK: - Generation Options
 
-    private var sizeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Palette Size")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            Picker("Palette Size", selection: $paletteSize) {
+    /// Keep the two generation controls together so they remain discoverable
+    /// on both compact phones and wider iPad layouts. Menus avoid the
+    /// six-segment squeeze that made the previous size control hard to use.
+    private var generationOptionsSection: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Menu {
                 ForEach(sizeOptions, id: \.self) { size in
-                    Text("\(size)").tag(size)
+                    Button {
+                        paletteSize = size
+                    } label: {
+                        if size == paletteSize {
+                            Label("\(size) colors", systemImage: "checkmark")
+                        } else {
+                            Text("\(size) colors")
+                        }
+                    }
                 }
+            } label: {
+                generationOptionLabel(
+                    title: "Palette Size",
+                    value: "\(paletteSize) colors",
+                    systemImage: "square.stack.3d.up"
+                )
             }
-            .pickerStyle(.segmented)
+            .accessibilityLabel("Palette size")
+
+            if canGenerateFromSource {
+                Menu {
+                    ForEach(HarmonyScheme.allCases) { option in
+                        Button {
+                            scheme = option
+                        } label: {
+                            if option == scheme {
+                                Label(option.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(option.displayName)
+                            }
+                        }
+                    }
+                } label: {
+                    generationOptionLabel(
+                        title: "Mode",
+                        value: scheme.displayName,
+                        systemImage: "paintpalette"
+                    )
+                }
+                .accessibilityLabel("Palette mode")
+                .transition(.scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
+            }
         }
+        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canGenerateFromSource)
+    }
+
+    private func generationOptionLabel(title: String, value: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 5) {
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Spacer(minLength: 2)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
     }
 
     // MARK: - Colors
@@ -336,13 +407,6 @@ struct GenerateView: View {
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
                     .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
                 }
-
-                // Mode selector sits under the color
-                // strip, revealed once at least one base color is chosen.
-                if !selectedColorIDs.isEmpty {
-                    modeSection
-                        .transition(.opacity)
-                }
             }
         }
     }
@@ -395,56 +459,6 @@ struct GenerateView: View {
         .hoverEffect(.lift)
         .accessibilityLabel(Text(colorItem.name))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    /// Lets the user choose how the generator should interpret the selected
-    /// base colors, including UI-specific light and dark utility palettes.
-    private var modeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Mode")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Spacer(minLength: 0)
-
-                Menu {
-                    ForEach(HarmonyScheme.allCases) { option in
-                        Button {
-                            scheme = option
-                        } label: {
-                            if option == scheme {
-                                Label(option.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(option.displayName)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "paintpalette")
-                            .font(.body.weight(.semibold))
-
-                        Text(scheme.displayName)
-                            .font(.body.weight(.medium))
-
-                        Spacer(minLength: 12)
-
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity, minHeight: 52)
-                    .liquidGlass(.interactive, in: .rect(cornerRadius: 30))
-                }
-                .frame(maxWidth: 360)
-                .accessibilityLabel("Palette mode")
-
-                Spacer(minLength: 0)
-            }
-        }
     }
 
     // MARK: - Vibe
@@ -502,6 +516,10 @@ struct GenerateView: View {
             || selectedImage != nil
     }
 
+    private var canGenerateFromSource: Bool {
+        !selectedColorIDs.isEmpty || selectedImage != nil
+    }
+
     private var generationStatusText: String {
         let vibe = vibeDescription.trimmingCharacters(in: .whitespaces)
         return vibe.isEmpty ? "Generating palette…" : vibe
@@ -521,7 +539,6 @@ struct GenerateView: View {
                         .padding(.vertical, 6)
                 }
                 .glassButton(prominent: true)
-                .disabled(!hasInput)
                 .keyboardShortcut(.return, modifiers: .command)
             }
             .frame(maxWidth: .infinity)

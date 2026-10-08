@@ -180,9 +180,19 @@ struct ColorsView: View {
         }
     }
 
+    private static func gridLayout(for layout: ListLayout) -> MorphingCardGrid {
+        switch layout {
+        case .compact:
+            MorphingCardGrid(minColumnWidth: 160, maxColumnWidth: 280, rowHeight: 118, spacing: 12)
+        case .normal:
+            MorphingCardGrid(minColumnWidth: 340, maxColumnWidth: 560, rowHeight: 180, spacing: 20)
+        }
+    }
+
     @ViewBuilder
     private var libraryContent: some View {
-        if displayedColors.isEmpty {
+        let colors = displayedColors
+        if colors.isEmpty {
             ContentUnavailableView(
                 filteredEmptyTitle,
                 systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
@@ -190,15 +200,12 @@ struct ColorsView: View {
             )
         } else {
             ScrollView {
-                MorphingCardGrid(
-                    minColumnWidth: layout == .compact ? 160 : 340,
-                    maxColumnWidth: layout == .compact ? 280 : 560,
-                    rowHeight: layout == .compact ? 118 : 180,
-                    spacing: layout == .compact ? 12 : 20
-                ) {
-                    ForEach(displayedColors) { color in
-                        colorCard(color)
-                    }
+                LazyMorphingCardGrid(
+                    items: colors,
+                    grid: Self.gridLayout(for: layout),
+                    morphTargets: [Self.gridLayout(for: layout == .compact ? .normal : .compact)]
+                ) { color in
+                    colorCard(color)
                 }
                 .padding()
                 .padding(.bottom, 88)
