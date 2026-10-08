@@ -44,21 +44,36 @@ enum OnboardingExtrasLogic {
         return cards
     }
 
-    /// One of the phrases in `PalettesShortcuts` ("Generate a palette in ...").
-    static func siriPhrase(appName: String) -> String {
-        "Generate a palette in \(appName)"
+    /// The timer runs only while nothing else is on screen over the detail
+    /// (color menu, Tag, edit, export, alert).
+    static func shouldStartTimer(target: UUID?, paletteID: UUID, alreadyShown: Bool, isBusy: Bool) -> Bool {
+        !isBusy && shouldPresent(target: target, paletteID: paletteID, alreadyShown: alreadyShown)
+    }
+
+    /// A phrase that exists in `PalettesShortcuts` and works on this device.
+    /// "Generate a palette" throws without Apple Intelligence, so without AI
+    /// the Open Palette phrase is used instead.
+    static func siriPhrase(appName: String, usesAI: Bool, paletteName: String) -> String {
+        usesAI ? "Generate a palette in \(appName)" : "Open \(paletteName) in \(appName)"
+    }
+
+    static func icloudLine(signedIn: Bool) -> String {
+        signedIn
+            ? "Your palettes sync across your devices with iCloud."
+            : "Sign in to iCloud in Settings to sync your palettes across your devices."
     }
 }
 
 extension View {
     /// Hook for `PaletteDetailView`; inert unless the coach mark armed it.
-    func onboardingExtras(for palette: PaletteViewModel) -> some View {
-        modifier(OnboardingExtrasModifier(palette: palette))
+    func onboardingExtras(for palette: PaletteViewModel, isBusy: Bool) -> some View {
+        modifier(OnboardingExtrasModifier(palette: palette, isBusy: isBusy))
     }
 }
 
 private struct OnboardingExtrasModifier: ViewModifier {
     let palette: PaletteViewModel
+    let isBusy: Bool
 
     @EnvironmentObject private var appData: AppData
     @AppStorage(OnboardingKeys.didShowExtras) private var didShow = false
@@ -72,23 +87,30 @@ private struct OnboardingExtrasModifier: ViewModifier {
                     .environmentObject(appData)
             }
             .onChange(of: appData.extrasPaletteID) { _, _ in arm() }
+            // Anything opening over the detail stops the wait; closing restarts it.
+            .onChange(of: isBusy) { _, _ in
+                task?.cancel()
+                arm()
+            }
             .onAppear { arm() }
-            .onDisappear { task?.cancel() }
+            .onDisappear {
+                task?.cancel()
+                showSheet = false
+            }
     }
 
     private func arm() {
-        guard OnboardingExtrasLogic.shouldPresent(
-            target: appData.extrasPaletteID, paletteID: palette.id, alreadyShown: didShow) else { return }
+        guard OnboardingExtrasLogic.shouldStartTimer(
+            target: appData.extrasPaletteID, paletteID: palette.id, alreadyShown: didShow, isBusy: isBusy)
+        else { return }
         task?.cancel()
         task = Task {
-            // Let the hint (and a color menu, if that's how it was dismissed) clear first.
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled,
-                  OnboardingExtrasLogic.shouldPresent(
-                    target: appData.extrasPaletteID, paletteID: palette.id, alreadyShown: didShow)
+                  OnboardingExtrasLogic.shouldStartTimer(
+                    target: appData.extrasPaletteID, paletteID: palette.id, alreadyShown: didShow, isBusy: isBusy)
             else { return }
-            didShow = true
-            appData.extrasPaletteID = nil
+            // `didShow` is set by the sheet itself once it actually appears.
             showSheet = true
         }
     }
@@ -103,6 +125,8 @@ struct OnboardingExtrasView: View {
     @State private var image: UIImage?
     @State private var isExporting = false
     @State private var appeared = false
+    @AppStorage(OnboardingKeys.didShowExtras) private var didShow = false
+    @AccessibilityFocusState private var titleFocused: Bool
 
     private var appName: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
@@ -124,6 +148,7 @@ struct OnboardingExtrasView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
+                        .accessibilityFocused($titleFocused)
                     ForEach(OnboardingExtrasLogic.cards(siriAvailable: siriAvailable), id: \.self) { card in
                         view(for: card)
                     }
@@ -142,6 +167,10 @@ struct OnboardingExtrasView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
+            // Counted as shown only once it is really on screen.
+            didShow = true
+            appData.extrasPaletteID = nil
+            titleFocused = true
             image = renderImage()
             withAnimation(.easeOut(duration: 0.4)) { appeared = true }
         }
@@ -197,7 +226,7 @@ struct OnboardingExtrasView: View {
     private var siriCard: some View {
         if #available(iOS 26.0, *) {
             ExtrasCard(title: "Ask Siri", symbol: "waveform") {
-                Text("Say \u{201C}\(OnboardingExtrasLogic.siriPhrase(appName: appName))\u{201D}.")
+                Text("Say \u{201C}\(OnboardingExtrasLogic.siriPhrase(appName: appName, usesAI: OnboardingPaletteMaker.usesAI, paletteName: palette.name))\u{201D}.")
                     .font(.body.weight(.medium))
                 Text("Your palettes also show up in Spotlight search.")
                     .foregroundStyle(.secondary)
@@ -216,7 +245,7 @@ struct OnboardingExtrasView: View {
 
     private var icloudCard: some View {
         ExtrasCard(title: "iCloud", symbol: "icloud") {
-            Text("Your palettes sync across your devices with iCloud.")
+            Text(OnboardingExtrasLogic.icloudLine(signedIn: FileManager.default.ubiquityIdentityToken != nil))
                 .foregroundStyle(.secondary)
         }
     }

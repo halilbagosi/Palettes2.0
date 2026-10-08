@@ -179,8 +179,23 @@ final class OnboardingExtrasLogicTests: XCTestCase {
             [.share, .siri, .widget, .icloud])
     }
 
-    func testSiriPhraseMatchesAShortcutPhrase() {
-        XCTAssertEqual(OnboardingExtrasLogic.siriPhrase(appName: "Palettes"), "Generate a palette in Palettes")
+    func testSiriPhraseDependsOnAI() {
+        XCTAssertEqual(OnboardingExtrasLogic.siriPhrase(appName: "Palettes", usesAI: true, paletteName: "Dusk"),
+                       "Generate a palette in Palettes")
+        XCTAssertEqual(OnboardingExtrasLogic.siriPhrase(appName: "Palettes", usesAI: false, paletteName: "Dusk"),
+                       "Open Dusk in Palettes")
+    }
+
+    func testTimerWaitsWhileBusy() {
+        let id = UUID()
+        XCTAssertTrue(OnboardingExtrasLogic.shouldStartTimer(target: id, paletteID: id, alreadyShown: false, isBusy: false))
+        XCTAssertFalse(OnboardingExtrasLogic.shouldStartTimer(target: id, paletteID: id, alreadyShown: false, isBusy: true))
+        XCTAssertFalse(OnboardingExtrasLogic.shouldStartTimer(target: id, paletteID: id, alreadyShown: true, isBusy: false))
+    }
+
+    func testICloudLineFollowsSignInState() {
+        XCTAssertTrue(OnboardingExtrasLogic.icloudLine(signedIn: true).contains("sync across"))
+        XCTAssertTrue(OnboardingExtrasLogic.icloudLine(signedIn: false).hasPrefix("Sign in"))
     }
 
     func testCoachMarkWordingForVoiceOver() {
