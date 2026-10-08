@@ -71,12 +71,12 @@
 - [ ] Stop the session when leaving the step or backgrounding.
 
 ### Task 4: Sample, adjust, generate (steps 3–4)
-- [ ] Sample the center color of the still using `ImageColorExtractor`. Animate it dropping out of the orb into the selected color.
-- [ ] Tap on the frozen frame re-samples (use `PhotoLoupeGeometry` normalization as `PhotoColorPickerView` does).
-- [ ] Show brightness and saturation sliders via `AdjustmentSlider` + `ColorAdjustment`, plus a "Generate palette" button.
-- [ ] On tap, fade in the generation UI on the same screen with the color preselected inside the orb (`GenerationExperienceView`). Palette blooms from the orb.
-- [ ] Generated name: fill with `GeneratedGradient` (iOS 26 AI path); non-AI path shows a normal name.
-- [ ] Create the palette through `AppData`; keep `colors`/`hexCodes`/`colorNames` aligned.
+- [x] Sample the center color of the still using `ImageColorExtractor`. Animate it dropping out of the orb into the selected color.
+- [x] Tap on the frozen frame re-samples (use `PhotoLoupeGeometry` normalization as `PhotoColorPickerView` does).
+- [x] Show brightness and saturation sliders via `AdjustmentSlider` + `ColorAdjustment`, plus a "Generate palette" button.
+- [x] On tap, fade in the generation UI on the same screen with the color preselected inside the orb (`GenerationExperienceView`). Palette blooms from the orb.
+- [x] Generated name: fill with `GeneratedGradient` (iOS 26 AI path); non-AI path shows a normal name.
+- [x] Create the palette through `AppData`; keep `colors`/`hexCodes`/`colorNames` aligned.
 
 ### Task 5: Detail handoff and coach mark (step 5)
 - [ ] Dismiss onboarding and have `PaletteTabView` push `PaletteDetailView` for the new palette.

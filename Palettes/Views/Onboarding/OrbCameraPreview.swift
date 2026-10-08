@@ -142,6 +142,9 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
     private var isConfigured = false
     private var hasReportedFailure = false
     private var hasRestartedAfterError = false
+    /// Set by `start()`, cleared by `stop()`; confined to `queue`. A runtime
+    /// error after a deliberate stop must not bring the session back.
+    private var wantsRunning = false
     private var inFlight: PhotoCaptureCoordinator?
     private var inFlightDelegate: PhotoDelegate?
     private var onConfigured: (@Sendable (AVCaptureDevice) -> Void)?
@@ -168,6 +171,7 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
 
     func start() {
         queue.async { [self] in
+            wantsRunning = true
             guard configureIfNeeded() else {
                 if !hasReportedFailure {
                     hasReportedFailure = true
@@ -183,7 +187,7 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
     /// report failure so the UI falls back to the photo/sample path.
     func handleRuntimeError() {
         queue.async { [self] in
-            guard isConfigured else { return }
+            guard isConfigured, wantsRunning else { return }
             if !hasRestartedAfterError {
                 hasRestartedAfterError = true
                 if !session.isRunning { session.startRunning() }
@@ -201,6 +205,7 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
             inFlight?.cancel()
             inFlight = nil
             inFlightDelegate = nil
+            wantsRunning = false
             hasRestartedAfterError = false
             if session.isRunning { session.stopRunning() }
         }

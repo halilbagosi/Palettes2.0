@@ -79,6 +79,21 @@ final class OnboardingModel: ObservableObject {
     @Published var brightness = 0.5
     @Published var saturation = 0.5
 
+    /// The scanned color after the brightness and saturation sliders.
+    /// Temperature stays neutral: onboarding adjusts only those two.
+    var adjustedRGB: (r: Double, g: Double, b: Double)? {
+        guard let rgb = scannedRGB else { return nil }
+        return ColorAdjustment.apply(
+            baseR: rgb.r, baseG: rgb.g, baseB: rgb.b,
+            temperature: 0.5, saturation: saturation, brightness: brightness
+        )
+    }
+
+    /// `#RRGGBB` of the adjusted color: the anchor the palette is built from.
+    var selectedHex: String? {
+        adjustedRGB.map { ColorAdjustment.hexString(r: $0.r, g: $0.g, b: $0.b) }
+    }
+
     private let onFinish: (OnboardingFinishReason) -> Void
 
     /// `onFinish` fires exactly once and is the presenter's only cue to dismiss.

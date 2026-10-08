@@ -15,6 +15,7 @@ struct OnboardingView: View {
     @StateObject private var model: OnboardingModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var appData: AppData
 
     /// Rubber-banded stretch of the island blob while the user pulls down.
     @State private var pull: CGFloat = 0
@@ -31,6 +32,26 @@ struct OnboardingView: View {
     @State private var rippleActive = false
     @State private var rippleScale: CGFloat = 1
     @State private var rippleOpacity: Double = 0
+
+    // Adjust step
+    @State private var sampler: ImageColorExtractor.PixelSampler?
+    /// Normalized image coordinate of the current sample.
+    @State private var samplePoint = OnboardingSampling.center
+    @State private var sampleCount = 0
+    @State private var swatchRevealed = false
+    @State private var dropActive = false
+    @State private var dropLanded = false
+    @State private var dropTask: Task<Void, Never>?
+
+    // Generate step
+    private enum GenState {
+        case generating
+        case ready(OnboardingPaletteMaker.Made)
+        case failed
+    }
+    @State private var genState = GenState.generating
+    @State private var genColors: [Color] = []
+    @State private var genTask: Task<Void, Never>?
 
     private static let islandDiameter: CGFloat = 37
     private static let maxOrbDiameter: CGFloat = 260
@@ -64,6 +85,12 @@ struct OnboardingView: View {
         var orbCenter: CGPoint { CGPoint(x: full.width / 2, y: orbTop + orbDiameter / 2) }
         /// Safe-area-space height reserved above the captions.
         var captionTopInset: CGFloat { orbTop - topInset + orbDiameter + 24 }
+        static let swatchDiameter: CGFloat = 52
+        /// Screen-space center of the selected-color swatch, the first row of
+        /// the adjust captions.
+        var swatchCenter: CGPoint {
+            CGPoint(x: full.width / 2, y: orbTop + orbDiameter + 24 + Self.swatchDiameter / 2)
+        }
     }
 
     var body: some View {
@@ -120,8 +147,10 @@ struct OnboardingView: View {
         }
         .sensoryFeedback(.impact(weight: .light), trigger: model.step)
         .sensoryFeedback(.impact(weight: .medium), trigger: scanCount)
+        .sensoryFeedback(.selection, trigger: sampleCount)
         .onChange(of: model.step) { _, step in
             if step == .camera { refreshCameraAccess() }
+            if step == .adjust { beginAdjust() }
             updateCameraSession()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -141,6 +170,8 @@ struct OnboardingView: View {
             camera.stop()
             pickerTask?.cancel()
             advanceTask?.cancel()
+            dropTask?.cancel()
+            genTask?.cancel()
         }
     }
 
@@ -155,18 +186,41 @@ struct OnboardingView: View {
             let stretch = detached ? 1 : 1 + pull / 500
 
             OnboardingOrb(diameter: diameter, blackFill: detached ? 0 : 1, label: orbLabel,
-                          backdrop: orbBackdrop, backdropID: orbBackdropID)
+                          colors: orbColors, backdrop: orbBackdrop, backdropID: orbBackdropID)
                 // Slow black -> clear so the glass reads as filling in after it detaches.
                 .animation(.easeInOut(duration: 1.4).delay(0.25), value: detached)
                 .scaleEffect(x: 1 / sqrt(stretch), y: stretch, anchor: .top)
+                .modifier(orbSampling(layout: layout))
                 .allowsHitTesting(orbTapsEnabled)
                 .position(x: layout.orbCenter.x, y: y)
         } else if detached {
             OnboardingOrb(diameter: layout.orbDiameter, blackFill: 0, label: orbLabel,
-                          backdrop: orbBackdrop, backdropID: orbBackdropID)
+                          colors: orbColors, backdrop: orbBackdrop, backdropID: orbBackdropID)
+                .modifier(orbSampling(layout: layout))
                 .allowsHitTesting(orbTapsEnabled)
                 .position(layout.orbCenter)
                 .transition(.opacity)
+        }
+        if model.step == .adjust, let image = model.capturedImage {
+            let local = OnboardingSampling.orbPoint(
+                forNormalized: samplePoint, imageSize: image.size, diameter: layout.orbDiameter)
+            if OnboardingSampling.isInsideOrb(local, diameter: layout.orbDiameter) {
+                sampleMarker
+                    .position(x: layout.orbCenter.x - layout.orbDiameter / 2 + local.x,
+                              y: layout.orbCenter.y - layout.orbDiameter / 2 + local.y)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+        }
+        if dropActive {
+            Circle()
+                .fill(adjustedColor)
+                .frame(width: Layout.swatchDiameter, height: Layout.swatchDiameter)
+                .scaleEffect(dropLanded ? 1 : 0.35)
+                .position(dropLanded ? layout.swatchCenter : layout.orbCenter)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
         if rippleActive {
             Circle()
@@ -178,8 +232,28 @@ struct OnboardingView: View {
         }
     }
 
-    /// Only steps with a tap target on the orb receive touches; the rest let
-    /// them fall through to the content underneath. (Task 4 re-samples on tap.)
+    private var sampleMarker: some View {
+        ZStack {
+            Circle().stroke(.white, lineWidth: 2).frame(width: 22, height: 22)
+            Circle().stroke(.black.opacity(0.4), lineWidth: 1).frame(width: 24, height: 24)
+        }
+        .shadow(color: .black.opacity(0.25), radius: 2)
+    }
+
+    /// Colors shown as liquid in the orb: the palette as it blooms.
+    private var orbColors: [Color] { model.step == .generate ? genColors : [] }
+
+    /// Taps on the frozen frame re-sample; VoiceOver gets a center action.
+    private func orbSampling(layout: Layout) -> OrbSamplingModifier {
+        OrbSamplingModifier(
+            enabled: orbTapsEnabled,
+            onTap: { point in resample(tap: point, diameter: layout.orbDiameter) },
+            onCenter: { resample(to: OnboardingSampling.center) }
+        )
+    }
+
+    /// Only the adjust step has a tap target on the orb; the rest let
+    /// touches fall through to the content underneath.
     private var orbTapsEnabled: Bool { model.step == .adjust }
 
     private var orbLabel: String {
@@ -286,20 +360,12 @@ struct OnboardingView: View {
                 continueButton
             case .camera:
                 cameraCaptions
+            case .adjust:
+                adjustCaptions
             case .generate:
-                // Placeholder: Task 4 finishes with `.completed(paletteID:)`.
-                Text("Step \(model.step.rawValue + 1) of \(OnboardingStep.allCases.count)")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                Button("Finish") { model.skip() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-            default:
-                // Adjust lands in Task 4.
-                Text("Step \(model.step.rawValue + 1) of \(OnboardingStep.allCases.count)")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                continueButton
+                generateCaptions
+            case .pull:
+                EmptyView()
             }
         }
     }
@@ -311,6 +377,8 @@ struct OnboardingView: View {
     private var stillImage: UIImage { pickedImage ?? OnboardingSampleImage.shared }
 
     private var orbBackdrop: AnyView? {
+        // The generate step shows the chosen color in an empty orb.
+        if model.step == .generate { return nil }
         if let frozen = model.capturedImage {
             return AnyView(Image(uiImage: frozen).resizable().scaledToFill())
         }
@@ -326,6 +394,7 @@ struct OnboardingView: View {
 
     /// Changes whenever the backdrop swaps, so the orb cross-fades.
     private var orbBackdropID: Int {
+        if model.step == .generate { return 5 }
         if model.capturedImage != nil { return 3 }
         guard model.step == .camera else { return 0 }
         if showsStill { return pickedImage == nil ? 2 : 4 }
@@ -509,6 +578,230 @@ struct OnboardingView: View {
     }
 }
 
+// MARK: - Adjust and generate steps
+
+extension OnboardingView {
+    private var adjustedColor: Color {
+        guard let rgb = model.adjustedRGB else { return .gray }
+        return ColorAdjustment.color(r: rgb.r, g: rgb.g, b: rgb.b)
+    }
+
+    private var adjustedName: String {
+        guard let hex = model.selectedHex else { return "" }
+        return ColorNamer.name(forHex: String(hex.dropFirst()))
+    }
+
+    /// Samples the center of the frozen frame and drops the color out of the
+    /// orb into the swatch. Reduce Motion just fades the swatch in.
+    fileprivate func beginAdjust() {
+        guard let image = model.capturedImage else { return }
+        sampler = ImageColorExtractor.PixelSampler(image: image)
+        model.brightness = 0.5
+        model.saturation = 0.5
+        samplePoint = OnboardingSampling.center
+        model.scannedRGB = rgb(at: samplePoint, in: image)
+        swatchRevealed = false
+        dropTask?.cancel()
+        if reduceMotion {
+            withAnimation(.easeInOut(duration: 0.4)) { swatchRevealed = true }
+            return
+        }
+        dropLanded = false
+        dropActive = true
+        dropTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) { dropLanded = true }
+            try? await Task.sleep(for: .milliseconds(650))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) { swatchRevealed = true }
+            dropActive = false
+        }
+    }
+
+    private func rgb(at point: CGPoint, in image: UIImage) -> (r: Double, g: Double, b: Double) {
+        sampler?.color(at: point, radius: 2) ?? ImageColorExtractor.sampleColor(from: image, at: point, radius: 2)
+    }
+
+    fileprivate func resample(tap: CGPoint, diameter: CGFloat) {
+        guard let image = model.capturedImage,
+              let normalized = OnboardingSampling.normalizedPoint(
+                forTap: tap, imageSize: image.size, diameter: diameter) else { return }
+        resample(to: normalized)
+    }
+
+    fileprivate func resample(to normalized: CGPoint) {
+        guard model.step == .adjust, let image = model.capturedImage else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            samplePoint = normalized
+            model.scannedRGB = rgb(at: normalized, in: image)
+            swatchRevealed = true
+        }
+        sampleCount += 1
+        UIAccessibility.post(notification: .announcement, argument: "Selected \(adjustedName)")
+    }
+
+    private func percentLabel(_ value: Double, neutral: String) -> String {
+        let percent = Int(((value - 0.5) * 200).rounded())
+        return percent == 0 ? neutral : String(format: "%+d%%", percent)
+    }
+
+    @ViewBuilder
+    var adjustCaptions: some View {
+        VStack(spacing: 6) {
+            Circle()
+                .fill(adjustedColor)
+                .frame(width: Layout.swatchDiameter, height: Layout.swatchDiameter)
+                .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1))
+                .opacity(swatchRevealed ? 1 : 0)
+            Text(adjustedName)
+                .font(.headline)
+                .opacity(swatchRevealed ? 1 : 0)
+            Text(model.selectedHex ?? "")
+                .font(.system(.footnote, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .opacity(swatchRevealed ? 1 : 0)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Selected color")
+        .accessibilityValue("\(adjustedName), \(model.selectedHex ?? "")")
+        Text("Tap the photo to pick a different spot.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 14) {
+            AdjustmentSlider(
+                title: "Brightness",
+                valueLabel: percentLabel(model.brightness, neutral: "Neutral"),
+                leftLabel: "Darker", rightLabel: "Brighter",
+                value: $model.brightness
+            )
+            AdjustmentSlider(
+                title: "Saturation",
+                valueLabel: percentLabel(model.saturation, neutral: "Neutral"),
+                leftLabel: "Muted", rightLabel: "Vivid",
+                value: $model.saturation
+            )
+        }
+        .frame(maxWidth: 420)
+        Button {
+            generate()
+        } label: {
+            Label("Generate palette", systemImage: "sparkles")
+                .font(.title3.weight(.semibold))
+                .padding(.horizontal, 12)
+        }
+        .glassCapsuleButton()
+        .accessibilityHint("Builds a palette from this color")
+    }
+
+    private func generate() {
+        guard model.selectedHex != nil else { return }
+        dropTask?.cancel()
+        dropActive = false
+        withAnimation(.easeInOut(duration: 0.4)) { model.advance() }
+        startGeneration()
+    }
+
+    private func startGeneration() {
+        guard let hex = model.selectedHex else { return }
+        genTask?.cancel()
+        // The chosen color is already in the orb; the rest bloom from it.
+        genColors = [adjustedColor]
+        withAnimation(.easeInOut(duration: 0.3)) { genState = .generating }
+        let names = appData.palettes.map(\.name)
+        let delay: Duration = reduceMotion ? .zero : .milliseconds(650)
+        genTask = Task {
+            do {
+                let made = try await OnboardingPaletteMaker.make(
+                    anchorHex: hex, existingNames: names, revealDelay: delay
+                ) { colors in genColors = colors }
+                guard !Task.isCancelled else { return }
+                genColors = made.palette.colors
+                withAnimation(.easeInOut(duration: 0.4)) { genState = .ready(made) }
+                UIAccessibility.post(notification: .announcement,
+                                     argument: "Palette ready: \(made.palette.name)")
+            } catch is CancellationError {
+                // Skipped or left the screen.
+            } catch {
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.3)) { genState = .failed }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var generateCaptions: some View {
+        switch genState {
+        case .generating:
+            Text("Mixing your palette…")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.secondary)
+                .transition(.opacity)
+                .accessibilityLabel("Generating your palette")
+        case .ready(let made):
+            VStack(spacing: 20) {
+                OnboardingPaletteName(name: made.palette.name, usesGradient: made.usedAI)
+                HStack(spacing: 0) {
+                    ForEach(made.palette.paletteColors) { color in
+                        Rectangle().fill(color.color)
+                    }
+                }
+                .frame(height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(.white.opacity(0.25), lineWidth: 1))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Palette colors")
+                .accessibilityValue(made.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; "))
+                Button {
+                    OnboardingPaletteSaver.save(made.palette, appData: appData, model: model)
+                } label: {
+                    Label("See my palette", systemImage: "arrow.right")
+                        .font(.title3.weight(.semibold))
+                        .padding(.horizontal, 12)
+                }
+                .glassCapsuleButton()
+            }
+            .frame(maxWidth: 420)
+            .transition(.opacity)
+        case .failed:
+            Text("Couldn't make a palette just now.")
+                .font(.title3.weight(.medium))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                startGeneration()
+            } label: {
+                Label("Try again", systemImage: "arrow.clockwise")
+                    .font(.title3.weight(.semibold))
+                    .padding(.horizontal, 12)
+            }
+            .glassCapsuleButton()
+            Button("Skip for now") { model.skip() }
+                .font(.body.weight(.medium))
+        }
+    }
+}
+
+/// Taps on the orb re-sample the frozen frame; VoiceOver users get an
+/// action to pick the center instead.
+private struct OrbSamplingModifier: ViewModifier {
+    let enabled: Bool
+    let onTap: (CGPoint) -> Void
+    let onCenter: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onTapGesture(count: 1, coordinateSpace: .local) { if enabled { onTap($0) } }
+            .accessibilityAddTraits(enabled ? .isButton : [])
+            .accessibilityHint(enabled ? "Double tap to pick the center color, or tap the photo to pick a spot." : "")
+            .accessibilityAction(named: "Pick center color") { if enabled { onCenter() } }
+    }
+}
+
 #Preview {
     OnboardingView { _ in }
+        .environmentObject(AppData(inMemory: true))
 }
