@@ -105,6 +105,8 @@ struct ColorsView: View {
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+                .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
+                .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
                 .sheet(isPresented: $isCreatingColor) {
                     NewColorView()
@@ -232,24 +234,11 @@ struct ColorsView: View {
             onCopy: { copyToClipboard(color.HEX, label: "Copied HEX") }
         )
         .hoverEffect(.lift)
-        .overlay(alignment: .topTrailing) {
-            if isSelecting {
-                SelectionCheckmark(isSelected: selectedIDs.contains(color.id))
-            }
-        }
-        .overlay {
-            if isSelecting {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: selectedIDs.contains(color.id) ? 3 : 0)
-            }
-        }
-        .overlay {
-            if isSelecting {
-                Color.white.opacity(0.001)
-                    .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .onTapGesture { toggleSelection(color.id) }
-            }
-        }
+        .selectableCardChrome(
+            isSelecting: isSelecting,
+            isSelected: selectedIDs.contains(color.id),
+            onToggle: { toggleSelection(color.id) }
+        )
         .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .onTapGesture {
             if !isSelecting { path.append(color) }
@@ -271,6 +260,12 @@ struct ColorsView: View {
 
     @ViewBuilder
     private func colorContextMenu(_ color: ColorViewModel) -> some View {
+        Button {
+            beginSelection(with: color.id)
+        } label: {
+            Label("Select", systemImage: "checkmark.circle")
+        }
+
         Button {
             colorToEdit = ColorBindingWrapper(color: color)
         } label: {
@@ -409,6 +404,14 @@ struct ColorsView: View {
         } else {
             selectionOrder.append(contentsOf: displayedColors.map(\.id).filter { !selectedIDs.contains($0) })
             selectedIDs.formUnion(visibleIDs)
+        }
+    }
+
+    private func beginSelection(with id: UUID) {
+        withAnimation {
+            isSelecting = true
+            selectedIDs = [id]
+            selectionOrder = [id]
         }
     }
 

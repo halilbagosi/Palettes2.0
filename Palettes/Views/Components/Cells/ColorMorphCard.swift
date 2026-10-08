@@ -111,7 +111,7 @@ struct ColorMorphCard: View {
 
                 Spacer(minLength: 0)
 
-                if let onView {
+                if let onView, !isSelecting {
                     Button(action: onView) {
                         Text("View")
                             .font(.subheadline.weight(.semibold))
