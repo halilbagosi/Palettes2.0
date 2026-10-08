@@ -159,3 +159,12 @@ final class OnboardingCoachMarkLogicTests: XCTestCase {
         XCTAssertFalse(OnboardingCoachMarkLogic.shouldShow(target: nil, paletteID: id, alreadyShown: false))
     }
 }
+
+final class OnboardingCoachMarkWordingTests: XCTestCase {
+    func testCoachMarkWordingForVoiceOver() {
+        XCTAssertEqual(OnboardingCoachMarkLogic.message(voiceOverRunning: false),
+                       "Long press a color for options, or tag it.")
+        XCTAssertEqual(OnboardingCoachMarkLogic.message(voiceOverRunning: true),
+                       "Use the Actions rotor on a color for options, or tag it.")
+    }
+}

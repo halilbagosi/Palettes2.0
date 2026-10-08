@@ -52,17 +52,18 @@
 ## Tasks
 
 ### Task 1: Onboarding shell and gating
-- [ ] Create `OnboardingStep` enum and `OnboardingModel` (current step, `advance()`, `skip()`, permission status, scanned RGB).
-- [ ] Create `OnboardingView` with placeholder content per step and a Skip button.
-- [ ] Gate in `MyApp.swift`: `fullScreenCover` over `PaletteTabView` on `!didCompleteOnboarding`; Skip and finish both set the flag.
-- [ ] Add a debug-only "Replay onboarding" row to `SettingsView` (also useful as a user-facing feature later).
-- [ ] Tests: `advance()` order, `skip()` ends the flow, flag is set on finish.
+- [x] Create `OnboardingStep` enum and `OnboardingModel` (current step, `advance()`, `skip()`, permission status, scanned RGB).
+- [x] Create `OnboardingView` with placeholder content per step and a Skip button.
+- [x] Gate (in `PaletteTabView`, not `MyApp.swift`): `fullScreenCover` over `PaletteTabView` on `!didCompleteOnboarding`; Skip and finish both set the flag.
+- [x] Add a user-facing "Replay onboarding" (Settings > About; not debug-only) row to `SettingsView` (also useful as a user-facing feature later).
+- [x] Tests: `advance()` order, `skip()` ends the flow, flag is set on finish.
 
 ### Task 2: Pull and orb detach (steps 0–1)
-- [ ] Drag-down gesture with rubber-band; at threshold, the orb separates from the top center and travels to the screen center.
-- [ ] Orb fill animates black → clear. iOS 26: glass effect; iOS 17–25: `.ultraThinMaterial` with a specular edge.
-- [ ] Reduce Motion: cross-fade the orb in at center.
-- [ ] Verify on the iPhone 17 Pro simulator (Dynamic Island position); check a notch-less device size for sensible fallback.
+- [x] Drag-down gesture with rubber-band; at threshold, the orb separates from the top center and travels to the screen center.
+- [x] Orb fill animates black → clear. iOS 26: glass effect; iOS 17–25: `.ultraThinMaterial` with a specular edge.
+- [x] Reduce Motion: cross-fade the orb in at center.
+- [x] Verify on the iPhone 17 Pro simulator (Dynamic Island position).
+- [ ] Check a notch-less device size for a sensible fallback (not yet verified).
 
 ### Task 3: Camera in the orb (step 2)
 - [x] `OrbCameraPreview`: `AVCaptureVideoPreviewLayer` in a `UIViewRepresentable`, masked to a circle with a radial gradient mask so edges fade into the glass.

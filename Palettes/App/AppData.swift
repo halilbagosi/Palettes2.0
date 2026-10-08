@@ -28,6 +28,9 @@ class AppData: ObservableObject {
     /// Transient (never persisted): the palette that should show the
     /// onboarding coach mark when its detail screen appears.
     @Published var coachMarkPaletteID: UUID?
+    /// Transient: set once the coach mark is dismissed, arming the one-time
+    /// onboarding extras sheet for that palette.
+    @Published var extrasPaletteID: UUID?
 
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []
