@@ -94,6 +94,8 @@ struct PaletteView: View {
                     ColorDetailView(colorItem: color)
                 }
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+                .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
+                .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
                 .sheet(isPresented: $isCreatingPalette) {
                     NewPaletteView()
@@ -212,24 +214,11 @@ struct PaletteView: View {
             onCopy: { copyToClipboard(palette.hexCodes.joined(separator: ", "), label: "Copied HEX") }
         )
         .hoverEffect(.lift)
-        .overlay(alignment: .topTrailing) {
-            if isSelecting {
-                SelectionCheckmark(isSelected: selectedIDs.contains(palette.id))
-            }
-        }
-        .overlay {
-            if isSelecting {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: selectedIDs.contains(palette.id) ? 3 : 0)
-            }
-        }
-        .overlay {
-            if isSelecting {
-                Color.white.opacity(0.001)
-                    .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .onTapGesture { toggleSelection(palette.id) }
-            }
-        }
+        .selectableCardChrome(
+            isSelecting: isSelecting,
+            isSelected: selectedIDs.contains(palette.id),
+            onToggle: { toggleSelection(palette.id) }
+        )
         .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .onTapGesture {
             if !isSelecting { path.append(palette) }
@@ -250,6 +239,12 @@ struct PaletteView: View {
 
     @ViewBuilder
     private func paletteContextMenu(_ palette: PaletteViewModel) -> some View {
+        Button {
+            beginSelection(with: palette.id)
+        } label: {
+            Label("Select", systemImage: "checkmark.circle")
+        }
+
         Button {
             paletteToEdit = palette
         } label: {
@@ -421,6 +416,14 @@ struct PaletteView: View {
         } else {
             selectionOrder.append(contentsOf: displayedPalettes.map(\.id).filter { !selectedIDs.contains($0) })
             selectedIDs.formUnion(visibleIDs)
+        }
+    }
+
+    private func beginSelection(with id: UUID) {
+        withAnimation {
+            isSelecting = true
+            selectedIDs = [id]
+            selectionOrder = [id]
         }
     }
 
