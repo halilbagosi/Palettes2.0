@@ -90,10 +90,14 @@
 - [x] iCloud line only if v1 ships with CloudKit enabled (see launch-data-model decision).
 
 ### Task 7: Polish and verification
-- [ ] Accessibility pass (VoiceOver order, Dynamic Type, Reduce Motion).
-- [ ] Run on iPhone 17 Pro simulator through all steps using the sample image; capture screenshots per step.
-- [ ] Full test run; zero new warnings.
-- [ ] Update `plans/README.md` status.
+- [x] Accessibility pass (VoiceOver order, Dynamic Type, Reduce Motion). Done in the simulator for Dynamic Type (AX3), Reduce Motion and dark mode; VoiceOver was reviewed from labels in code only (live VoiceOver needs a device).
+- [x] Run on iPhone 17 Pro simulator through all steps using the sample image; capture screenshots per step (`advisor-plans/onboarding-screens/`). Also walked on iPhone SE (3rd gen); landscape not verifiable with the headless simulator tooling.
+- [x] Full test run; zero new warnings.
+- [x] Update `plans/README.md` status.
+
+**Polish fixes (Task 7):** Skip capped at xxxLarge (it overlapped the orb at AX sizes); orb shrinks on accessibility sizes and short screens; captions capped at accessibility1 (no mid-word breaks in sliders and buttons); Generate button pinned below the scrolling captions; coach-mark banner capped at xxxLarge.
+
+**Needs on-device verification:** real camera (preview, capture, rotation coordinator, interruption and runtime-error handling, permission prompts), the Apple Intelligence generation path (gradient name, `isGenerated` badge), VoiceOver and the Actions rotor, landscape, iOS 17/18 runtime behavior (input could not be driven on the 17.5 simulator), notch-less hardware (SE walked in simulator only).
 
 ## Verification
 

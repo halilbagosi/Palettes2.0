@@ -73,6 +73,8 @@ private struct OnboardingCoachMarkModifier: ViewModifier {
                 .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
         }
         .buttonStyle(.plain)
+        // A banner, not content: at the largest sizes it would cover the colors.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, 24)
         .padding(.bottom, 8)
         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))

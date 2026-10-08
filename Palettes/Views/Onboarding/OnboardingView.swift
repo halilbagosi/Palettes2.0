@@ -15,6 +15,7 @@ struct OnboardingView: View {
     @StateObject private var model: OnboardingModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var appData: AppData
 
     /// Rubber-banded stretch of the island blob while the user pulls down.
@@ -76,11 +77,18 @@ struct OnboardingView: View {
         let topInset: CGFloat
         let bottomInset: CGFloat
         let hasIsland: Bool
+        /// Accessibility text sizes: a smaller orb leaves room for the captions.
+        var compactOrb = false
 
         var skipTopPadding: CGFloat {
             hasIsland ? OnboardingView.skipTopPaddingIsland : OnboardingView.skipTopPaddingDefault
         }
-        var orbDiameter: CGFloat { min(OnboardingView.maxOrbDiameter, full.height * 0.45) }
+        var orbDiameter: CGFloat {
+            // Short screens (SE) and accessibility text sizes get a smaller orb so
+            // the sliders and the pinned Generate button fit.
+            let factor: CGFloat = compactOrb ? 0.2 : (full.height < 700 ? 0.28 : 0.45)
+            return min(OnboardingView.maxOrbDiameter, full.height * factor)
+        }
         /// Screen-space top of the settled orb: below Skip.
         var orbTop: CGFloat { topInset + skipTopPadding + OnboardingView.skipHeight + 8 }
         var orbCenter: CGPoint { CGPoint(x: full.width / 2, y: orbTop + orbDiameter / 2) }
@@ -107,7 +115,8 @@ struct OnboardingView: View {
                 bottomInset: insets.bottom,
                 // Portrait Dynamic Island devices have a ~59pt top inset;
                 // notch-less ones ~20pt and landscape ~0.
-                hasIsland: insets.top >= 50 && full.height > full.width
+                hasIsland: insets.top >= 50 && full.height > full.width,
+                compactOrb: dynamicTypeSize.isAccessibilitySize
             )
             // Reduce Motion, landscape, and island-less devices just fade the
             // orb in at its settled position.
@@ -344,6 +353,9 @@ struct OnboardingView: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
+            .safeAreaInset(edge: .bottom) {
+                if model.step == .adjust { generateButton.transition(.opacity) }
+            }
             .id(model.step)
             .transition(.opacity)
         }
@@ -369,6 +381,9 @@ struct OnboardingView: View {
                 EmptyView()
             }
         }
+        // The largest accessibility sizes split words in the sliders and glass
+        // buttons; captions stay scrollable and large at this cap.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 
     // MARK: - Camera step
@@ -575,6 +590,8 @@ struct OnboardingView: View {
         Button("Skip") { model.skip() }
             .font(.body.weight(.medium))
             .glassCapsuleButton()
+            // Skip sits above the orb in a fixed-height slot; very large text would overlap the orb.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .accessibilityLabel("Skip onboarding")
     }
 }
@@ -686,6 +703,11 @@ extension OnboardingView {
             )
         }
         .frame(maxWidth: 420)
+    }
+
+    /// Pinned below the scrolling captions so small screens and large text
+    /// never push it out of reach.
+    var generateButton: some View {
         Button {
             generate()
         } label: {
@@ -694,7 +716,9 @@ extension OnboardingView {
                 .padding(.horizontal, 12)
         }
         .glassCapsuleButton()
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .accessibilityHint("Builds a palette from this color")
+        .padding(.bottom, 8)
     }
 
     private func generate() {
