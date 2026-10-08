@@ -319,7 +319,7 @@ struct OnboardingView: View {
             return AnyView(Image(uiImage: stillImage).resizable().scaledToFill())
         }
         if model.cameraUIState == .live {
-            return AnyView(OrbCameraPreview(controller: camera))
+            return AnyView(OrbCameraPreview(controller: camera, device: camera.device))
         }
         return nil
     }
@@ -348,6 +348,13 @@ struct OnboardingView: View {
             if model.cameraUIState == .photoFallback && pickedImage == nil {
                 Text(fallbackMessage)
                     .font(.title3.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if camera.isInterrupted && model.cameraUIState == .live {
+                Text("Camera paused while another app is using it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -387,17 +394,23 @@ struct OnboardingView: View {
     private var fallbackMessage: String {
         switch model.cameraAccess {
         case .denied, .restricted: "Camera access is off. Scan the sample, or pick a photo."
-        default: "No camera here. Scan the sample, or pick a photo."
+        default:
+            camera.didFailToConfigure
+                ? "Camera isn't available right now. Scan the sample, or pick a photo."
+                : "No camera here. Scan the sample, or pick a photo."
         }
     }
 
     private func refreshCameraAccess() {
+        // Start from the status alone so granted users never see the pre-prompt flash.
+        model.cameraAccess = .quick()
         Task { model.cameraAccess = await .current() }
     }
 
     private func requestCameraAccess() {
         Task {
             _ = await AVCaptureDevice.requestAccess(for: .video)
+            model.cameraAccess = .quick()
             model.cameraAccess = await .current()
         }
     }

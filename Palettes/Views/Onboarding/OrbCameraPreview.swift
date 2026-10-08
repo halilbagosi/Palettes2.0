@@ -32,6 +32,17 @@ nonisolated extension OnboardingCameraAccess {
         }
     }
 
+    /// Cheap synchronous guess from the authorization status alone, assuming a
+    /// camera exists. Lets the UI start from the right state while the device
+    /// lookup in `current()` finishes.
+    static func quick() -> OnboardingCameraAccess {
+#if targetEnvironment(simulator)
+        return .unavailable
+#else
+        OnboardingCameraAccess(status: AVCaptureDevice.authorizationStatus(for: .video), hasDevice: true)
+#endif
+    }
+
     /// The device's current camera state. The device lookup can block, so it
     /// runs off the main thread. The simulator has no camera, so it goes
     /// straight to the photo/sample fallback without prompting.
@@ -130,6 +141,7 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
     private let photoOutput = AVCapturePhotoOutput()
     private var isConfigured = false
     private var hasReportedFailure = false
+    private var hasRestartedAfterError = false
     private var inFlight: PhotoCaptureCoordinator?
     private var inFlightDelegate: PhotoDelegate?
     private var onConfigured: (@Sendable (AVCaptureDevice) -> Void)?
@@ -167,6 +179,21 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
         }
     }
 
+    /// A runtime error stops the session: restart once, then give up and
+    /// report failure so the UI falls back to the photo/sample path.
+    func handleRuntimeError() {
+        queue.async { [self] in
+            guard isConfigured else { return }
+            if !hasRestartedAfterError {
+                hasRestartedAfterError = true
+                if !session.isRunning { session.startRunning() }
+            } else if !hasReportedFailure {
+                hasReportedFailure = true
+                onFailure?()
+            }
+        }
+    }
+
     /// Stops the session and resumes any in-flight capture with nil, so a
     /// caller awaiting `capturePhoto()` can never hang.
     func stop() {
@@ -174,6 +201,7 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
             inFlight?.cancel()
             inFlight = nil
             inFlightDelegate = nil
+            hasRestartedAfterError = false
             if session.isRunning { session.stopRunning() }
         }
     }
@@ -262,14 +290,25 @@ final class OrbCameraController: ObservableObject {
 
     private func observeInterruptions() {
         let center = NotificationCenter.default
+        let session = engine.session
         observers = [
             center.addObserver(forName: AVCaptureSession.wasInterruptedNotification,
-                               object: engine.session, queue: .main) { [weak self] _ in
+                               object: session, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.isInterrupted = true }
             },
             center.addObserver(forName: AVCaptureSession.interruptionEndedNotification,
-                               object: engine.session, queue: .main) { [weak self] _ in
+                               object: session, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.isInterrupted = false }
+            },
+            // The session can be stopped mid-interruption (no "ended" ever
+            // arrives), so a successful start always clears the flag.
+            center.addObserver(forName: AVCaptureSession.didStartRunningNotification,
+                               object: session, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.isInterrupted = false }
+            },
+            center.addObserver(forName: AVCaptureSession.runtimeErrorNotification,
+                               object: session, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.engine.handleRuntimeError() }
             },
         ]
     }
@@ -292,16 +331,20 @@ final class OrbCameraController: ObservableObject {
 /// reads as living inside the glass.
 struct OrbCameraPreview: UIViewRepresentable {
     let controller: OrbCameraController
+    /// Passed in (not read in `updateUIView`) so SwiftUI sees the value change
+    /// when the engine finishes configuring and calls `updateUIView`.
+    let device: AVCaptureDevice?
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.videoGravity = .resizeAspectFill
         view.previewLayer.session = controller.session
+        view.observeStart(of: controller.session)
         return view
     }
 
     func updateUIView(_ uiView: PreviewView, context: Context) {
-        if let device = controller.device {
+        if let device {
             uiView.attach(device: device) { [controller] angle in
                 controller.setCaptureAngle(angle)
             }
@@ -315,6 +358,24 @@ struct OrbCameraPreview: UIViewRepresentable {
         private var rotation: AVCaptureDevice.RotationCoordinator?
         private var observations: [NSKeyValueObservation] = []
         private var previewAngle: CGFloat = 90
+        private var startObserver: NSObjectProtocol?
+
+        deinit {
+            if let startObserver { NotificationCenter.default.removeObserver(startObserver) }
+        }
+
+        /// The preview connection can appear after the last layout, so the
+        /// angle is re-applied once the session actually starts running.
+        func observeStart(of session: AVCaptureSession) {
+            startObserver = NotificationCenter.default.addObserver(
+                forName: AVCaptureSession.didStartRunningNotification, object: session, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.applyPreviewAngle(self.previewAngle)
+                }
+            }
+        }
 
         /// Starts tracking device rotation once the camera is known: the
         /// preview connection follows the preview angle, and the capture angle
