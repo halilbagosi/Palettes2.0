@@ -43,6 +43,31 @@ extension View {
     }
 }
 
+extension View {
+    /// The orb's backing body for iOS 17–25: an ultra-thin material with a
+    /// specular rim lit from the upper left. On iOS 26+ this is a no-op, since
+    /// `GenerationOrbView` already draws the clear Liquid Glass shell and a
+    /// second glass layer would turn it opaque.
+    @ViewBuilder
+    func orbGlass<S: InsettableShape>(in shape: S) -> some View {
+        if #available(iOS 26.0, *) {
+            self
+        } else {
+            background(.ultraThinMaterial, in: shape)
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.55), .white.opacity(0.05), .white.opacity(0.25)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                }
+        }
+    }
+}
+
 /// `GlassEffectContainer` on iOS 26+, a passthrough on earlier systems.
 struct GlassContainer<Content: View>: View {
     var spacing: CGFloat? = nil

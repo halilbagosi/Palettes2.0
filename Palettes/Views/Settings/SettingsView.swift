@@ -71,6 +71,11 @@ struct SettingsView: View {
                     Link(destination: AppLinks.supportEmailURL) {
                         Label("Contact Support", systemImage: "envelope")
                     }
+                    Button {
+                        replayOnboarding()
+                    } label: {
+                        Label("Replay Onboarding", systemImage: "sparkles")
+                    }
                     LabeledContent("Version", value: versionString)
                 }
             }
@@ -94,6 +99,16 @@ struct SettingsView: View {
             ShareSheetPresenter.present(items: [url], cleanup: url)
         } catch {
             showExportError = true
+        }
+    }
+
+    private func replayOnboarding() {
+        dismiss()
+        // The onboarding cover is presented from the app root, so wait for
+        // this sheet to finish dismissing before raising it.
+        // Written to defaults directly: this view is gone by the time it fires.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            UserDefaults.standard.set(false, forKey: OnboardingModel.completionKey)
         }
     }
 
