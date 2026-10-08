@@ -225,13 +225,6 @@ struct GenerateView: View {
                 }
             }
         }
-        .onChange(of: selectedColorIDs) { _, ids in
-            // The scheme menu only makes sense while base colors are
-            // selected; once the last one is deselected (one at a time, not
-            // just via resetForm), drop back to Auto so a stale override
-            // can't silently apply to a vibe- or photo-only generation.
-            if ids.isEmpty { scheme = .auto }
-        }
         }
     }
 
@@ -284,7 +277,7 @@ struct GenerateView: View {
             }
             .accessibilityLabel("Palette size")
 
-            if canGenerateFromSource {
+            if canChooseMode {
                 Menu {
                     ForEach(HarmonyScheme.allCases) { option in
                         Button {
@@ -308,7 +301,7 @@ struct GenerateView: View {
                 .transition(.scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canGenerateFromSource)
+        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
     }
 
     private func generationOptionLabel(title: String, value: String, systemImage: String) -> some View {
@@ -516,6 +509,11 @@ struct GenerateView: View {
             || selectedImage != nil
     }
 
+    /// Modes shape every generation now, including one from a vibe alone.
+    private var canChooseMode: Bool {
+        canGenerateFromSource || !vibeDescription.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private var canGenerateFromSource: Bool {
         !selectedColorIDs.isEmpty || selectedImage != nil
     }
@@ -721,7 +719,7 @@ struct GenerateView: View {
             // padded out with synthesized harmony colors.
             let needed = max(1, paletteSize - baseColors.count)
             let extracted = try ImageColorExtractor.extractColors(from: image, count: needed)
-            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: $0.name) }
+            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: "") }
         }
 
         // Without a vibe, an image (or hand-picked colors + image) must yield
@@ -740,7 +738,7 @@ struct GenerateView: View {
             baseColors: baseColors,
             size: targetSize,
             vibe: combinedVibe,
-            scheme: scheme,
+            scheme: canChooseMode ? scheme : .auto,
             existingNames: appData.palettes.map { $0.name },
             onPartialColors: onColors
         )

@@ -18,9 +18,9 @@ enum PaletteNamer {
 
     // MARK: - Public API
 
-    /// Resolves the final palette title: keeps `aiName` when it's specific and
-    /// not already taken, otherwise synthesizes a descriptive one from the
-    /// palette's colors.
+    /// Resolves the final palette title: keeps `aiName` when it's specific, names
+    /// only colors the palette has, and isn't already taken; otherwise
+    /// synthesizes a descriptive one from the palette's colors.
     ///
     /// - Parameters:
     ///   - aiName: the model's suggestion, if any.
@@ -33,6 +33,7 @@ enum PaletteNamer {
            !candidate.isEmpty,
            !isGeneric(candidate),
            !usesClichedTitleLanguage(candidate),
+           ColorVocabulary.isPlausibleTitle(candidate, forHexes: hexes),
            !taken.contains(candidate.lowercased()) {
             return candidate
         }
@@ -103,9 +104,11 @@ enum PaletteNamer {
     // MARK: - Traits
 
     private struct Traits {
-        /// Hue of the palette's most characteristic *actual* color (the most
-        /// saturated one), never an average — averaging opposing hues yields a
-        /// family that isn't in the palette at all (magenta + cyan → "apricot").
+        /// Hue of the palette's first clearly colored swatch, never an
+        /// average (averaging opposing hues names a family that isn't in
+        /// the palette at all). Generated palettes list the user's colors
+        /// and the main color's family first, so this is the main color,
+        /// not the loudest accent.
         var hue: Double
         /// Brightness of that same characteristic color, so the family word
         /// ("Terracotta" vs "Ember") describes a real color, not the mean.
@@ -138,12 +141,10 @@ enum PaletteNamer {
                           seed: deterministicSeed(hexes))
         }
 
-        // The palette's "signature" color: the most saturated one, tie-broken
-        // deterministically by hex order. Its hue names the family, so the
-        // title always points at a color that is genuinely present.
-        let signature = chromatic.max { lhs, rhs in
-            lhs.s == rhs.s ? false : lhs.s < rhs.s
-        }
+        // The palette's "signature" color: its first clearly colored swatch.
+        // Its hue names the family, so the title always points at a color
+        // that is genuinely present — and at the main one.
+        let signature = chromatic.first
 
         // How spread out the hues are — a wide spread means "no single family
         // describes this", which the character words can acknowledge.
@@ -195,7 +196,6 @@ enum PaletteNamer {
             if isWarm(t.hue) { words += ["Warm", "Sunlit", "Embered"] } else { words += ["Cool", "Shaded", "Glacial"] }
             if t.spread > 0.5 { words += ["Layered", "Contrasted", "Tonal"] }
         }
-        words += ["Textured", "Woven", "Measured"]
         return words
     }
 
@@ -234,7 +234,7 @@ enum PaletteNamer {
         if t.brightness < 0.4 { return ["Dusk", "Nocturne", "Afterglow", "Velvet"] }
         if t.brightness > 0.75 { return ["Haze", "Daylight", "Gleam", "Lustre"] }
         return isWarm(t.hue)
-            ? ["Bloom", "Kiln", "Saffron", "Solstice"]
+            ? ["Bloom", "Kiln", "Hearth", "Solstice"]
             : ["Tide", "Current", "Mist", "Rain"]
     }
 

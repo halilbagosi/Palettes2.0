@@ -143,4 +143,46 @@ final class PaletteNamerTests: XCTestCase {
         XCTAssertFalse(name.isEmpty)
         XCTAssertFalse(name.contains("Generated"))
     }
+
+    // MARK: - Titles follow the main color
+
+    /// Generated palettes list the main color first. The title must name
+    /// that family, not the loudest accent: a blue palette with one orange
+    /// accent was being titled after the orange.
+    func testTitleFamilyComesFromTheFirstColor() {
+        let name = PaletteNamer.descriptiveName(
+            forHexes: ["#2E5F8A", "#3E7FB0", "#1E3F5A", "#FF5A00"],
+            existingNames: []
+        )
+        let warmFamilies = ["Garnet", "Coral", "Terracotta", "Ember", "Copper", "Apricot"]
+        XCTAssertFalse(warmFamilies.contains { name.contains($0) }, name)
+    }
+
+    func testTitlesDropFillerWords() {
+        let palettes = [
+            ["#A9603F", "#C08552"], ["#2E5F8A", "#3E7FB0"], ["#4E7A4F", "#6FA36F"],
+            ["#E8E2D8", "#D8D2C8"], ["#6B4E8A", "#8E6FB0"],
+        ]
+        var names: [String] = []
+        for hexes in palettes {
+            for _ in 0..<6 {
+                names.append(PaletteNamer.descriptiveName(forHexes: hexes, existingNames: names))
+            }
+        }
+        for name in names {
+            for filler in ["Textured", "Woven", "Measured"] {
+                XCTAssertFalse(name.contains(filler), name)
+            }
+        }
+    }
+
+    func testAITitleNamingAColorNotInThePaletteIsReplaced() {
+        let name = PaletteNamer.resolvedName(
+            aiName: "Crimson Tide",
+            hexes: ["#2E5F8A", "#3E7FB0", "#1E3F5A"],
+            existingNames: []
+        )
+        XCTAssertNotEqual(name, "Crimson Tide")
+        XCTAssertFalse(name.isEmpty)
+    }
 }
