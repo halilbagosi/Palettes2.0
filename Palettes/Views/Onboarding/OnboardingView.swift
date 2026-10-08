@@ -20,11 +20,13 @@ struct OnboardingView: View {
     @State private var pull: CGFloat = 0
 
     // Camera step
-    @State private var camera = OrbCameraController()
-    @State private var sampleImage = OnboardingSampleImage.make()
+    @StateObject private var camera = OrbCameraController()
     @State private var pickedImage: UIImage?
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var isScanning = false
+    @State private var pickerError: String?
+    @State private var pickerTask: Task<Void, Never>?
+    @State private var advanceTask: Task<Void, Never>?
     @State private var scanCount = 0
     @State private var rippleActive = false
     @State private var rippleScale: CGFloat = 1
@@ -119,19 +121,27 @@ struct OnboardingView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: model.step)
         .sensoryFeedback(.impact(weight: .medium), trigger: scanCount)
         .onChange(of: model.step) { _, step in
-            if step == .camera { model.cameraAccess = .current() }
+            if step == .camera { refreshCameraAccess() }
             updateCameraSession()
         }
         .onChange(of: scenePhase) { _, phase in
             // The user may have changed access in Settings while away.
             if phase == .active, model.step == .camera, model.capturedImage == nil {
-                model.cameraAccess = .current()
+                refreshCameraAccess()
             }
             updateCameraSession()
         }
         .onChange(of: model.cameraAccess) { _, _ in updateCameraSession() }
         .onChange(of: photosPickerItem) { _, item in loadPickedPhoto(item) }
-        .onDisappear { camera.stop() }
+        .onChange(of: camera.didFailToConfigure) { _, failed in
+            // The session couldn't be set up: show the photo/sample fallback.
+            if failed { model.cameraAccess = .unavailable }
+        }
+        .onDisappear {
+            camera.stop()
+            pickerTask?.cancel()
+            advanceTask?.cancel()
+        }
     }
 
     // MARK: - Orb
@@ -298,7 +308,7 @@ struct OnboardingView: View {
 
     /// Camera preview, or the chosen/sample still when the camera isn't usable.
     private var showsStill: Bool { model.cameraUIState == .photoFallback || pickedImage != nil }
-    private var stillImage: UIImage { pickedImage ?? sampleImage }
+    private var stillImage: UIImage { pickedImage ?? OnboardingSampleImage.shared }
 
     private var orbBackdrop: AnyView? {
         if let frozen = model.capturedImage {
@@ -309,7 +319,7 @@ struct OnboardingView: View {
             return AnyView(Image(uiImage: stillImage).resizable().scaledToFill())
         }
         if model.cameraUIState == .live {
-            return AnyView(OrbCameraPreview(session: camera.session))
+            return AnyView(OrbCameraPreview(controller: camera))
         }
         return nil
     }
@@ -330,7 +340,8 @@ struct OnboardingView: View {
                 .font(.title3.weight(.medium))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Allow Camera") { requestCameraAccess() }
+            // Not worded like the system alert's buttons (App Review 5.1.1(iv)).
+            Button("Continue") { requestCameraAccess() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
         default:
@@ -348,14 +359,29 @@ struct OnboardingView: View {
                     .padding(.horizontal, 12)
             }
             .glassCapsuleButton()
-            .disabled(isScanning)
+            .disabled(isScanning || camera.isInterrupted)
             .accessibilityHint("Captures the color in the orb")
+            if model.cameraAccess == .denied {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.body.weight(.medium))
+            }
         }
         PhotosPicker(selection: $photosPickerItem, matching: .images) {
             Text("Use a photo instead")
                 .font(.body.weight(.medium))
         }
         .disabled(isScanning)
+        if let pickerError {
+            Text(pickerError)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var fallbackMessage: String {
@@ -365,21 +391,37 @@ struct OnboardingView: View {
         }
     }
 
+    private func refreshCameraAccess() {
+        Task { model.cameraAccess = await .current() }
+    }
+
     private func requestCameraAccess() {
         Task {
             _ = await AVCaptureDevice.requestAccess(for: .video)
-            model.cameraAccess = .current()
+            model.cameraAccess = await .current()
         }
     }
 
     private func loadPickedPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
-        Task {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
+        pickerTask?.cancel()
+        pickerError = nil
+        pickerTask = Task {
+            let data = try? await item.loadTransferable(type: Data.self)
+            let image: UIImage? = if let data {
+                await Task.detached { OnboardingImageLoader.downscaled(from: data) }.value
+            } else {
+                nil
+            }
+            guard !Task.isCancelled else { return }
+            if let image {
                 pickedImage = image
                 updateCameraSession()
+            } else {
+                pickerError = "Couldn't load that photo. Try another."
             }
+            // Lets the same photo be picked again.
+            photosPickerItem = nil
         }
     }
 
@@ -397,9 +439,16 @@ struct OnboardingView: View {
     private func scan() {
         guard !isScanning else { return }
         isScanning = true
-        Task {
-            let image = showsStill ? stillImage : await camera.capturePhoto()
-            guard let image else {
+        advanceTask = Task {
+            let image: UIImage?
+            if showsStill {
+                image = stillImage
+            } else if let data = await camera.capturePhoto() {
+                image = await Task.detached { OnboardingImageLoader.downscaled(from: data) }.value
+            } else {
+                image = nil
+            }
+            guard !Task.isCancelled, let image else {
                 isScanning = false
                 return
             }
@@ -408,6 +457,7 @@ struct OnboardingView: View {
             updateCameraSession()
             playRipple()
             try? await Task.sleep(for: .seconds(reduceMotion ? 0.6 : 1.0))
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.4)) { model.advance() }
             isScanning = false
         }

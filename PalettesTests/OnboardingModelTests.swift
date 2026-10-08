@@ -5,6 +5,7 @@
 
 import XCTest
 import AVFoundation
+import ImageIO
 @testable import Palettes
 
 @MainActor
@@ -181,5 +182,92 @@ final class OnboardingReplayCoordinatorTests: XCTestCase {
         coordinator.request()
         XCTAssertTrue(coordinator.consume())
         XCTAssertFalse(coordinator.consume())
+    }
+}
+
+final class PhotoCaptureCoordinatorTests: XCTestCase {
+    private final class Box: @unchecked Sendable {
+        var results: [Data?] = []
+    }
+
+    private func makeCoordinator(_ box: Box) -> PhotoCaptureCoordinator {
+        PhotoCaptureCoordinator { box.results.append($0) }
+    }
+
+    func testResumesOnceWithProcessedData() {
+        let box = Box()
+        let coordinator = makeCoordinator(box)
+        let data = Data([1, 2, 3])
+        coordinator.didProcess(data: data, error: nil)
+        XCTAssertTrue(box.results.isEmpty, "must wait for didFinishCapture")
+        coordinator.didFinishCapture(error: nil)
+        coordinator.didFinishCapture(error: nil)
+        coordinator.cancel()
+        XCTAssertEqual(box.results, [data])
+    }
+
+    func testCancelResumesNilAndIgnoresLaterCallbacks() {
+        let box = Box()
+        let coordinator = makeCoordinator(box)
+        coordinator.cancel()
+        coordinator.didProcess(data: Data([9]), error: nil)
+        coordinator.didFinishCapture(error: nil)
+        XCTAssertEqual(box.results.count, 1)
+        XCTAssertNil(box.results[0])
+    }
+
+    func testErrorResumesNil() {
+        let box = Box()
+        let coordinator = makeCoordinator(box)
+        coordinator.didProcess(data: Data([1]), error: NSError(domain: "x", code: 1))
+        coordinator.didFinishCapture(error: nil)
+        XCTAssertEqual(box.results.count, 1)
+        XCTAssertNil(box.results[0])
+    }
+
+    func testFinishWithoutPhotoResumesNil() {
+        let box = Box()
+        let coordinator = makeCoordinator(box)
+        coordinator.didFinishCapture(error: nil)
+        XCTAssertEqual(box.results.count, 1)
+        XCTAssertNil(box.results[0])
+    }
+}
+
+final class OnboardingImageLoaderTests: XCTestCase {
+    func testDownscalesLongSideAndKeepsAspect() throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 3000, height: 2000), format: format).image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 3000, height: 2000))
+        }
+        let data = try XCTUnwrap(source.pngData())
+        let image = try XCTUnwrap(OnboardingImageLoader.downscaled(from: data))
+        let cg = try XCTUnwrap(image.cgImage)
+        XCTAssertEqual(max(cg.width, cg.height), OnboardingImageLoader.maxPixelSize)
+        XCTAssertEqual(Double(cg.width) / Double(cg.height), 1.5, accuracy: 0.01)
+    }
+
+    func testAppliesEXIFOrientation() throws {
+        // A landscape JPEG tagged "rotated 90 degrees" must come out portrait.
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 200), format: format).image { ctx in
+            UIColor.blue.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 200))
+        }
+        let cgImage = try XCTUnwrap(source.cgImage)
+        let output = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(output, "public.jpeg" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, cgImage, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let image = try XCTUnwrap(OnboardingImageLoader.downscaled(from: output as Data))
+        let cg = try XCTUnwrap(image.cgImage)
+        XCTAssertGreaterThan(cg.height, cg.width)
+    }
+
+    func testGarbageDataReturnsNil() {
+        XCTAssertNil(OnboardingImageLoader.downscaled(from: Data([0, 1, 2])))
     }
 }
