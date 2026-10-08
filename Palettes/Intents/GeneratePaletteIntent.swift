@@ -19,7 +19,7 @@ struct GeneratePaletteIntent: AppIntent {
     @Parameter(title: "Vibe", description: "The mood or theme, like 'warm sunset' or 'calm ocean'.")
     var vibe: String
 
-    @Parameter(title: "Number of Colors", default: 5, controlStyle: .stepper, inclusiveRange: (2, 10))
+    @Parameter(title: "Number of Colors", default: 6, controlStyle: .stepper, inclusiveRange: (2, 12))
     var size: Int
 
     static var parameterSummary: some ParameterSummary {
@@ -32,9 +32,11 @@ struct GeneratePaletteIntent: AppIntent {
             throw PalettesIntentError.aiUnavailable
         }
 
+        // Palettes come in even sizes (2–12), matching the in-app picker.
+        let evenSize = min(12, max(2, size + size % 2))
         let generated = try await PaletteGenerator.generate(
             baseColors: [],
-            size: min(max(size, 2), 10),
+            size: evenSize,
             vibe: vibe,
             scheme: .auto,
             existingNames: AppData.shared.palettes.map { $0.name }

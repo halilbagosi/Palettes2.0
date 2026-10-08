@@ -122,4 +122,51 @@ final class ColorNamerTests: XCTestCase {
         XCTAssertEqual(names[0], "Red")
     }
 
+    // MARK: - Names agree with the swatch
+
+    func testLightColorIsNotGivenADarkEntryName() {
+        // A light teal whose nearest dictionary entry is "Dark Turquoise".
+        let name = ColorNamer.uniqueNames(forHexes: ["#2FD4DE"])[0]
+        XCTAssertFalse(ColorVocabulary.tokens(name).contains("dark"), name)
+    }
+
+    func testSaturatedTealIsNotNamedAfterAGrey() {
+        // Its nearest dictionary entry is "Steel".
+        let name = ColorNamer.uniqueNames(forHexes: ["#2C7284"])[0]
+        XCTAssertFalse(ColorVocabulary.tokens(name).contains { ColorVocabulary.greyWords.contains($0) }, name)
+    }
+
+    func testPaleIsNeverPutOnADarkColor() {
+        // Used to be "Pale Space Blue".
+        let name = ColorNamer.uniqueNames(forHexes: ["#3D405B"])[0]
+        XCTAssertFalse(name.hasPrefix("Pale") || name.hasPrefix("Light"), name)
+    }
+
+    func testGreyEntriesNeverGetAChromaModifier() {
+        // Used to be "Vivid Black".
+        let name = ColorNamer.uniqueNames(forHexes: ["#26131D"])[0]
+        XCTAssertFalse(name.hasPrefix("Vivid") || name.hasPrefix("Rich"), name)
+    }
+
+    /// Every dictionary name the generator can ship passes the same check
+    /// the model's names must pass.
+    func testBuiltPalettesGetPlausibleNames() {
+        for scheme in HarmonyScheme.allCases where scheme != .auto {
+            for seed in UInt64(0)..<12 {
+                let hexes = PaletteBuilder.build(PaletteBuildRequest(
+                    anchors: [], size: 8, scheme: scheme, hue: Double(seed * 29 % 360), seed: seed
+                )).hexes
+                for (hex, name) in zip(hexes, ColorNamer.uniqueNames(forHexes: hexes)) {
+                    XCTAssertTrue(ColorVocabulary.isPlausible(name: name, forHex: hex), "\(name) on \(hex)")
+                }
+            }
+        }
+    }
+
+    func testHexForNameIgnoresCaseAndSpacing() {
+        XCTAssertEqual(ColorNamer.hex(forName: "red"), "#FF0000")
+        XCTAssertEqual(ColorNamer.hex(forName: " Red "), "#FF0000")
+        XCTAssertNil(ColorNamer.hex(forName: "Not A Color"))
+    }
+
 }
