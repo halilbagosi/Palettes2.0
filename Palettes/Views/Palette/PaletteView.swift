@@ -119,6 +119,7 @@ struct PaletteView: View {
                 }) {
                     SettingsView()
                         .environmentObject(appData)
+                        .environmentObject(replay)
                 }
                 .alert("Delete Palette", isPresented: $showDeleteAlert, presenting: paletteToDelete) { palette in
                     Button("Delete", role: .destructive) {

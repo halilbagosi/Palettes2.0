@@ -73,6 +73,11 @@ struct GenerationOrbView: View {
     /// When false the orb is purely decorative: no stretch-on-drag and no
     /// debug triple-tap panel.
     var interactive: Bool = true
+    /// Content that sits inside the glass, under the liquid (e.g. a camera
+    /// preview). Its edge fades out. Change `backdropID` when swapping it to
+    /// cross-fade.
+    var backdrop: AnyView? = nil
+    var backdropID: Int = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -104,13 +109,38 @@ struct GenerationOrbView: View {
             let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
 
             ZStack {
+                OrbShellBackground()
+                    .frame(width: diameter, height: diameter)
+
+                ZStack {
+                    if let backdrop {
+                        backdrop
+                            .frame(width: diameter, height: diameter)
+                            .mask(
+                                RadialGradient(
+                                    stops: [
+                                        .init(color: .black, location: 0),
+                                        .init(color: .black, location: 0.7),
+                                        .init(color: .clear, location: 1),
+                                    ],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: diameter / 2
+                                )
+                            )
+                            .id(backdropID)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(width: diameter, height: diameter)
+                .clipShape(Circle())
+                .animation(.easeInOut(duration: 0.4), value: backdropID)
+
                 liquid(diameter: diameter, time: t, now: now)
                     .clipShape(Circle())
 
-                // Clear glass shell — refracts whatever sits behind the orb
-                Circle()
-                    .fill(.clear)
-                    .orbGlassShell(in: .circle)
+                // Clear glass shell (iOS 26) or specular rim (earlier) on top
+                OrbShellOverlay()
                     .frame(width: diameter, height: diameter)
 
                 // Drawn above the liquid so it stays readable as colors arrive

@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import AVFoundation
 @testable import Palettes
 
 @MainActor
@@ -103,6 +104,42 @@ final class OnboardingModelTests: XCTestCase {
         XCTAssertTrue(model.usesPhotoFallback)
         model.cameraAccess = .unavailable
         XCTAssertTrue(model.usesPhotoFallback)
+    }
+
+    // MARK: - Camera permission mapping
+
+    func testAuthorizationStatusMapping() {
+        let cases: [(AVAuthorizationStatus, OnboardingCameraAccess)] = [
+            (.notDetermined, .notDetermined), (.authorized, .authorized),
+            (.denied, .denied), (.restricted, .restricted),
+        ]
+        for (status, expected) in cases {
+            XCTAssertEqual(OnboardingCameraAccess(status: status, hasDevice: true), expected)
+        }
+    }
+
+    func testNoDeviceWinsOverAnyStatus() {
+        for status in [AVAuthorizationStatus.notDetermined, .authorized, .denied, .restricted] {
+            XCTAssertEqual(OnboardingCameraAccess(status: status, hasDevice: false), .unavailable)
+        }
+    }
+
+    func testCameraUIStateMapping() {
+        let model = makeModel()
+        let expected: [(OnboardingCameraAccess, OnboardingCameraUIState)] = [
+            (.notDetermined, .needsPermission), (.authorized, .live),
+            (.denied, .photoFallback), (.restricted, .photoFallback), (.unavailable, .photoFallback),
+        ]
+        for (access, state) in expected {
+            model.cameraAccess = access
+            XCTAssertEqual(model.cameraUIState, state)
+            XCTAssertEqual(model.usesPhotoFallback, state == .photoFallback)
+        }
+    }
+
+    func testSampleImageIsRenderable() {
+        let image = OnboardingSampleImage.make(size: CGSize(width: 40, height: 40))
+        XCTAssertEqual(image.size, CGSize(width: 40, height: 40))
     }
 
     // MARK: - Pull gesture

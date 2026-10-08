@@ -14,11 +14,13 @@ struct OnboardingOrb: View {
     var blackFill: Double
     var label: String
     var colors: [Color] = []
+    var backdrop: AnyView? = nil
+    var backdropID: Int = 0
 
     var body: some View {
         ZStack {
             // Draws its own glass shell (material fallback before iOS 26).
-            GenerationOrbView(colors: colors, interactive: false)
+            GenerationOrbView(colors: colors, interactive: false, backdrop: backdrop, backdropID: backdropID)
 
             Circle()
                 .fill(.black)

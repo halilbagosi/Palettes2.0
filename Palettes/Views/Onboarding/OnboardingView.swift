@@ -8,13 +8,27 @@
 //
 
 import SwiftUI
+import PhotosUI
+import AVFoundation
 
 struct OnboardingView: View {
     @StateObject private var model: OnboardingModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Rubber-banded stretch of the island blob while the user pulls down.
     @State private var pull: CGFloat = 0
+
+    // Camera step
+    @State private var camera = OrbCameraController()
+    @State private var sampleImage = OnboardingSampleImage.make()
+    @State private var pickedImage: UIImage?
+    @State private var photosPickerItem: PhotosPickerItem?
+    @State private var isScanning = false
+    @State private var scanCount = 0
+    @State private var rippleActive = false
+    @State private var rippleScale: CGFloat = 1
+    @State private var rippleOpacity: Double = 0
 
     private static let islandDiameter: CGFloat = 37
     private static let maxOrbDiameter: CGFloat = 260
@@ -90,8 +104,8 @@ struct OnboardingView: View {
                 // Full-screen coordinate space for the orb.
                 Color.clear
                     .ignoresSafeArea()
-                    .overlay { ZStack { orbLayer(layout: layout, travels: travels) }.ignoresSafeArea() }
                     .allowsHitTesting(false)
+                    .overlay { ZStack { orbLayer(layout: layout, travels: travels) }.ignoresSafeArea() }
 
                 content(layout: layout, travels: travels)
 
@@ -103,6 +117,21 @@ struct OnboardingView: View {
             }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: model.step)
+        .sensoryFeedback(.impact(weight: .medium), trigger: scanCount)
+        .onChange(of: model.step) { _, step in
+            if step == .camera { model.cameraAccess = .current() }
+            updateCameraSession()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // The user may have changed access in Settings while away.
+            if phase == .active, model.step == .camera, model.capturedImage == nil {
+                model.cameraAccess = .current()
+            }
+            updateCameraSession()
+        }
+        .onChange(of: model.cameraAccess) { _, _ in updateCameraSession() }
+        .onChange(of: photosPickerItem) { _, item in loadPickedPhoto(item) }
+        .onDisappear { camera.stop() }
     }
 
     // MARK: - Orb
@@ -115,17 +144,33 @@ struct OnboardingView: View {
             // Stretch down the pull axis like a drop about to fall.
             let stretch = detached ? 1 : 1 + pull / 500
 
-            OnboardingOrb(diameter: diameter, blackFill: detached ? 0 : 1, label: orbLabel)
+            OnboardingOrb(diameter: diameter, blackFill: detached ? 0 : 1, label: orbLabel,
+                          backdrop: orbBackdrop, backdropID: orbBackdropID)
                 // Slow black -> clear so the glass reads as filling in after it detaches.
                 .animation(.easeInOut(duration: 1.4).delay(0.25), value: detached)
                 .scaleEffect(x: 1 / sqrt(stretch), y: stretch, anchor: .top)
+                .allowsHitTesting(orbTapsEnabled)
                 .position(x: layout.orbCenter.x, y: y)
         } else if detached {
-            OnboardingOrb(diameter: layout.orbDiameter, blackFill: 0, label: orbLabel)
+            OnboardingOrb(diameter: layout.orbDiameter, blackFill: 0, label: orbLabel,
+                          backdrop: orbBackdrop, backdropID: orbBackdropID)
+                .allowsHitTesting(orbTapsEnabled)
                 .position(layout.orbCenter)
                 .transition(.opacity)
         }
+        if rippleActive {
+            Circle()
+                .stroke(.white.opacity(0.9), lineWidth: 3)
+                .frame(width: layout.orbDiameter, height: layout.orbDiameter)
+                .scaleEffect(rippleScale)
+                .opacity(rippleOpacity)
+                .position(layout.orbCenter)
+        }
     }
+
+    /// Only steps with a tap target on the orb receive touches; the rest let
+    /// them fall through to the content underneath. (Task 4 re-samples on tap.)
+    private var orbTapsEnabled: Bool { model.step == .adjust }
 
     private var orbLabel: String {
         switch model.step {
@@ -175,13 +220,18 @@ struct OnboardingView: View {
     private func content(layout: Layout, travels: Bool) -> some View {
         if model.step == .pull {
             VStack(spacing: 10) {
-                Image(systemName: "chevron.compact.down")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text("Pull down to begin")
-                    .font(.title3.weight(.medium))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Not hittable, so a drag starting on the caption still reaches
+                // the pull gesture underneath; Begin stays tappable.
+                VStack(spacing: 10) {
+                    Image(systemName: "chevron.compact.down")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("Pull down to begin")
+                        .font(.title3.weight(.medium))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .allowsHitTesting(false)
 
                 // No drag required when the orb doesn't travel from the island.
                 if !travels {
@@ -224,6 +274,8 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 continueButton
+            case .camera:
+                cameraCaptions
             case .generate:
                 // Placeholder: Task 4 finishes with `.completed(paletteID:)`.
                 Text("Step \(model.step.rawValue + 1) of \(OnboardingStep.allCases.count)")
@@ -233,12 +285,148 @@ struct OnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
             default:
-                // Camera and adjust land in later tasks.
+                // Adjust lands in Task 4.
                 Text("Step \(model.step.rawValue + 1) of \(OnboardingStep.allCases.count)")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                 continueButton
             }
+        }
+    }
+
+    // MARK: - Camera step
+
+    /// Camera preview, or the chosen/sample still when the camera isn't usable.
+    private var showsStill: Bool { model.cameraUIState == .photoFallback || pickedImage != nil }
+    private var stillImage: UIImage { pickedImage ?? sampleImage }
+
+    private var orbBackdrop: AnyView? {
+        if let frozen = model.capturedImage {
+            return AnyView(Image(uiImage: frozen).resizable().scaledToFill())
+        }
+        guard model.step == .camera else { return nil }
+        if showsStill {
+            return AnyView(Image(uiImage: stillImage).resizable().scaledToFill())
+        }
+        if model.cameraUIState == .live {
+            return AnyView(OrbCameraPreview(session: camera.session))
+        }
+        return nil
+    }
+
+    /// Changes whenever the backdrop swaps, so the orb cross-fades.
+    private var orbBackdropID: Int {
+        if model.capturedImage != nil { return 3 }
+        guard model.step == .camera else { return 0 }
+        if showsStill { return pickedImage == nil ? 2 : 4 }
+        return model.cameraUIState == .live ? 1 : 0
+    }
+
+    @ViewBuilder
+    private var cameraCaptions: some View {
+        switch model.cameraUIState {
+        case .needsPermission where pickedImage == nil:
+            Text("Palettes uses your camera to find a color. Nothing is saved or uploaded.")
+                .font(.title3.weight(.medium))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Allow Camera") { requestCameraAccess() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+        default:
+            if model.cameraUIState == .photoFallback && pickedImage == nil {
+                Text(fallbackMessage)
+                    .font(.title3.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button {
+                scan()
+            } label: {
+                Label("Scan", systemImage: "viewfinder")
+                    .font(.title3.weight(.semibold))
+                    .padding(.horizontal, 12)
+            }
+            .glassCapsuleButton()
+            .disabled(isScanning)
+            .accessibilityHint("Captures the color in the orb")
+        }
+        PhotosPicker(selection: $photosPickerItem, matching: .images) {
+            Text("Use a photo instead")
+                .font(.body.weight(.medium))
+        }
+        .disabled(isScanning)
+    }
+
+    private var fallbackMessage: String {
+        switch model.cameraAccess {
+        case .denied, .restricted: "Camera access is off. Scan the sample, or pick a photo."
+        default: "No camera here. Scan the sample, or pick a photo."
+        }
+    }
+
+    private func requestCameraAccess() {
+        Task {
+            _ = await AVCaptureDevice.requestAccess(for: .video)
+            model.cameraAccess = .current()
+        }
+    }
+
+    private func loadPickedPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                pickedImage = image
+                updateCameraSession()
+            }
+        }
+    }
+
+    /// The session only runs while the camera step is visible, the app is
+    /// active, access is granted, and nothing is frozen or picked.
+    private func updateCameraSession() {
+        let wanted = model.step == .camera
+            && scenePhase == .active
+            && model.cameraUIState == .live
+            && model.capturedImage == nil
+            && pickedImage == nil
+        if wanted { camera.start() } else { camera.stop() }
+    }
+
+    private func scan() {
+        guard !isScanning else { return }
+        isScanning = true
+        Task {
+            let image = showsStill ? stillImage : await camera.capturePhoto()
+            guard let image else {
+                isScanning = false
+                return
+            }
+            scanCount += 1
+            withAnimation(.easeInOut(duration: 0.4)) { model.capturedImage = image }
+            updateCameraSession()
+            playRipple()
+            try? await Task.sleep(for: .seconds(reduceMotion ? 0.6 : 1.0))
+            withAnimation(.easeInOut(duration: 0.4)) { model.advance() }
+            isScanning = false
+        }
+    }
+
+    /// A ring expanding from the orb's edge; Reduce Motion gets the image
+    /// cross-fade alone.
+    private func playRipple() {
+        guard !reduceMotion else { return }
+        rippleScale = 1
+        rippleOpacity = 1
+        rippleActive = true
+        withAnimation(.easeOut(duration: 0.9)) {
+            rippleScale = 1.4
+            rippleOpacity = 0
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            rippleActive = false
         }
     }
 

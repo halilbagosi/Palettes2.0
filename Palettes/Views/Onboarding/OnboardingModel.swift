@@ -10,6 +10,7 @@
 
 import Foundation
 import Combine
+import UIKit
 
 /// Steps shown inside the full-screen cover. The detail-screen coach mark and
 /// the extras cards happen after the cover dismisses, so they are not steps
@@ -34,6 +35,15 @@ enum OnboardingCameraAccess {
     case notDetermined, authorized, denied, restricted
     /// No capture device (e.g. the simulator).
     case unavailable
+}
+
+/// What the camera step shows, derived from `OnboardingCameraAccess`.
+enum OnboardingCameraUIState: Equatable {
+    /// Not asked yet: show the pre-prompt line and an Allow button.
+    case needsPermission
+    case live
+    /// Denied, restricted, or no camera: photo picker and sample image.
+    case photoFallback
 }
 
 /// Pull-down gesture math for step 0.
@@ -61,6 +71,8 @@ final class OnboardingModel: ObservableObject {
     @Published private(set) var step: OnboardingStep = .pull
     @Published private(set) var isFinished = false
     @Published var cameraAccess: OnboardingCameraAccess = .notDetermined
+    /// The frozen scan (or chosen photo) shown inside the orb after Scan.
+    @Published var capturedImage: UIImage?
     /// Sampled color, 0...255 per channel; set once the user scans.
     @Published var scannedRGB: (r: Double, g: Double, b: Double)?
     /// Adjustment slider positions in `ColorAdjustment`'s convention (0...1, 0.5 neutral).
@@ -79,6 +91,14 @@ final class OnboardingModel: ObservableObject {
         switch cameraAccess {
         case .denied, .restricted, .unavailable: true
         case .notDetermined, .authorized: false
+        }
+    }
+
+    var cameraUIState: OnboardingCameraUIState {
+        switch cameraAccess {
+        case .notDetermined: .needsPermission
+        case .authorized: .live
+        case .denied, .restricted, .unavailable: .photoFallback
         }
     }
 
