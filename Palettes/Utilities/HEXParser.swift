@@ -440,7 +440,54 @@ enum ColorNamer {
     private static let namedColorsLab: [(name: String, lab: (L: Double, a: Double, b: Double))] =
         namedColors.map { ($0.name, sRGBtoLab(r: $0.r / 255.0, g: $0.g / 255.0, b: $0.b / 255.0)) }
 
+    private static let namedColorsOKLCH: [OKLCH] =
+        namedColors.map { OKLCH(r: $0.r / 255.0, g: $0.g / 255.0, b: $0.b / 255.0) }
+
+    /// Words that already modify an entry name ("Dark Orange", "Pale Gold");
+    /// such an entry never gets a second modifier.
+    private static let modifierWords: Set<String> = [
+        "dark", "deep", "light", "pale", "medium", "vivid", "rich", "muted", "soft",
+        "bright", "hot", "neon", "electric", "dim", "dusty", "pastel",
+    ]
+
+    /// Whether a dictionary entry belongs to the same broad color as `color`:
+    /// greys only for greys, never a grey for a clearly colored swatch, a
+    /// hue family at most one step away, and an entry name that doesn't
+    /// itself contradict the color ("Dark Turquoise" on a light teal).
+    private static func entryFits(_ index: Int, color: OKLCH) -> Bool {
+        let entry = namedColorsOKLCH[index]
+        if color.C < 0.03 {
+            guard entry.C < 0.05 else { return false }
+        } else if color.C >= 0.045 && entry.C < 0.025 {
+            return false
+        } else if color.C >= 0.04 && entry.C >= 0.04 {
+            let a = ColorVocabulary.family(forHue: color.h)
+            let b = ColorVocabulary.family(forHue: entry.h)
+            guard ColorVocabulary.ringDistance(a, b) <= 1 else { return false }
+        }
+        return ColorVocabulary.isPlausible(name: namedColors[index].name, for: color)
+    }
+
+    /// Whether a modifier is true of the color itself, not just of its
+    /// difference from the dictionary entry.
+    private static func modifierFits(_ word: String, color: OKLCH) -> Bool {
+        switch word {
+        case "Pale", "Light": return color.L >= 0.62
+        case "Dark", "Deep": return color.L <= 0.6
+        case "Vivid": return color.C >= 0.12
+        case "Rich": return color.C >= 0.08
+        default: return true
+        }
+    }
+
     // ── Public API ──
+
+    /// The dictionary color named `name` (any casing), as "#RRGGBB".
+    static func hex(forName name: String) -> String? {
+        let target = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let entry = namedColors.first(where: { $0.name.lowercased() == target }) else { return nil }
+        return String(format: "#%02X%02X%02X", Int(entry.r), Int(entry.g), Int(entry.b))
+    }
 
     static func name(forHex hex: String) -> String {
         var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -474,10 +521,11 @@ enum ColorNamer {
     /// unique within the call. Preferred (AI-supplied) names are honored
     /// verbatim when present and not already claimed by an earlier index;
     /// everything else gets a descriptive name built from the nearest
-    /// dictionary entry plus a modifier reflecting how the color actually
-    /// deviates from that entry in Lab (lightness → Deep/Dark/Pale/Light,
-    /// chroma → Muted/Soft/Vivid/Rich). Colors very close to their nearest
-    /// entry get the plain entry name, no modifier.
+    /// dictionary entry that fits the color (same hue family, greys for
+    /// greys, an entry name that doesn't contradict the swatch), plus a
+    /// modifier only when it is true of the color itself (lightness →
+    /// Deep/Dark/Pale/Light, chroma → Muted/Soft/Vivid/Rich). Colors very
+    /// close to their nearest entry get the plain entry name, no modifier.
     ///
     /// If a name is still claimed once names are considered in order (a
     /// duplicate preferred name, or two colors that would otherwise
@@ -504,11 +552,20 @@ enum ColorNamer {
             guard let c = parseHexComponents(hex) else { return nil }
             return sRGBtoLab(r: c.r, g: c.g, b: c.b)
         }
-        let ranked: [[(index: Int, delta: Double)]] = labs.map { lab in
-            guard let lab else { return [] }
-            return namedColorsLab.enumerated()
+        let oklch: [OKLCH?] = hexes.map { OKLCH(hex: $0) }
+        let ranked: [[(index: Int, delta: Double)]] = hexes.indices.map { i in
+            guard let lab = labs[i] else { return [] }
+            let byDistance = namedColorsLab.enumerated()
                 .map { (index: $0.offset, delta: ciede2000(lab, $0.element.lab)) }
                 .sorted { $0.delta < $1.delta }
+            // Entries in the color's own hue family (and greys for greys)
+            // come first, even when a wrong-family entry is a little nearer
+            // in Lab — that nearness is what named a deep teal "Charcoal".
+            guard let color = oklch[i] else { return byDistance }
+            let fits = byDistance.map { entryFits($0.index, color: color) }
+            let fitting = byDistance.indices.filter { fits[$0] }.map { byDistance[$0] }
+            let others = byDistance.indices.filter { !fits[$0] }.map { byDistance[$0] }
+            return fitting + others
         }
 
         enum Axis { case lightness, chroma }
@@ -524,23 +581,32 @@ enum ColorNamer {
         // Every candidate name for a given color at a given rank into its
         // ranked-entries list: the plain entry name if it's a close match,
         // otherwise the dominant-axis modifier first, then the secondary
-        // axis's modifier as a second, distinct option before moving on to
-        // the next-nearest entry.
+        // axis's modifier, keeping only modifiers that are true of the
+        // color itself (never "Pale" on a dark color, "Vivid" on a grey, or
+        // a second modifier on an entry that already has one).
         func candidates(colorIndex: Int, rank: Int) -> [String] {
             guard let lab = labs[colorIndex], rank < ranked[colorIndex].count else { return [] }
             let entry = ranked[colorIndex][rank]
             let entryName = namedColorsLab[entry.index].name
             guard entry.delta >= modifierThreshold else { return [entryName] }
+            guard let color = oklch[colorIndex],
+                  !ColorVocabulary.tokens(entryName).contains(where: modifierWords.contains) else { return [entryName] }
 
             let entryLab = namedColorsLab[entry.index].lab
+            let entryIsGrey = namedColorsOKLCH[entry.index].C < 0.03
             let dL = lab.L - entryLab.L
             let dC = labChroma(lab) - labChroma(entryLab)
             let dominant: Axis = abs(dL) >= abs(dC) ? .lightness : .chroma
             let secondary: Axis = dominant == .lightness ? .chroma : .lightness
 
-            let primary = "\(modifierWord(dL: dL, dC: dC, axis: dominant)) \(entryName)"
-            let alternate = "\(modifierWord(dL: dL, dC: dC, axis: secondary)) \(entryName)"
-            return primary == alternate ? [primary] : [primary, alternate]
+            var names: [String] = []
+            for axis in [dominant, secondary] where !(axis == .chroma && entryIsGrey) {
+                let word = modifierWord(dL: dL, dC: dC, axis: axis)
+                guard modifierFits(word, color: color) else { continue }
+                let name = "\(word) \(entryName)"
+                if !names.contains(name) { names.append(name) }
+            }
+            return names.isEmpty ? [entryName] : names
         }
 
         var result = Array(repeating: "", count: n)
