@@ -12,15 +12,13 @@ struct OnboardingOrb: View {
     var diameter: CGFloat
     /// 1 = solid black (island), 0 = fully clear glass.
     var blackFill: Double
+    var label: String
     var colors: [Color] = []
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(.clear)
-                .orbGlass(in: .circle)
-
-            GenerationOrbView(colors: colors)
+            // Draws its own glass shell (material fallback before iOS 26).
+            GenerationOrbView(colors: colors, interactive: false)
 
             Circle()
                 .fill(.black)
@@ -28,14 +26,14 @@ struct OnboardingOrb: View {
         }
         .frame(width: diameter, height: diameter)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Color orb")
+        .accessibilityLabel(label)
     }
 }
 
 #Preview {
     VStack(spacing: 24) {
-        OnboardingOrb(diameter: 220, blackFill: 1)
-        OnboardingOrb(diameter: 220, blackFill: 0)
+        OnboardingOrb(diameter: 220, blackFill: 1, label: "Orb")
+        OnboardingOrb(diameter: 220, blackFill: 0, label: "Orb")
     }
     .padding()
     .background(Color(.systemBackground))

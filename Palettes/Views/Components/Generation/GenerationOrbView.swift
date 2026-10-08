@@ -70,6 +70,9 @@ struct GenerationOrbView: View {
     var photo: UIImage? = nil
     var expectedCount: Int = 0
     var showsProgress: Bool = false
+    /// When false the orb is purely decorative: no stretch-on-drag and no
+    /// debug triple-tap panel.
+    var interactive: Bool = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -107,7 +110,7 @@ struct GenerationOrbView: View {
                 // Clear glass shell — refracts whatever sits behind the orb
                 Circle()
                     .fill(.clear)
-                    .liquidGlass(.clear, in: .circle)
+                    .orbGlassShell(in: .circle)
                     .frame(width: diameter, height: diameter)
 
                 // Drawn above the liquid so it stays readable as colors arrive
@@ -123,7 +126,8 @@ struct GenerationOrbView: View {
         .offset(x: dragOffset.width * translation, y: dragOffset.height * translation)
         .contentShape(Circle())
 #if DEBUG
-        .onTapGesture(count: 3) { showDebugPanel = true }
+        .gesture(TapGesture(count: 3).onEnded { showDebugPanel = true },
+                 including: interactive ? .all : .none)
         .sheet(isPresented: $showDebugPanel) {
             OrbDebugPanel(settings: debug)
                 .presentationDetents([.medium])
@@ -138,7 +142,8 @@ struct GenerationOrbView: View {
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
                         dragOffset = .zero
                     }
-                }
+                },
+            including: interactive ? .all : .none
         )
         .sensoryFeedback(.impact(weight: .light), trigger: colors.count)
         .onChange(of: colors.count) { oldCount, newCount in
