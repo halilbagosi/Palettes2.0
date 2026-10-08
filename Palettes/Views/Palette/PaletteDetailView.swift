@@ -120,6 +120,7 @@ struct PaletteDetailView: View {
         }
         .navigationTitle(livePalette.name)
         .onboardingCoachMark(for: palette.id)
+        .onboardingExtras(for: livePalette)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

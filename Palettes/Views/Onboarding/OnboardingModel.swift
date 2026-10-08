@@ -24,6 +24,8 @@ enum OnboardingKeys {
     static let didComplete = "didCompleteOnboarding"
     /// Set once the detail-screen coach mark has been shown; it never returns.
     static let didShowCoachMark = "didShowOnboardingCoachMark"
+    /// Set once the post-onboarding extras sheet has been shown.
+    static let didShowExtras = "didShowOnboardingExtras"
 }
 
 enum OnboardingFinishReason: Equatable {

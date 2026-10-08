@@ -84,10 +84,10 @@
 - [x] `OnboardingCoachMark`: non-modal overlay "Long press a color for options, or tag it." Dismiss on first long press or a tap on the hint; once shown, never again.
 
 ### Task 6: Extras cards (step 6, optional)
-- [ ] Share card: render with `PaletteImageRenderer`, button opens `ExportPaletteSheet`.
-- [ ] Siri card: "Ask Siri: generate a palette", plus a line that palettes appear in Spotlight (`EntityIndexer`).
-- [ ] Reserved widget slot: a `static let showsWidgetCard = false` constant; flip it when the widget ships.
-- [ ] iCloud line only if v1 ships with CloudKit enabled (see launch-data-model decision).
+- [x] Share card: render with `PaletteImageRenderer`, button opens `ExportPaletteSheet`.
+- [x] Siri card: "Ask Siri: generate a palette", plus a line that palettes appear in Spotlight (`EntityIndexer`).
+- [x] Reserved widget slot: a `static let showsWidgetCard = false` constant; flip it when the widget ships.
+- [x] iCloud line only if v1 ships with CloudKit enabled (see launch-data-model decision).
 
 ### Task 7: Polish and verification
 - [ ] Accessibility pass (VoiceOver order, Dynamic Type, Reduce Motion).

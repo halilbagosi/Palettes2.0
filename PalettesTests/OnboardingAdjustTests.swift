@@ -160,7 +160,29 @@ final class OnboardingCoachMarkLogicTests: XCTestCase {
     }
 }
 
-final class OnboardingCoachMarkWordingTests: XCTestCase {
+final class OnboardingExtrasLogicTests: XCTestCase {
+    func testPresentsOnlyForArmedPaletteAndOnlyOnce() {
+        let id = UUID()
+        XCTAssertTrue(OnboardingExtrasLogic.shouldPresent(target: id, paletteID: id, alreadyShown: false))
+        XCTAssertFalse(OnboardingExtrasLogic.shouldPresent(target: id, paletteID: id, alreadyShown: true))
+        XCTAssertFalse(OnboardingExtrasLogic.shouldPresent(target: id, paletteID: UUID(), alreadyShown: false))
+        XCTAssertFalse(OnboardingExtrasLogic.shouldPresent(target: nil, paletteID: id, alreadyShown: false))
+    }
+
+    func testCardListHidesReservedCardsAndGatesSiri() {
+        XCTAssertFalse(OnboardingExtras.showsWidgetCard)
+        XCTAssertFalse(OnboardingExtras.showsICloudCard)
+        XCTAssertEqual(OnboardingExtrasLogic.cards(siriAvailable: true), [.share, .siri])
+        XCTAssertEqual(OnboardingExtrasLogic.cards(siriAvailable: false), [.share])
+        XCTAssertEqual(
+            OnboardingExtrasLogic.cards(siriAvailable: true, showsWidget: true, showsICloud: true),
+            [.share, .siri, .widget, .icloud])
+    }
+
+    func testSiriPhraseMatchesAShortcutPhrase() {
+        XCTAssertEqual(OnboardingExtrasLogic.siriPhrase(appName: "Palettes"), "Generate a palette in Palettes")
+    }
+
     func testCoachMarkWordingForVoiceOver() {
         XCTAssertEqual(OnboardingCoachMarkLogic.message(voiceOverRunning: false),
                        "Long press a color for options, or tag it.")
