@@ -120,7 +120,7 @@ enum PaletteBuilder {
 
     static func build(_ request: PaletteBuildRequest) -> BuiltPalette {
         let anchorHexes = normalize(request.anchors)
-        let anchors = anchorHexes.compactMap(OKLCH.init(hex:))
+        let anchors = anchorHexes.compactMap { OKLCH(hex: $0) }
         let size = max(request.size, anchorHexes.count)
         var rng = SplitMix64(seed: request.seed)
 

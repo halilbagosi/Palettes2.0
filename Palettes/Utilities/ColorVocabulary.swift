@@ -157,7 +157,7 @@ enum ColorVocabulary {
         guard !words.isEmpty, words.count <= 4, trimmed.count <= 28 else { return false }
         guard trimmed.rangeOfCharacter(from: .decimalDigits) == nil, !trimmed.contains("#") else { return false }
 
-        let named = words.compactMap { hueWords[$0] }.map(family(forHue:))
+        let named = words.compactMap { hueWords[$0] }.map { family(forHue: $0) }
         let own = family(forHue: color.h)
         if color.C < 0.006 {
             // A true grey has no hue to name.
@@ -178,9 +178,9 @@ enum ColorVocabulary {
     /// Whether a palette title's color words match colors in the palette.
     /// A title with no color words always passes.
     static func isPlausibleTitle(_ title: String, forHexes hexes: [String]) -> Bool {
-        let named = tokens(title).compactMap { hueWords[$0] }.map(family(forHue:))
+        let named = tokens(title).compactMap { hueWords[$0] }.map { family(forHue: $0) }
         guard !named.isEmpty else { return true }
-        let present = hexes.compactMap(OKLCH.init(hex:)).filter { $0.C >= 0.04 }.map { family(forHue: $0.h) }
+        let present = hexes.compactMap { OKLCH(hex: $0) }.filter { $0.C >= 0.04 }.map { family(forHue: $0.h) }
         return named.allSatisfy { word in present.contains { ringDistance($0, word) <= 1 } }
     }
 }
