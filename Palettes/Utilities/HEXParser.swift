@@ -541,7 +541,7 @@ enum ColorNamer {
 
         // Modifier threshold: below this CIEDE2000 delta from the nearest
         // entry, the color reads as "basically that color" — no modifier
-        // needed. Chosen well under `PaletteValidation.minDeltaE` (12) so a
+        // needed. Chosen well under the palette builder's distinctness floor (12) so a
         // color that's still clearly distinguishable from a sibling color
         // can nonetheless read as an unmodified match to its own entry.
         let modifierThreshold: Double = 8

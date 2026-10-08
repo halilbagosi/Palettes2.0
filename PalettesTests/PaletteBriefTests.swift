@@ -6,6 +6,7 @@
 import XCTest
 @testable import Palettes
 
+@MainActor
 final class PaletteBriefTests: XCTestCase {
 
     func testColorWordSetsTheHue() {
