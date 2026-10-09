@@ -106,12 +106,14 @@ struct OnboardingView: View {
                         .accessibilityAction { morph.useFadeMode(); morph.beginFade() }
                 }
 
-                IslandMorphStage(controller: morph) { diameter in
-                    orb(diameter: diameter, layout: layout)
-                }
-
                 if !(model.step == .pull && travels) {
                     stepLayer(layout: layout, content: content(travels: travels))
+                }
+
+                // Above the text and buttons: pulled over them, the glass bends
+                // them. It only takes touches on the drop itself.
+                IslandMorphStage(controller: morph) { diameter in
+                    orb(diameter: diameter, layout: layout)
                 }
 
                 OnboardingSkipButton { model.skip() }

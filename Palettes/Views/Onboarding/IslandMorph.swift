@@ -277,6 +277,7 @@ struct IslandMorphStage<Orb: View>: View {
             // orb's top as black melting into glass.
             if controller.showsGoo {
                 IslandGooCanvas(controller: controller, frame: frame)
+                    .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea()

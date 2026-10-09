@@ -79,8 +79,8 @@ final class DropPhysics {
         // The orb can be zero-sized while tucked into the island; never divide by it.
         let d = max(Double(diameter), 1)
         let phi = atan2(Double(pull.height), Double(pull.width))
-        let amount = 0.30 * (1 - exp(-len / (d * 0.85)))
-        let shift = 0.10 * (1 - exp(-len / (d * 1.2)))
+        let amount = 0.42 * (1 - exp(-len / (d * 0.9)))
+        let shift = 0.22 * (1 - exp(-len / (d * 1.1)))
 
         // Held: track the finger tightly. Released: a bouncy water-drop spring.
         let (resp, damp) = held ? (0.11, 1.0) : (0.42, 0.26)
