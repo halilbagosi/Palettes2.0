@@ -191,7 +191,7 @@ struct LiquidBubble<Content: View>: View {
 
         return ZStack {
             if showsGlow {
-                dropletShadow
+                dropletShadow(shape)
                 if colorScheme == .dark {
                     backdrop(shape)
                         .offset(x: w.drift.width * diameter, y: w.drift.height * diameter)
@@ -239,21 +239,27 @@ struct LiquidBubble<Content: View>: View {
 
     /// Light stage: a large soft grey shadow all around, like a drop of water
     /// resting just above white paper.
-    private var dropletShadow: some View {
-        // Like a droplet's shadow on the surface below: a soft round shadow that
-        // stays circular while the drop above wobbles, sitting slightly low.
-        ZStack {
-            Circle()
-                .fill(.black.opacity(colorScheme == .dark ? 0.45 : 0.13))
-                .frame(width: diameter * 0.96, height: diameter * 0.96)
-                .blur(radius: diameter * 0.08)
-                .offset(y: diameter * 0.06)
-            // A tighter contact shadow right under the drop.
-            Circle()
-                .fill(.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
-                .frame(width: diameter * 0.8, height: diameter * 0.8)
-                .blur(radius: diameter * 0.03)
-                .offset(y: diameter * 0.04)
+    /// Like a droplet's shadow on the surface below: a thin soft ring that
+    /// follows the drop's shape as it wobbles, sitting a little lower.
+    private func dropletShadow(_ shape: BubbleShape) -> some View {
+        let dark = colorScheme == .dark
+        return ZStack {
+            shape
+                .stroke(.black.opacity(dark ? 0.55 : 0.22), lineWidth: diameter * 0.045)
+                .blur(radius: diameter * 0.022)
+            // Faint spread so the ring sits on the surface rather than floating.
+            shape
+                .stroke(.black.opacity(dark ? 0.25 : 0.08), lineWidth: diameter * 0.12)
+                .blur(radius: diameter * 0.06)
+        }
+        .frame(width: diameter, height: diameter)
+        .offset(y: diameter * 0.085)
+        // Only on the surface around the drop, never seen through the glass.
+        .mask {
+            Rectangle()
+                .overlay { shape.fill(.black).frame(width: diameter, height: diameter).blendMode(.destinationOut) }
+                .compositingGroup()
+                .frame(width: diameter * 1.6, height: diameter * 1.6)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
