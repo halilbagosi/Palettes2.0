@@ -272,10 +272,10 @@ struct LiquidBubble<Content: View>: View {
             .fill(RadialGradient(
                 // Continuous behind the drop: a clear middle left a dark hole
                 // beside a stretched drop.
-                stops: [.init(color: .white.opacity(0.05), location: 0),
-                        .init(color: .white.opacity(0.06), location: 0.44),
-                        .init(color: .white.opacity(0.07), location: 0.5),
-                        .init(color: .white.opacity(0.025), location: 0.72),
+                stops: [.init(color: .white.opacity(0.03), location: 0),
+                        .init(color: .white.opacity(0.035), location: 0.44),
+                        .init(color: .white.opacity(0.045), location: 0.5),
+                        .init(color: .white.opacity(0.015), location: 0.72),
                         .init(color: .clear, location: 1)],
                 center: .center, startRadius: 0, endRadius: diameter * 1.1))
             .frame(width: diameter * 2.3, height: diameter * 2.3)
@@ -291,12 +291,12 @@ struct LiquidBubble<Content: View>: View {
         let dark = colorScheme == .dark
         return ZStack {
             shape
-                .stroke(.black.opacity(dark ? 0.08 : 0.06), lineWidth: diameter * 0.06)
-                .blur(radius: diameter * 0.045)
+                .stroke(.black.opacity(dark ? 0.32 : 0.06), lineWidth: diameter * (dark ? 0.11 : 0.06))
+                .blur(radius: diameter * (dark ? 0.075 : 0.045))
             // Faint spread so the ring sits on the surface rather than floating.
             shape
-                .stroke(.black.opacity(dark ? 0.03 : 0.025), lineWidth: diameter * 0.16)
-                .blur(radius: diameter * 0.1)
+                .stroke(.black.opacity(dark ? 0.16 : 0.025), lineWidth: diameter * (dark ? 0.24 : 0.16))
+                .blur(radius: diameter * (dark ? 0.13 : 0.1))
         }
         .frame(width: diameter, height: diameter)
         .offset(y: diameter * 0.2)
