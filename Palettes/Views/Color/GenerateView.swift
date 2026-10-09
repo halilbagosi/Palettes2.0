@@ -40,7 +40,7 @@ struct GenerateView: View {
     @State private var duplicateOfName = ""
 
     private let sizeOptions = [2, 4, 6, 8, 10, 12]
-    private let formOrbDiameter: CGFloat = 138
+    private let formOrbDiameter: CGFloat = 156
 
     /// Iridescent tint reserved for the Apple Intelligence glyph.
     private var glowGradient: AnyShapeStyle {
@@ -154,7 +154,7 @@ struct GenerateView: View {
             showsProgress: true
         )
         .matchedGeometryEffect(id: "orb", in: orbNamespace)
-        .frame(width: 260, height: 260)
+        .frame(width: 300, height: 300)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 

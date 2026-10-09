@@ -51,7 +51,7 @@ struct OnboardingView: View {
         let compact: Bool
 
         var orbDiameter: CGFloat {
-            compact ? min(220, full.width * 0.56) : min(280, full.width * 0.68)
+            compact ? min(240, full.width * 0.62) : min(310, full.width * 0.76)
         }
         /// Skip's pill: 6 below the top safe area, 30 tall.
         var skipBottom: CGFloat { topInset + 6 + 30 }

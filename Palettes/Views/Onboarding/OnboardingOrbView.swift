@@ -52,7 +52,7 @@ struct OnboardingOrbView: View {
     /// Local pokes: a tap on the window jiggles the bubble.
     @State private var pokes = 0
 
-    static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.56 }
+    static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.7 }
     /// The liquid color fill grows to this fraction of the orb.
     static let colorFillFraction: CGFloat = 0.78
 

@@ -12,73 +12,113 @@
 
 import SwiftUI
 
-// MARK: - Wobble model
+// MARK: - Shape state
 
-/// The bubble's shape at one moment: a circle deformed by an oval (mode 2) and
-/// a slight three-lobed (mode 3) wave, plus a small drift of its center.
+/// The drop's shape at one moment: a circle deformed by an oval (mode 2), a
+/// one-sided bulge toward a pulling finger (mode 1), a slight three-lobed
+/// wave (mode 3), and a shift of its center.
 struct BubbleWobble: Equatable {
     var oval: Double = 0
     var ovalAngle: Double = 0
+    var bulge: Double = 0
+    var bulgeAngle: Double = 0
     var lobe: Double = 0
     var lobeAngle: Double = 0
+    /// Center shift as a fraction of the diameter.
     var drift: CGSize = .zero
 
     static let still = BubbleWobble()
+}
 
+// MARK: - Physics
+
+/// A soft-body model of the drop. Each deformation mode is a damped spring
+/// integrated every frame, so the drop carries momentum: let go of a pull and
+/// it springs back past round into a squash the other way, wobbling to rest
+/// like a drop of water. While held, the springs are stiff and critically
+/// damped so the shape tracks the finger with no lag or bounce.
+///
+/// The oval is kept as a tensor (a, b) = amount·(cos 2φ, sin 2φ): passing
+/// through zero flips it to the perpendicular axis, which is exactly how a
+/// stretched jelly overshoots into a squash.
+final class DropPhysics {
+    private struct Spring2 {
+        var x = 0.0, y = 0.0, vx = 0.0, vy = 0.0
+        mutating func step(toward tx: Double, _ ty: Double, response: Double, damping: Double, dt: Double) {
+            let k = pow(2 * .pi / response, 2)
+            let c = 4 * .pi * damping / response
+            vx += (-k * (x - tx) - c * vx) * dt
+            vy += (-k * (y - ty) - c * vy) * dt
+            x += vx * dt
+            y += vy * dt
+        }
+    }
+
+    private var oval = Spring2()
+    private var bulge = Spring2()
+    private var center = Spring2()
+    private var last: Date?
+
+    /// Gives the drop a nudge (e.g. a color landing): oval velocity along `angle`.
+    func impulse(_ strength: Double, angle: Double) {
+        oval.vx += strength * cos(2 * angle)
+        oval.vy += strength * sin(2 * angle)
+    }
+
+    /// Advances the simulation to `now` and returns the shape.
     /// - Parameters:
-    ///   - t: seconds since the bubble appeared.
-    ///   - energy: idle liveliness, 0 (still) to 1 (busy, like while generating).
-    ///   - kick: the last poke: seconds since it, its strength, and the axis it
-    ///     was along; nil if none.
-    static func at(_ t: Double, energy: Double,
-                   kick: (since: Double, amount: Double, angle: Double)?) -> BubbleWobble {
-        // Idle: barely there. A slow breathing oval whose axis turns, so the
-        // drop looks alive without ever looking pulled. Big shapes only come
-        // from the user pulling on it.
-        let swell = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * sin(t * 0.29)
-        var oval = energy * (0.006 + 0.014 * swell) * sin(t * 1.6)
-        var angle = t * 0.45 + 0.9 * sin(t * 0.31)
-        var lobe = energy * 0.004 * sin(t * 2.3 + 0.6)
-        let lobeAngle = -t * 0.4
+    ///   - pull: the finger's offset from where it grabbed, in points (zero when not held).
+    ///   - held: whether a finger is on the drop.
+    func step(to now: Date, pull: CGSize, held: Bool, diameter: CGFloat,
+              idleTime t: Double, energy: Double) -> BubbleWobble {
+        let dt = min(1.0 / 30, max(0, last.map { now.timeIntervalSince($0) } ?? 0))
+        last = now
 
-        // Kick: a damped jiggle along the poke's axis, like a water balloon
-        // that was let go.
-        if let k = kick, k.since >= 0, k.since < 2.5 {
-            let decay = exp(-3.2 * k.since)
-            let jiggle = k.amount * decay * cos(k.since * 13.0)
-            // Blend toward the kick's axis while it is strong.
-            let weight = min(1, abs(jiggle) / max(abs(oval) + abs(jiggle), 0.0001))
-            angle = angle * (1 - weight) + k.angle * weight
-            oval += jiggle
-            lobe += k.amount * 0.2 * decay * sin(k.since * 16.0)
+        // Targets from the finger, rubber-banded so the drop can't tear.
+        let len = Double(hypot(pull.width, pull.height))
+        // The orb can be zero-sized while tucked into the island; never divide by it.
+        let d = max(Double(diameter), 1)
+        let phi = atan2(Double(pull.height), Double(pull.width))
+        let amount = 0.30 * (1 - exp(-len / (d * 0.85)))
+        let shift = 0.10 * (1 - exp(-len / (d * 1.2)))
+
+        // Held: track the finger tightly. Released: a bouncy water-drop spring.
+        let (resp, damp) = held ? (0.11, 1.0) : (0.42, 0.26)
+        let sub = 4
+        for _ in 0..<sub {
+            let h = dt / Double(sub)
+            oval.step(toward: amount * cos(2 * phi), amount * sin(2 * phi), response: resp, damping: damp, dt: h)
+            bulge.step(toward: amount * 0.35 * cos(phi), amount * 0.35 * sin(phi), response: resp, damping: held ? 1 : 0.4, dt: h)
+            center.step(toward: shift * cos(phi), shift * sin(phi), response: held ? 0.14 : 0.36, damping: held ? 1 : 0.55, dt: h)
         }
 
-        let drift = CGSize(width: energy * 0.004 * sin(t * 0.8 + 0.4),
-                           height: energy * 0.005 * sin(t * 0.63))
-        return BubbleWobble(oval: oval, ovalAngle: angle, lobe: lobe, lobeAngle: lobeAngle, drift: drift)
-    }
+        // Idle breathing on top: barely there, so it looks alive but never pulled.
+        let swell = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * sin(t * 0.29)
+        let idleOval = energy * (0.006 + 0.012 * swell) * sin(t * 1.6)
+        let idleAngle = t * 0.45 + 0.9 * sin(t * 0.31)
+        let a = oval.x + idleOval * cos(2 * idleAngle)
+        let b = oval.y + idleOval * sin(2 * idleAngle)
 
-    /// Stretch toward a finger pulling at `pull` (points from the center).
-    /// The drop elongates along the pull and leans a little after the finger.
-    func pulled(by pull: CGSize, diameter: CGFloat) -> BubbleWobble {
-        let len = hypot(pull.width, pull.height)
-        guard len > 0.5 else { return self }
-        // Rubber-banded so it never tears.
-        let amount = 0.32 * (1 - exp(-Double(len) / Double(diameter * 0.9)))
-        var w = self
-        w.oval = amount + oval * 0.3
-        w.ovalAngle = atan2(Double(pull.height), Double(pull.width))
-        w.drift = CGSize(width: drift.width + pull.width / diameter * 0.06,
-                         height: drift.height + pull.height / diameter * 0.06)
-        return w
-    }
+        // A non-finite value would stick in the springs forever; reset instead.
+        if ![oval.x, oval.y, oval.vx, oval.vy, bulge.x, bulge.y, center.x, center.y].allSatisfy(\.isFinite) {
+            oval = Spring2(); bulge = Spring2(); center = Spring2()
+            return .still
+        }
 
-    static func pullAmount(_ pull: CGSize, diameter: CGFloat) -> Double {
-        0.32 * (1 - exp(-Double(hypot(pull.width, pull.height)) / Double(diameter * 0.9)))
+        return BubbleWobble(
+            oval: hypot(a, b),
+            ovalAngle: atan2(b, a) / 2,
+            bulge: hypot(bulge.x, bulge.y),
+            bulgeAngle: atan2(bulge.y, bulge.x),
+            lobe: energy * 0.004 * sin(t * 2.3 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
+            lobeAngle: -t * 0.4,
+            drift: CGSize(width: center.x + energy * 0.004 * sin(t * 0.8 + 0.4),
+                          height: center.y + energy * 0.005 * sin(t * 0.63))
+        )
     }
 }
 
-/// The bubble outline for a wobble state, fitted to the rect's inscribed circle.
+/// The drop outline for a shape state, fitted to the rect's inscribed circle.
 struct BubbleShape: Shape {
     var wobble: BubbleWobble
 
@@ -92,10 +132,10 @@ struct BubbleShape: Shape {
         for i in 0..<n {
             let th = Double(i) / Double(n) * 2 * .pi
             let k = 1 + wobble.oval * cos(2 * (th - wobble.ovalAngle))
+                      + wobble.bulge * cos(th - wobble.bulgeAngle)
                       + wobble.lobe * cos(3 * (th - wobble.lobeAngle))
             points.append(CGPoint(x: c.x + r * k * cos(th), y: c.y + r * k * sin(th)))
         }
-        // Smooth closed curve through the midpoints.
         var path = Path()
         func mid(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2) }
         path.move(to: mid(points[n - 1], points[0]))
@@ -113,14 +153,14 @@ struct LiquidBubble<Content: View>: View {
     var diameter: CGFloat
     /// Idle liveliness: 0 still, ~0.4 resting, 1 busy.
     var energy: Double = 0.4
-    /// Change this to poke the bubble (a small jiggle that settles).
+    /// Change this to nudge the drop (a small wobble that settles).
     var kick: Int = 0
     /// When true the user can grab the drop and pull it out of shape; it
-    /// springs back with a jiggle on release.
+    /// springs back with momentum on release.
     var pullable: Bool = false
     /// An external pull (e.g. a parent's own drag gesture), in points.
     var externalPull: CGSize = .zero
-    /// How strongly content bends toward the rim, 0...1.
+    /// How strongly content bends toward the rim, 0...1 (drawn-glass fallback only).
     var lensStrength: Double = 0.9
     var showsGlow: Bool = true
     @ViewBuilder var content: () -> Content
@@ -128,10 +168,9 @@ struct LiquidBubble<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var start = Date()
-    @State private var kickDate: Date?
-    @State private var kickAmount = 0.06
-    @State private var kickAngle = 0.0
+    @State private var physics = DropPhysics()
     @State private var pull: CGSize = .zero
+    @State private var holding = false
 
     private var activePull: CGSize {
         CGSize(width: pull.width + externalPull.width, height: pull.height + externalPull.height)
@@ -139,46 +178,34 @@ struct LiquidBubble<Content: View>: View {
 
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { timeline in
-            let t = timeline.date.timeIntervalSince(start)
-            let kick = kickDate.map { (since: timeline.date.timeIntervalSince($0), amount: kickAmount, angle: kickAngle) }
-            let idle = reduceMotion ? .still : BubbleWobble.at(t, energy: energy, kick: kick)
-            bubble(idle.pulled(by: activePull, diameter: diameter))
+            let shape = reduceMotion ? .still : physics.step(
+                to: timeline.date,
+                pull: activePull,
+                held: holding || externalPull != .zero,
+                diameter: diameter,
+                idleTime: timeline.date.timeIntervalSince(start),
+                energy: energy)
+            bubble(shape)
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())
         .simultaneousGesture(pullGesture, including: pullable ? .all : .none)
-        .onChange(of: kick) { _, _ in poke(amount: 0.05, angle: Double.random(in: 0...(2 * .pi))) }
-        .onChange(of: externalPull == .zero) { _, released in
-            // A parent's drag ended: spring back with a jiggle.
-            if released { poke(amount: lastExternalAmount, angle: lastExternalAngle) }
-        }
-        .onChange(of: externalPull) { _, p in
-            if p != .zero {
-                lastExternalAmount = BubbleWobble.pullAmount(p, diameter: diameter)
-                lastExternalAngle = atan2(Double(p.height), Double(p.width))
-            }
+        .onChange(of: kick) { _, _ in
+            guard !reduceMotion else { return }
+            physics.impulse(0.9, angle: Double.random(in: 0...(2 * .pi)))
         }
     }
-
-    @State private var lastExternalAmount = 0.0
-    @State private var lastExternalAngle = 0.0
 
     private var pullGesture: some Gesture {
-        DragGesture(minimumDistance: 6)
-            .onChanged { pull = reduceMotion ? .zero : $0.translation }
-            .onEnded { _ in
-                let amount = BubbleWobble.pullAmount(pull, diameter: diameter)
-                let angle = atan2(Double(pull.height), Double(pull.width))
-                pull = .zero
-                poke(amount: amount, angle: angle)
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                holding = true
+                pull = reduceMotion ? .zero : value.translation
             }
-    }
-
-    private func poke(amount: Double, angle: Double) {
-        guard !reduceMotion else { return }
-        kickAmount = amount
-        kickAngle = angle
-        kickDate = Date()
+            .onEnded { _ in
+                holding = false
+                pull = .zero
+            }
     }
 
     private func bubble(_ w: BubbleWobble) -> some View {
@@ -215,6 +242,15 @@ struct LiquidBubble<Content: View>: View {
                 .clipShape(shape)
 
             glass(shape)
+
+            // The shadow continues under the drop: the glass frosts what's
+            // beneath it, so the part inside the outline is drawn over the glass,
+            // faintly, as if seen through clear water.
+            if showsGlow {
+                dropletShadow(shape)
+                    .mask(shape.frame(width: diameter, height: diameter))
+                    .opacity(colorScheme == .dark ? 0.5 : 0.8)
+            }
         }
         .frame(width: diameter, height: diameter)
     }
@@ -245,15 +281,15 @@ struct LiquidBubble<Content: View>: View {
         let dark = colorScheme == .dark
         return ZStack {
             shape
-                .stroke(.black.opacity(dark ? 0.55 : 0.11), lineWidth: diameter * 0.045)
-                .blur(radius: diameter * 0.022)
+                .stroke(.black.opacity(dark ? 0.5 : 0.06), lineWidth: diameter * 0.06)
+                .blur(radius: diameter * 0.045)
             // Faint spread so the ring sits on the surface rather than floating.
             shape
-                .stroke(.black.opacity(dark ? 0.25 : 0.04), lineWidth: diameter * 0.12)
-                .blur(radius: diameter * 0.06)
+                .stroke(.black.opacity(dark ? 0.22 : 0.025), lineWidth: diameter * 0.16)
+                .blur(radius: diameter * 0.1)
         }
         .frame(width: diameter, height: diameter)
-        .offset(y: diameter * 0.085)
+        .offset(y: diameter * 0.13)
         // A real shadow: it lies on the surface under the drop and shows through the glass.
         .allowsHitTesting(false)
         .accessibilityHidden(true)
