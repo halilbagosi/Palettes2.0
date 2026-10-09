@@ -245,22 +245,16 @@ struct LiquidBubble<Content: View>: View {
         let dark = colorScheme == .dark
         return ZStack {
             shape
-                .stroke(.black.opacity(dark ? 0.55 : 0.22), lineWidth: diameter * 0.045)
+                .stroke(.black.opacity(dark ? 0.55 : 0.11), lineWidth: diameter * 0.045)
                 .blur(radius: diameter * 0.022)
             // Faint spread so the ring sits on the surface rather than floating.
             shape
-                .stroke(.black.opacity(dark ? 0.25 : 0.08), lineWidth: diameter * 0.12)
+                .stroke(.black.opacity(dark ? 0.25 : 0.04), lineWidth: diameter * 0.12)
                 .blur(radius: diameter * 0.06)
         }
         .frame(width: diameter, height: diameter)
         .offset(y: diameter * 0.085)
-        // Only on the surface around the drop, never seen through the glass.
-        .mask {
-            Rectangle()
-                .overlay { shape.fill(.black).frame(width: diameter, height: diameter).blendMode(.destinationOut) }
-                .compositingGroup()
-                .frame(width: diameter * 1.6, height: diameter * 1.6)
-        }
+        // A real shadow: it lies on the surface under the drop and shows through the glass.
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
