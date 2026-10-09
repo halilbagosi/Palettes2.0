@@ -75,6 +75,8 @@ struct GenerationOrbView: View {
 
     @State private var arrivalTimes: [Date] = []
     @State private var dragOffset: CGSize = .zero
+    /// Counts pull releases, so the bubble jiggles when let go.
+    @State private var releases = 0
 
 #if DEBUG
     @ObservedObject private var debug = OrbDebugSettings.shared
@@ -96,24 +98,23 @@ struct GenerationOrbView: View {
     }
 
     private func orb(diameter: CGFloat) -> some View {
-        TimelineView(.animation) { timeline in
-            let now = timeline.date
-            let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
+        // A clear water bubble: busy while colors are arriving, calm otherwise,
+        // and it jiggles as each color lands or when it is let go after a pull.
+        LiquidBubble(diameter: diameter,
+                     energy: showsProgress ? 1 : 0.4,
+                     kick: colors.count + releases) {
+            TimelineView(.animation) { timeline in
+                let now = timeline.date
+                let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
 
-            ZStack {
-                liquid(diameter: diameter, time: t, now: now)
-                    .clipShape(Circle())
+                ZStack {
+                    liquid(diameter: diameter, time: t, now: now)
 
-                // Clear glass shell — refracts whatever sits behind the orb
-                Circle()
-                    .fill(.clear)
-                    .liquidGlass(.clear, in: .circle)
-                    .frame(width: diameter, height: diameter)
-
-                // Drawn above the liquid so it stays readable as colors arrive
-                innerContent(diameter: diameter)
+                    // Drawn above the liquid so it stays readable as colors arrive
+                    innerContent(diameter: diameter)
+                }
+                .frame(width: diameter, height: diameter)
             }
-            .frame(width: diameter, height: diameter)
         }
         .scaleEffect(
             x: 1 + abs(squish.width) * malleability - abs(squish.height) * crossThin,
@@ -135,6 +136,7 @@ struct GenerationOrbView: View {
                     dragOffset = value.translation
                 }
                 .onEnded { _ in
+                    releases += 1
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
                         dragOffset = .zero
                     }

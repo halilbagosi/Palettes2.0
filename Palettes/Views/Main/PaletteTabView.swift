@@ -129,7 +129,7 @@ extension View {
             self
                 .tabBarMinimizeBehavior(.onScrollDown)
                 .scrollEdgeEffectHidden(false, for: .all)
-                .scrollEdgeEffectStyle(.soft, for: .all)
+                .softScrollEdge()
         } else {
             self
         }

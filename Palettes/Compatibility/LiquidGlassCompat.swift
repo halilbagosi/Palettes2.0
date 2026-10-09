@@ -58,3 +58,16 @@ struct GlassContainer<Content: View>: View {
         }
     }
 }
+
+extension View {
+    /// Soft (blurred) scroll-edge effect under navigation titles and toolbars on
+    /// iOS 26+; a no-op on earlier systems.
+    @ViewBuilder
+    func softScrollEdge() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            self
+        }
+    }
+}

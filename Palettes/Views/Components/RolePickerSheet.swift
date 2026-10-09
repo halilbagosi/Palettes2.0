@@ -100,6 +100,7 @@ struct RolePickerSheet: View {
             }
             .navigationTitle("Tag Color")
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

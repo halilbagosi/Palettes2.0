@@ -43,9 +43,14 @@ struct OnboardingOrbView: View {
     var flash: Double = 0
     /// Scale of the window alone (the "you can tap this" pulse).
     var windowScale: CGFloat = 1
-    var showsShadow = true
+    /// Idle wobble liveliness (see `LiquidBubble`).
+    var energy: Double = 0.4
+    /// Change to make the bubble jiggle.
+    var kick: Int = 0
 
     @State private var isPressed = false
+    /// Local pokes: a tap on the window jiggles the bubble.
+    @State private var pokes = 0
 
     static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.56 }
     /// The liquid color fill grows to this fraction of the orb.
@@ -55,17 +60,17 @@ struct OnboardingOrbView: View {
     private var isTappable: Bool { onWindowTap != nil }
 
     var body: some View {
-        ZStack {
-            if showsShadow { shadowRing }
-            window
-            if case .color(let color) = content {
-                OrbLiquidFill(color: color, size: diameter * Self.colorFillFraction)
-                    .transition(.windowSwap)
-                    .allowsHitTesting(false)
+        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes) {
+            ZStack {
+                window
+                if case .color(let color) = content {
+                    OrbLiquidFill(color: color, size: diameter * Self.colorFillFraction)
+                        .transition(.windowSwap)
+                        .allowsHitTesting(false)
+                }
             }
-            glass
+            .animation(.easeInOut(duration: 0.4), value: content.key)
         }
-        .animation(.easeInOut(duration: 0.4), value: content.key)
         .frame(width: diameter, height: diameter)
         .scaleEffect(isPressed ? 0.97 : 1)
         .animation(.spring(response: 0.25, dampingFraction: 1), value: isPressed)
@@ -131,45 +136,12 @@ struct OnboardingOrbView: View {
             .onChanged { _ in isPressed = true }
             .onEnded { value in
                 isPressed = false
+                pokes += 1
                 let moved = hypot(value.translation.width, value.translation.height)
                 if moved < 12 { onWindowTap?(value.location) }
             }
     }
 
-    // MARK: Glass
-
-    @ViewBuilder
-    private var glass: some View {
-        if #available(iOS 26.0, *) {
-            Circle()
-                .fill(.clear)
-                .glassEffect(.clear.interactive(isTappable), in: .circle)
-                .allowsHitTesting(false)
-        } else {
-            LegacyGlassShell()
-                .allowsHitTesting(false)
-        }
-    }
-
-    /// A soft shadow under the orb only: a ring with the orb's body cut out, so it
-    /// never tints the clear glass.
-    private var shadowRing: some View {
-        let strength = Easing.smoothstep(40, 200, Double(diameter))
-        return Circle()
-            .fill(.black.opacity(0.12 * strength))
-            .frame(width: diameter, height: diameter)
-            .blur(radius: 24)
-            .offset(y: 12)
-            .mask {
-                Rectangle()
-                    .fill(.black)
-                    .overlay { Circle().fill(.black).frame(width: diameter, height: diameter).blendMode(.destinationOut) }
-                    .compositingGroup()
-                    .frame(width: diameter + 400, height: diameter + 400)
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
 }
 
 // MARK: - Window pieces
@@ -242,37 +214,6 @@ struct OrbDrops: View {
 
 /// Clear glass for iOS 17-25: a 1 pt rim, a specular arc at the top-left and a
 /// faint inner shadow at the bottom edge. No frosting.
-private struct LegacyGlassShell: View {
-    var body: some View {
-        GeometryReader { geo in
-            let d = geo.size.width
-            ZStack {
-                // Inner shadow, bottom edge.
-                Circle()
-                    .strokeBorder(
-                        LinearGradient(colors: [.clear, .black.opacity(0.14)],
-                                       startPoint: UnitPoint(x: 0.5, y: 0.55), endPoint: .bottom),
-                        lineWidth: d * 0.05)
-                    .blur(radius: d * 0.02)
-                    .clipShape(Circle())
-                // Specular arc.
-                Ellipse()
-                    .fill(.white.opacity(0.35))
-                    .frame(width: d * 0.42, height: d * 0.16)
-                    .blur(radius: d * 0.035)
-                    .rotationEffect(.degrees(-38))
-                    .offset(x: -d * 0.2, y: -d * 0.3)
-                    .clipShape(Circle())
-                // Rim.
-                Circle().strokeBorder(
-                    AngularGradient(
-                        colors: [.white.opacity(0.7), .white.opacity(0.1), .white.opacity(0.5), .white.opacity(0.7)],
-                        center: .center),
-                    lineWidth: 1)
-            }
-        }
-    }
-}
 
 #Preview("Glass orb") {
     ZStack {

@@ -21,7 +21,7 @@ struct OnboardingBackground: View {
     var body: some View {
         ZStack {
             // Darker than systemBackground's dark so the island's black goo stays visible.
-            (colorScheme == .dark ? Color(white: 0.09) : Color(.systemBackground))
+            (colorScheme == .dark ? Color(white: 0.05) : Color(.systemBackground))
             Group {
                 if tint.isEmpty {
                     LiquidGradientView(intensity: 0.25)
@@ -33,44 +33,11 @@ struct OnboardingBackground: View {
                         .id("tinted")
                 }
             }
-            .opacity(ambient)
+            .opacity(0) // The stage stays plain, like the reference; the bubble carries the look.
             .animation(.easeInOut(duration: 0.6), value: tint.isEmpty)
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
-    }
-}
-
-// MARK: - Orb halo
-
-/// A saturated glow behind the orb. Clear Liquid Glass brightens whatever is behind
-/// it, so over the near-white ambient field it renders as a flat white disc; over
-/// colored light it reads as a transparent lens that bends the color. The halo
-/// travels with the orb.
-struct OrbHalo: View {
-    var diameter: CGFloat
-    var colors: [Color] = []
-
-    var body: some View {
-        // The shader's color features scale with its frame, so the frame stays close to the
-        // orb's size: the glass then bends a gradient of several colors, not one flat tone.
-        // Without custom colors this is the bright iridescent field, whose bands read most
-        // clearly as refraction through clear glass.
-        let side = max(diameter * 1.55, 1)
-        Group {
-            if colors.isEmpty {
-                LiquidGradientView(intensity: 1)
-            } else {
-                LiquidGradientView(intensity: 0.9, colors: colors)
-            }
-        }
-        .frame(width: side, height: side)
-        .mask(RadialGradient(stops: [.init(color: .black, location: 0),
-                                     .init(color: .black, location: 0.55),
-                                     .init(color: .clear, location: 1)],
-                             center: .center, startRadius: 0, endRadius: side / 2))
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }
 

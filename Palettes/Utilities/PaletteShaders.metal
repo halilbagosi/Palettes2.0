@@ -113,3 +113,30 @@ using namespace metal;
     half a = color.a;
     return half4(half3(col) * a, a);
 }
+
+// Water-bubble lens for the wobbling glass bubble. The bubble is an ellipse
+// (`radii`, rotated by `angle`) around `center`. Content near the middle is
+// nearly untouched; toward the rim it is pulled inward from further in, so it
+// stretches and wraps around the edge the way text bends inside a drop of water.
+[[ stitchable ]] float2 bubbleLens(
+    float2 position,
+    float2 center,
+    float2 radii,
+    float angle,
+    float strength
+) {
+    float2 d = position - center;
+    float c = cos(angle), s = sin(angle);
+    // Into the ellipse's own frame.
+    float2 local = float2(c * d.x + s * d.y, -s * d.x + c * d.y);
+    float2 n = local / max(radii, float2(1.0));
+    float q = length(n);
+    if (q >= 1.0) { return position; }
+    // Untouched in the middle; in the outer band the rim samples from near the
+    // center, so inner content smears around the edge like in a drop of water.
+    float k = strength * pow(q, 14.0);
+    float2 warped = local * (1.0 - k);
+    // Back to screen space.
+    float2 back = float2(c * warped.x - s * warped.y, s * warped.x + c * warped.y);
+    return center + back;
+}

@@ -30,6 +30,7 @@ struct NewColorView: View {
                 .padding(.bottom, 20)
             }
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("New Color")

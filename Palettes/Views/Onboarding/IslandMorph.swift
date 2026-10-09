@@ -266,9 +266,6 @@ struct IslandMorphStage<Orb: View>: View {
         let fadeScale = fade && !reduceMotion ? Easing.lerp(0.9, 1, Easing.clamp01(t)) : 1
         let fadeBlur = fade && !reduceMotion ? (1 - Easing.smoothstep(0, 0.7, t)) * 8 : 0
         ZStack {
-            OrbHalo(diameter: frame.diameter)
-                .position(frame.center)
-                .opacity(controller.orbOpacity)
             orb(frame.diameter)
                 .scaleEffect(fadeScale)
                 .blur(radius: fadeBlur)

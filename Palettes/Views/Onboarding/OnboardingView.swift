@@ -29,6 +29,8 @@ struct OnboardingView: View {
     /// The orb has landed: the text, buttons and Skip are shown.
     @State private var landed = false
 
+    private var skipVisible: Bool { landed || model.step == .pull }
+
     init(onFinish: @escaping (OnboardingFinishReason) -> Void) {
         let start = OnboardingDebug.start
         let model = OnboardingModel(startingAt: start.step, onFinish: onFinish)
@@ -116,9 +118,10 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(.top, 6 - 7)
                     .padding(.trailing, 20 - 7)
-                    .opacity(landed ? 1 : 0)
-                    .allowsHitTesting(landed)
-                    .animation(.easeOut(duration: 0.4), value: landed)
+                    // Always reachable, except while the orb is travelling to its place.
+                    .opacity(skipVisible ? 1 : 0)
+                    .allowsHitTesting(skipVisible)
+                    .animation(.easeOut(duration: 0.3), value: skipVisible)
             }
             .animation(.easeOut(duration: 0.3), value: model.step == .pull)
             .onChange(of: travels, initial: true) { _, travels in
@@ -194,8 +197,9 @@ struct OnboardingView: View {
                 onWindowTap: windowTap(windowDiameter: windowDiameter),
                 flash: flow.flash,
                 windowScale: flow.windowScale,
-                // The halo behind supplies depth; a grey shadow would muddy it.
-                showsShadow: false
+                // Livelier while the camera is live or a palette is generating.
+                energy: orbEnergy,
+                kick: flow.scanCount
             )
             if model.step == .adjust, let image = model.capturedImage {
                 let local = OnboardingSampling.orbPoint(
@@ -208,6 +212,17 @@ struct OnboardingView: View {
                         .transition(.opacity)
                 }
             }
+        }
+    }
+
+    /// How lively the bubble's idle wobble is: calm while held or tucked in the
+    /// island, livelier while the camera is live, busiest while generating.
+    private var orbEnergy: Double {
+        switch model.step {
+        case .pull, .orb: 0.25
+        case .camera: 0.45
+        case .adjust: 0.3
+        case .generate: 1
         }
     }
 
