@@ -289,7 +289,7 @@ struct LiquidBubble<Content: View>: View {
                 .blur(radius: diameter * 0.1)
         }
         .frame(width: diameter, height: diameter)
-        .offset(y: diameter * 0.13)
+        .offset(y: diameter * 0.2)
         // A real shadow: it lies on the surface under the drop and shows through the glass.
         .allowsHitTesting(false)
         .accessibilityHidden(true)
