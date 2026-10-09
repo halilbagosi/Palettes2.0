@@ -28,27 +28,53 @@ struct BubbleWobble: Equatable {
     /// - Parameters:
     ///   - t: seconds since the bubble appeared.
     ///   - energy: idle liveliness, 0 (still) to 1 (busy, like while generating).
-    ///   - sinceKick: seconds since the last kick, or nil if none yet.
-    static func at(_ t: Double, energy: Double, sinceKick: Double?) -> BubbleWobble {
-        // Idle: a slow breathing oval whose axis keeps turning, with an
-        // amplitude that itself swells and relaxes so it never looks looped.
+    ///   - kick: the last poke: seconds since it, its strength, and the axis it
+    ///     was along; nil if none.
+    static func at(_ t: Double, energy: Double,
+                   kick: (since: Double, amount: Double, angle: Double)?) -> BubbleWobble {
+        // Idle: barely there. A slow breathing oval whose axis turns, so the
+        // drop looks alive without ever looking pulled. Big shapes only come
+        // from the user pulling on it.
         let swell = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * sin(t * 0.29)
-        var oval = energy * (0.025 + 0.09 * swell) * sin(t * 1.9)
-        var angle = t * 0.55 + 0.9 * sin(t * 0.31)
-        var lobe = energy * 0.02 * sin(t * 2.7 + 0.6)
+        var oval = energy * (0.006 + 0.014 * swell) * sin(t * 1.6)
+        var angle = t * 0.45 + 0.9 * sin(t * 0.31)
+        var lobe = energy * 0.004 * sin(t * 2.3 + 0.6)
         let lobeAngle = -t * 0.4
 
-        // Kick: a damped jiggle on top, like a water balloon that was poked.
-        if let k = sinceKick, k >= 0, k < 2.5 {
-            let decay = exp(-2.1 * k)
-            oval += 0.16 * decay * cos(k * 10.5)
-            lobe += 0.05 * decay * sin(k * 13.0)
-            angle += 0.4 * decay
+        // Kick: a damped jiggle along the poke's axis, like a water balloon
+        // that was let go.
+        if let k = kick, k.since >= 0, k.since < 2.5 {
+            let decay = exp(-3.2 * k.since)
+            let jiggle = k.amount * decay * cos(k.since * 13.0)
+            // Blend toward the kick's axis while it is strong.
+            let weight = min(1, abs(jiggle) / max(abs(oval) + abs(jiggle), 0.0001))
+            angle = angle * (1 - weight) + k.angle * weight
+            oval += jiggle
+            lobe += k.amount * 0.2 * decay * sin(k.since * 16.0)
         }
 
-        let drift = CGSize(width: energy * 0.018 * sin(t * 0.8 + 0.4),
-                           height: energy * 0.022 * sin(t * 0.63))
+        let drift = CGSize(width: energy * 0.004 * sin(t * 0.8 + 0.4),
+                           height: energy * 0.005 * sin(t * 0.63))
         return BubbleWobble(oval: oval, ovalAngle: angle, lobe: lobe, lobeAngle: lobeAngle, drift: drift)
+    }
+
+    /// Stretch toward a finger pulling at `pull` (points from the center).
+    /// The drop elongates along the pull and leans a little after the finger.
+    func pulled(by pull: CGSize, diameter: CGFloat) -> BubbleWobble {
+        let len = hypot(pull.width, pull.height)
+        guard len > 0.5 else { return self }
+        // Rubber-banded so it never tears.
+        let amount = 0.32 * (1 - exp(-Double(len) / Double(diameter * 0.9)))
+        var w = self
+        w.oval = amount + oval * 0.3
+        w.ovalAngle = atan2(Double(pull.height), Double(pull.width))
+        w.drift = CGSize(width: drift.width + pull.width / diameter * 0.06,
+                         height: drift.height + pull.height / diameter * 0.06)
+        return w
+    }
+
+    static func pullAmount(_ pull: CGSize, diameter: CGFloat) -> Double {
+        0.32 * (1 - exp(-Double(hypot(pull.width, pull.height)) / Double(diameter * 0.9)))
     }
 }
 
@@ -87,8 +113,13 @@ struct LiquidBubble<Content: View>: View {
     var diameter: CGFloat
     /// Idle liveliness: 0 still, ~0.4 resting, 1 busy.
     var energy: Double = 0.4
-    /// Change this to poke the bubble (it jiggles and settles).
+    /// Change this to poke the bubble (a small jiggle that settles).
     var kick: Int = 0
+    /// When true the user can grab the drop and pull it out of shape; it
+    /// springs back with a jiggle on release.
+    var pullable: Bool = false
+    /// An external pull (e.g. a parent's own drag gesture), in points.
+    var externalPull: CGSize = .zero
     /// How strongly content bends toward the rim, 0...1.
     var lensStrength: Double = 0.9
     var showsGlow: Bool = true
@@ -98,16 +129,56 @@ struct LiquidBubble<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var start = Date()
     @State private var kickDate: Date?
+    @State private var kickAmount = 0.06
+    @State private var kickAngle = 0.0
+    @State private var pull: CGSize = .zero
+
+    private var activePull: CGSize {
+        CGSize(width: pull.width + externalPull.width, height: pull.height + externalPull.height)
+    }
 
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { timeline in
             let t = timeline.date.timeIntervalSince(start)
-            let since = kickDate.map { timeline.date.timeIntervalSince($0) }
-            let wobble = reduceMotion ? .still : BubbleWobble.at(t, energy: energy, sinceKick: since)
-            bubble(wobble)
+            let kick = kickDate.map { (since: timeline.date.timeIntervalSince($0), amount: kickAmount, angle: kickAngle) }
+            let idle = reduceMotion ? .still : BubbleWobble.at(t, energy: energy, kick: kick)
+            bubble(idle.pulled(by: activePull, diameter: diameter))
         }
         .frame(width: diameter, height: diameter)
-        .onChange(of: kick) { _, _ in kickDate = Date() }
+        .contentShape(Circle())
+        .simultaneousGesture(pullGesture, including: pullable ? .all : .none)
+        .onChange(of: kick) { _, _ in poke(amount: 0.05, angle: Double.random(in: 0...(2 * .pi))) }
+        .onChange(of: externalPull == .zero) { _, released in
+            // A parent's drag ended: spring back with a jiggle.
+            if released { poke(amount: lastExternalAmount, angle: lastExternalAngle) }
+        }
+        .onChange(of: externalPull) { _, p in
+            if p != .zero {
+                lastExternalAmount = BubbleWobble.pullAmount(p, diameter: diameter)
+                lastExternalAngle = atan2(Double(p.height), Double(p.width))
+            }
+        }
+    }
+
+    @State private var lastExternalAmount = 0.0
+    @State private var lastExternalAngle = 0.0
+
+    private var pullGesture: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { pull = reduceMotion ? .zero : $0.translation }
+            .onEnded { _ in
+                let amount = BubbleWobble.pullAmount(pull, diameter: diameter)
+                let angle = atan2(Double(pull.height), Double(pull.width))
+                pull = .zero
+                poke(amount: amount, angle: angle)
+            }
+    }
+
+    private func poke(amount: Double, angle: Double) {
+        guard !reduceMotion else { return }
+        kickAmount = amount
+        kickAngle = angle
+        kickDate = Date()
     }
 
     private func bubble(_ w: BubbleWobble) -> some View {
@@ -120,14 +191,14 @@ struct LiquidBubble<Content: View>: View {
 
         return ZStack {
             if showsGlow {
+                dropletShadow
                 if colorScheme == .dark {
                     backdrop(shape)
                         .offset(x: w.drift.width * diameter, y: w.drift.height * diameter)
-                } else {
-                    lightShadow(shape)
                 }
             }
-            if colorScheme != .dark { lightBody(shape) }
+            // Before iOS 26 there's no real glass, so light mode draws a body.
+            if !Self.hasLiquidGlass && colorScheme != .dark { lightBody(shape) }
 
             content()
                 .frame(width: diameter, height: diameter)
@@ -136,7 +207,8 @@ struct LiquidBubble<Content: View>: View {
                         .float2(Float(center.x), Float(center.y)),
                         .float2(Float(radii.width), Float(radii.height)),
                         .float(Float(lensAngle)),
-                        .float(Float(lensStrength))
+                        // Real Liquid Glass refracts on its own; the drawn lens is the fallback.
+                        .float(Float(!Self.hasLiquidGlass && colorScheme == .dark ? lensStrength : 0))
                     ),
                     maxSampleOffset: CGSize(width: r, height: r)
                 )
@@ -152,8 +224,8 @@ struct LiquidBubble<Content: View>: View {
     private func backdrop(_ shape: BubbleShape) -> some View {
         Circle()
                 .fill(RadialGradient(
-                    colors: [Color.white.opacity(0.2), .clear],
-                    center: .center, startRadius: diameter * 0.45, endRadius: diameter * 0.95))
+                    colors: [Color.white.opacity(0.085), Color.white.opacity(0.03), .clear],
+                    center: .center, startRadius: diameter * 0.48, endRadius: diameter * 1.1))
                 .frame(width: diameter * 2.3, height: diameter * 2.3)
                 .mask {
                     Rectangle()
@@ -167,15 +239,24 @@ struct LiquidBubble<Content: View>: View {
 
     /// Light stage: a large soft grey shadow all around, like a drop of water
     /// resting just above white paper.
-    private func lightShadow(_ shape: BubbleShape) -> some View {
-        shape
-            .fill(.black.opacity(0.16))
-            .frame(width: diameter, height: diameter)
-            .scaleEffect(1.04)
-            .blur(radius: diameter * 0.09)
-            .offset(y: diameter * 0.035)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+    private var dropletShadow: some View {
+        // Like a droplet's shadow on the surface below: a soft round shadow that
+        // stays circular while the drop above wobbles, sitting slightly low.
+        ZStack {
+            Circle()
+                .fill(.black.opacity(colorScheme == .dark ? 0.45 : 0.13))
+                .frame(width: diameter * 0.96, height: diameter * 0.96)
+                .blur(radius: diameter * 0.08)
+                .offset(y: diameter * 0.06)
+            // A tighter contact shadow right under the drop.
+            Circle()
+                .fill(.black.opacity(colorScheme == .dark ? 0.35 : 0.08))
+                .frame(width: diameter * 0.8, height: diameter * 0.8)
+                .blur(radius: diameter * 0.03)
+                .offset(y: diameter * 0.04)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     /// Light stage: the water reads as a white jelly, a touch brighter in the
@@ -198,10 +279,28 @@ struct LiquidBubble<Content: View>: View {
         .accessibilityHidden(true)
     }
 
-    /// Drawn glass rather than the system material: the system's clear glass
-    /// frosts what's inside, while a water bubble stays perfectly clear and only
-    /// its edge catches the light.
+    static var hasLiquidGlass: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
+    @ViewBuilder
     private func glass(_ shape: BubbleShape) -> some View {
+        if #available(iOS 26.0, *) {
+            // Real Liquid Glass in the drop's shape: it refracts the content and
+            // the stage behind it and catches light along the rim by itself.
+            Color.clear
+                .glassEffect(.clear.interactive(), in: shape)
+                .frame(width: diameter, height: diameter)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        } else {
+            drawnGlass(shape)
+        }
+    }
+
+    /// Drawn glass for systems without Liquid Glass.
+    private func drawnGlass(_ shape: BubbleShape) -> some View {
         let dark = colorScheme == .dark
         let d = diameter
         return ZStack {

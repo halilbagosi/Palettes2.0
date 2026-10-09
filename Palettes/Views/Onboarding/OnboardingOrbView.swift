@@ -60,7 +60,7 @@ struct OnboardingOrbView: View {
     private var isTappable: Bool { onWindowTap != nil }
 
     var body: some View {
-        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes) {
+        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes, pullable: true) {
             ZStack {
                 window
                 if case .color(let color) = content {

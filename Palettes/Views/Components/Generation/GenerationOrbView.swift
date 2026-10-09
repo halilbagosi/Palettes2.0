@@ -75,8 +75,6 @@ struct GenerationOrbView: View {
 
     @State private var arrivalTimes: [Date] = []
     @State private var dragOffset: CGSize = .zero
-    /// Counts pull releases, so the bubble jiggles when let go.
-    @State private var releases = 0
 
 #if DEBUG
     @ObservedObject private var debug = OrbDebugSettings.shared
@@ -102,7 +100,8 @@ struct GenerationOrbView: View {
         // and it jiggles as each color lands or when it is let go after a pull.
         LiquidBubble(diameter: diameter,
                      energy: showsProgress ? 1 : 0.4,
-                     kick: colors.count + releases) {
+                     kick: colors.count,
+                     externalPull: dragOffset) {
             TimelineView(.animation) { timeline in
                 let now = timeline.date
                 let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
@@ -116,12 +115,7 @@ struct GenerationOrbView: View {
                 .frame(width: diameter, height: diameter)
             }
         }
-        .scaleEffect(
-            x: 1 + abs(squish.width) * malleability - abs(squish.height) * crossThin,
-            y: 1 + abs(squish.height) * malleability - abs(squish.width) * crossThin,
-            anchor: stretchAnchor
-        )
-        .offset(x: dragOffset.width * translation, y: dragOffset.height * translation)
+        // Pulling deforms the drop itself (LiquidBubble's externalPull).
         .contentShape(Circle())
 #if DEBUG
         .onTapGesture(count: 3) { showDebugPanel = true }
@@ -136,10 +130,8 @@ struct GenerationOrbView: View {
                     dragOffset = value.translation
                 }
                 .onEnded { _ in
-                    releases += 1
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
-                        dragOffset = .zero
-                    }
+                    // The bubble springs back with its own jiggle.
+                    dragOffset = .zero
                 }
         )
         .sensoryFeedback(.impact(weight: .light), trigger: colors.count)
