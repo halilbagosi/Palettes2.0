@@ -106,15 +106,13 @@ struct GenerationOrbView: View {
                 let now = timeline.date
                 let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
 
-                ZStack {
-                    liquid(diameter: diameter, time: t, now: now)
-
-                    // Drawn above the liquid so it stays readable as colors arrive
-                    innerContent(diameter: diameter)
-                }
-                .frame(width: diameter, height: diameter)
+                liquid(diameter: diameter, time: t, now: now)
+                    .frame(width: diameter, height: diameter)
             }
         }
+        // Text, photo and progress sit on top of the glass so they stay crisp;
+        // under it, the glass would frost them.
+        .overlay { innerContent(diameter: diameter) }
         // Pulling deforms the drop itself (LiquidBubble's externalPull).
         .contentShape(Circle())
 #if DEBUG
