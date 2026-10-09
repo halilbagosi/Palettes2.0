@@ -14,6 +14,11 @@
 import Foundation
 
 enum OnboardingDebug {
+    /// The step names the launch argument and the Settings picker accept.
+    static let stepNames = ["pull", "camera", "picked", "adjust", "generate"]
+    static let slowMoToggleKey = "onboardingSlowMoOn"
+    private static let startKey = "onboardingStart"
+
     struct Start {
         let name: String
 
@@ -51,7 +56,9 @@ enum OnboardingDebug {
     static var timeScale: Double {
         #if DEBUG
         let value = UserDefaults.standard.double(forKey: "onboardingSlowMo")
-        return value > 1 ? 1 / value : 1
+        if value > 1 { return 1 / value }
+        // The Settings toggle: quarter speed.
+        return UserDefaults.standard.bool(forKey: slowMoToggleKey) ? 0.25 : 1
         #else
         return 1
         #endif
@@ -67,12 +74,52 @@ enum OnboardingDebug {
         #endif
     }
 
-    /// True when the launch argument is present (DEBUG builds only).
-    static var isActive: Bool {
+    /// `-onboardingAutoBegin YES`: after a moment, begins as if Begin were tapped (the
+    /// fade path), for capturing it on devices the simulator tool can't drive.
+    static var autoBegin: Bool {
         #if DEBUG
-        return UserDefaults.standard.string(forKey: "onboardingStart") != nil
+        return UserDefaults.standard.bool(forKey: "onboardingAutoBegin")
         #else
         return false
+        #endif
+    }
+
+    /// `-onboardingGlassLab YES`: shows a grid of glass-orb variants instead of onboarding.
+    static var glassLab: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: "onboardingGlassLab")
+        #else
+        return false
+        #endif
+    }
+
+    /// True when the app was launched with `-onboardingStart` or `-onboardingGlassLab` (DEBUG
+    /// builds only). A start recorded by Settings does not count: that one goes through the
+    /// normal replay presentation.
+    static var isLaunchArgument: Bool {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-onboardingStart") || args.contains("-onboardingGlassLab")
+        #else
+        return false
+        #endif
+    }
+
+    // MARK: Settings (DEBUG "Try Onboarding")
+
+    /// Records the step for the next presentation. Settings then asks the replay
+    /// coordinator to present onboarding as a normal replay would.
+    static func requestFromSettings(start name: String) {
+        #if DEBUG
+        UserDefaults.standard.set(name, forKey: startKey)
+        #endif
+    }
+
+    /// Clears a start written by Settings so a normal launch never begins mid-flow.
+    /// A launch argument lives in the argument domain and is unaffected.
+    static func clearSettingsRequest() {
+        #if DEBUG
+        UserDefaults.standard.removeObject(forKey: startKey)
         #endif
     }
 }

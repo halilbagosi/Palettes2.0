@@ -16,7 +16,7 @@ struct PaletteTabView: View {
     @State private var debugOnboardingFinished = false
 
     private var showsOnboarding: Bool {
-        OnboardingDebug.isActive ? !debugOnboardingFinished : !didCompleteOnboarding
+        OnboardingDebug.isLaunchArgument ? !debugOnboardingFinished : !didCompleteOnboarding
     }
 
     var body: some View {

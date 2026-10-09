@@ -43,6 +43,7 @@ struct OnboardingOrbView: View {
     var flash: Double = 0
     /// Scale of the window alone (the "you can tap this" pulse).
     var windowScale: CGFloat = 1
+    var showsShadow = true
 
     @State private var isPressed = false
 
@@ -55,7 +56,7 @@ struct OnboardingOrbView: View {
 
     var body: some View {
         ZStack {
-            shadowRing
+            if showsShadow { shadowRing }
             window
             if case .color(let color) = content {
                 OrbLiquidFill(color: color, size: diameter * Self.colorFillFraction)

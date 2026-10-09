@@ -41,6 +41,39 @@ struct OnboardingBackground: View {
     }
 }
 
+// MARK: - Orb halo
+
+/// A saturated glow behind the orb. Clear Liquid Glass brightens whatever is behind
+/// it, so over the near-white ambient field it renders as a flat white disc; over
+/// colored light it reads as a transparent lens that bends the color. The halo
+/// travels with the orb.
+struct OrbHalo: View {
+    var diameter: CGFloat
+    var colors: [Color] = []
+
+    var body: some View {
+        // The shader's color features scale with its frame, so the frame stays close to the
+        // orb's size: the glass then bends a gradient of several colors, not one flat tone.
+        // Without custom colors this is the bright iridescent field, whose bands read most
+        // clearly as refraction through clear glass.
+        let side = max(diameter * 1.55, 1)
+        Group {
+            if colors.isEmpty {
+                LiquidGradientView(intensity: 1)
+            } else {
+                LiquidGradientView(intensity: 0.9, colors: colors)
+            }
+        }
+        .frame(width: side, height: side)
+        .mask(RadialGradient(stops: [.init(color: .black, location: 0),
+                                     .init(color: .black, location: 0.55),
+                                     .init(color: .clear, location: 1)],
+                             center: .center, startRadius: 0, endRadius: side / 2))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Transitions
 
 /// Opacity plus a blur of `radius`; with `rise`, a vertical offset too. The
@@ -169,11 +202,16 @@ struct OnboardingSkipButton: View {
     var body: some View {
         Button(action: action) {
             Text("Skip")
-                .font(.subheadline.weight(.medium))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .liquidGlass(.interactive, in: Capsule())
+                // The visible capsule is 30 pt; the touch target is not.
+                .padding(7)
+                .contentShape(Rectangle())
         }
-        .glassCapsuleButton()
-        .controlSize(.regular)
+        .buttonStyle(.plain)
         // Sits in a fixed slot above the orb; very large text would overlap it.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .accessibilityLabel("Skip onboarding")

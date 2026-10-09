@@ -4,8 +4,7 @@
 //
 //  First-launch onboarding coordinator. A step machine over `OnboardingModel`:
 //  pull, orb, camera (or sample/photo fallback), adjust, and generate. It owns
-//  the layout: the orb at 34% of the height, the step's text in a bottom-anchored
-//  block, and the primary action pinned at the bottom. The island morph, the
+//  the layout: the orb at 38% of the height, the step's text just under it, and the primary action pinned at the bottom. The island morph, the
 //  orb, and each step's content live in their own files. Finishing saves the
 //  palette through `AppData`; the presenter dismisses the cover in response to
 //  `onFinish`.
@@ -52,14 +51,15 @@ struct OnboardingView: View {
         var orbDiameter: CGFloat {
             compact ? min(220, full.width * 0.56) : min(280, full.width * 0.68)
         }
-        /// Skip's slot: below the top safe area by 6, 32 tall.
-        var skipBottom: CGFloat { topInset + 6 + 32 }
+        /// Skip's pill: 6 below the top safe area, 30 tall.
+        var skipBottom: CGFloat { topInset + 6 + 30 }
         var restCenter: CGPoint {
-            let y = max(full.height * 0.34, skipBottom + 12 + orbDiameter / 2)
+            // 38% of the height; short screens keep the orb higher to leave room for the text.
+            let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), skipBottom + 12 + orbDiameter / 2)
             return CGPoint(x: full.width / 2, y: y)
         }
         /// Safe-area-space top of the text region, under the orb.
-        var contentTop: CGFloat { restCenter.y + orbDiameter / 2 + 20 - topInset }
+        var contentTop: CGFloat { restCenter.y + orbDiameter / 2 + 28 - topInset }
         var placement: IslandMorphController.Placement {
             .init(island: island, screenWidth: full.width, restCenter: restCenter, restDiameter: orbDiameter)
         }
@@ -67,6 +67,18 @@ struct OnboardingView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        if OnboardingDebug.glassLab, #available(iOS 26.0, *) {
+            OnboardingGlassLab()
+        } else {
+            onboardingBody
+        }
+        #else
+        onboardingBody
+        #endif
+    }
+
+    private var onboardingBody: some View {
         GeometryReader { geo in
             let insets = geo.safeAreaInsets
             let full = CGSize(width: geo.size.width + insets.leading + insets.trailing,
@@ -102,8 +114,8 @@ struct OnboardingView: View {
 
                 OnboardingSkipButton { model.skip() }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 6)
-                    .padding(.trailing, 20)
+                    .padding(.top, 6 - 7)
+                    .padding(.trailing, 20 - 7)
                     .opacity(landed ? 1 : 0)
                     .allowsHitTesting(landed)
                     .animation(.easeOut(duration: 0.4), value: landed)
@@ -120,12 +132,21 @@ struct OnboardingView: View {
                 model.advance()
             }
             morph.onLand = { withAnimation(.easeOut(duration: 0.4)) { landed = true } }
+            // A Settings-triggered debug start is single-use.
+            OnboardingDebug.clearSettingsRequest()
             if landed { morph.landImmediately() }
             if let hold = OnboardingDebug.pullHold { morph.debugHold(pull: hold) }
             if model.step == .camera { flow.refreshAccess() }
             if model.step == .adjust || model.step == .generate { interim.beginAdjust() }
             if model.step == .generate { interim.startGeneration(appData: appData, reduceMotion: reduceMotion) }
             flow.updateSession()
+            if OnboardingDebug.autoBegin, model.step == .pull {
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    morph.useFadeMode()
+                    morph.beginFade()
+                }
+            }
         }
         .onChange(of: model.step) { _, step in
             if step == .camera { flow.refreshAccess() }
@@ -172,7 +193,9 @@ struct OnboardingView: View {
                 label: orbLabel,
                 onWindowTap: windowTap(windowDiameter: windowDiameter),
                 flash: flow.flash,
-                windowScale: flow.windowScale
+                windowScale: flow.windowScale,
+                // The halo behind supplies depth; a grey shadow would muddy it.
+                showsShadow: false
             )
             if model.step == .adjust, let image = model.capturedImage {
                 let local = OnboardingSampling.orbPoint(
@@ -279,11 +302,8 @@ struct OnboardingView: View {
             Color.clear.frame(height: layout.contentTop)
             GeometryReader { region in
                 ScrollView {
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        textBlock(content)
-                    }
-                    .frame(minHeight: region.size.height)
+                    textBlock(content)
+                    .frame(maxWidth: .infinity, minHeight: region.size.height, alignment: .top)
                     .padding(.horizontal, 24)
                 }
                 .scrollBounceBehavior(.basedOnSize)

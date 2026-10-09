@@ -10,6 +10,10 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
+    #if DEBUG
+    @State private var debugStart = "pull"
+    @AppStorage(OnboardingDebug.slowMoToggleKey) private var debugSlowMo = false
+    #endif
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
@@ -79,6 +83,26 @@ struct SettingsView: View {
                     }
                     LabeledContent("Version", value: versionString)
                 }
+
+                #if DEBUG
+                Section {
+                    Picker("Start at", selection: $debugStart) {
+                        ForEach(OnboardingDebug.stepNames, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                    Toggle("Slow motion (0.25×)", isOn: $debugSlowMo)
+                    Button {
+                        OnboardingDebug.requestFromSettings(start: debugStart)
+                        // Same path as Replay Onboarding: the presenter restarts it in onDismiss.
+                        replayOnboarding()
+                    } label: {
+                        Label("Try Onboarding", systemImage: "play.circle")
+                    }
+                } header: {
+                    Text("Onboarding (Debug)")
+                } footer: {
+                    Text("Starts onboarding at the chosen step with the sample image. Completing it behaves like a normal replay.")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
