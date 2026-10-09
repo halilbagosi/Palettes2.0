@@ -290,35 +290,20 @@ struct LiquidBubble<Content: View>: View {
     /// Like a droplet's shadow on the surface below: a thin soft ring that
     /// follows the drop's shape as it wobbles, sitting a little lower.
     private func dropletShadow(_ shape: BubbleShape) -> some View {
-        Group {
-            if colorScheme == .dark {
-                // A soft contact shadow on the grey surface right under the drop;
-                // the glass refracts it on its own.
-                ZStack {
-                    shape.fill(.black.opacity(0.55))
-                        .blur(radius: diameter * 0.07)
-                        .offset(y: diameter * 0.09)
-                    shape.fill(.black.opacity(0.3))
-                        .scaleEffect(1.08)
-                        .blur(radius: diameter * 0.14)
-                        .offset(y: diameter * 0.16)
-                }
-                .frame(width: diameter, height: diameter)
-            } else {
-                ZStack {
-                    shape
-                        .stroke(.black.opacity(0.06), lineWidth: diameter * 0.06)
-                        .blur(radius: diameter * 0.045)
-                    // Faint spread so the ring sits on the surface rather than floating.
-                    shape
-                        .stroke(.black.opacity(0.025), lineWidth: diameter * 0.16)
-                        .blur(radius: diameter * 0.1)
-                }
-                .frame(width: diameter, height: diameter)
-                .offset(y: diameter * 0.2)
-            }
+        // A thin soft ring on the surface under the drop, sitting a little low and
+        // following its shape. Same geometry in both modes; darker on the dark stage.
+        let dark = colorScheme == .dark
+        return ZStack {
+            shape
+                .stroke(.black.opacity(dark ? 0.4 : 0.06), lineWidth: diameter * 0.06)
+                .blur(radius: diameter * 0.045)
+            // Faint spread so the ring sits on the surface rather than floating.
+            shape
+                .stroke(.black.opacity(dark ? 0.18 : 0.025), lineWidth: diameter * 0.16)
+                .blur(radius: diameter * 0.1)
         }
-        // A real shadow: it lies on the surface under the drop and follows it.
+        .frame(width: diameter, height: diameter)
+        .offset(y: diameter * 0.2)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
