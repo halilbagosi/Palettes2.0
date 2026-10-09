@@ -288,9 +288,11 @@ struct IslandMorphStage<Orb: View>: View {
             // square), so the melt is black laid over the orb's top instead.
             if melt > 0 {
                 Circle()
+                    // Black where it joins the neck, the stage's own near-black
+                    // below, so the drop reads as one dark liquid with the island.
                     .fill(LinearGradient(stops: [.init(color: .black.opacity(melt), location: 0),
-                                                 .init(color: .black.opacity(melt * 0.55), location: 0.4),
-                                                 .init(color: .clear, location: 0.8)],
+                                                 .init(color: Color(white: 0.05).opacity(melt * 0.9), location: 0.55),
+                                                 .init(color: Color(white: 0.05).opacity(melt * 0.75), location: 1)],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: frame.diameter, height: frame.diameter)
                     .position(frame.center)

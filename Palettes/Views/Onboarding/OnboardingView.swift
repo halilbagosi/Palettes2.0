@@ -201,7 +201,8 @@ struct OnboardingView: View {
                 windowScale: flow.windowScale,
                 // Livelier while the camera is live or a palette is generating.
                 energy: orbEnergy,
-                kick: flow.scanCount
+                kick: flow.scanCount,
+                showsGlow: landed
             )
             if model.step == .adjust, let image = model.capturedImage {
                 let local = OnboardingSampling.orbPoint(

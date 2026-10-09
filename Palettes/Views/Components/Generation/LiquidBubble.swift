@@ -228,7 +228,7 @@ struct LiquidBubble<Content: View>: View {
             if showsGlow {
                 dropletShadow(shape)
                 if colorScheme == .dark {
-                    backdrop(shape)
+                    backdrop
                         .offset(x: w.drift.width * diameter, y: w.drift.height * diameter)
                 }
             }
@@ -265,20 +265,22 @@ struct LiquidBubble<Content: View>: View {
 
     /// Dark stage: a soft white glow around the bubble only, so the water
     /// itself stays dark and clear.
-    private func backdrop(_ shape: BubbleShape) -> some View {
+    private var backdrop: some View {
+        // Soft light around and behind the drop; no cut-out, which left a dark
+        // gap beside a pulled drop.
         Circle()
-                .fill(RadialGradient(
-                    colors: [Color.white.opacity(0.085), Color.white.opacity(0.03), .clear],
-                    center: .center, startRadius: diameter * 0.48, endRadius: diameter * 1.1))
-                .frame(width: diameter * 2.3, height: diameter * 2.3)
-                .mask {
-                    Rectangle()
-                        .overlay { shape.fill(.black).frame(width: diameter, height: diameter).blendMode(.destinationOut) }
-                        .compositingGroup()
-                        .frame(width: diameter * 2.3, height: diameter * 2.3)
-                }
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            .fill(RadialGradient(
+                // Continuous behind the drop: a clear middle left a dark hole
+                // beside a stretched drop.
+                stops: [.init(color: .white.opacity(0.05), location: 0),
+                        .init(color: .white.opacity(0.06), location: 0.44),
+                        .init(color: .white.opacity(0.07), location: 0.5),
+                        .init(color: .white.opacity(0.025), location: 0.72),
+                        .init(color: .clear, location: 1)],
+                center: .center, startRadius: 0, endRadius: diameter * 1.1))
+            .frame(width: diameter * 2.3, height: diameter * 2.3)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// Light stage: a large soft grey shadow all around, like a drop of water
