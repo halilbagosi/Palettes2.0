@@ -277,7 +277,9 @@ struct IslandMorphStage<Orb: View>: View {
         // glass fades in only as the neck snaps. Light mode blends on its own.
         let glassReveal: Double = {
             guard colorScheme == .dark, !fade, controller.phase != .landed else { return 1 }
-            return Easing.smoothstep(0, 1, 1 - controller.neckConnected)
+            // Stays black until it has fully separated from the island, then fades into glass.
+            guard controller.phase == .detaching, controller.neckConnected <= 0.001 else { return 0 }
+            return Easing.smoothstep(0.3, 0.8, Easing.clamp01(t))
         }()
         ZStack {
             orb(frame.diameter)
@@ -333,7 +335,7 @@ struct IslandGooCanvas: View {
         // Dark stage: the whole drop is island-black (the stage cross-fades it
         // into the glass as the neck thins).
         let fadeEnd = colorScheme == .dark
-            ? blobTop + frame.diameter * 1.05
+            ? blobTop + frame.diameter * 3
             : max(blobTop + frame.diameter / 3 * CGFloat(connected), fadeStart + 10)
 
         GeometryReader { geo in

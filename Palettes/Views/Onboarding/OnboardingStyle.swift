@@ -21,7 +21,7 @@ struct OnboardingBackground: View {
     var body: some View {
         ZStack {
             // Darker than systemBackground's dark so the island's black goo stays visible.
-            (colorScheme == .dark ? Color(white: 0.05) : Color(.systemBackground))
+            (colorScheme == .dark ? Color(white: 0.12) : Color(.systemBackground))
             Group {
                 if tint.isEmpty {
                     LiquidGradientView(intensity: 0.25)

@@ -98,6 +98,13 @@ struct OnboardingView: View {
             ZStack {
                 PullDrivenBackground(pull: morph.pull, ambient: ambient)
 
+                // Fixed light on the surface under where the orb rests.
+                BubbleStageGlow(diameter: layout.orbDiameter)
+                    .position(layout.restCenter)
+                    .ignoresSafeArea()
+                    .opacity(landed ? 1 : 0)
+                    .animation(.easeOut(duration: 0.6), value: landed)
+
                 if model.step == .pull && travels {
                     pullGestureLayer
                     PullPrompt(pull: morph.pull)

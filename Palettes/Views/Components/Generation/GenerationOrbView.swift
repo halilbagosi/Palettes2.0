@@ -96,6 +96,14 @@ struct GenerationOrbView: View {
     }
 
     private func orb(diameter: CGFloat) -> some View {
+        ZStack {
+            // Fixed light under the orb; it doesn't move with the drop.
+            BubbleStageGlow(diameter: diameter)
+            bubble(diameter: diameter)
+        }
+    }
+
+    private func bubble(diameter: CGFloat) -> some View {
         // A clear water bubble: busy while colors are arriving, calm otherwise,
         // and it jiggles as each color lands or when it is let go after a pull.
         LiquidBubble(diameter: diameter,

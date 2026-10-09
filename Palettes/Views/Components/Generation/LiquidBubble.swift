@@ -155,6 +155,30 @@ struct BubbleShape: Shape {
     }
 }
 
+// MARK: - Stage glow
+
+/// A soft light on the surface under where the orb rests (dark stage only). It
+/// belongs to the view, not the orb, so it stays put while the drop moves.
+struct BubbleStageGlow: View {
+    var diameter: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if colorScheme == .dark {
+            Circle()
+                .fill(RadialGradient(
+                    stops: [.init(color: .white.opacity(0.09), location: 0),
+                            .init(color: .white.opacity(0.06), location: 0.45),
+                            .init(color: .white.opacity(0.02), location: 0.75),
+                            .init(color: .clear, location: 1)],
+                    center: .center, startRadius: 0, endRadius: diameter * 1.25))
+                .frame(width: diameter * 2.5, height: diameter * 2.5)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 // MARK: - Bubble
 
 struct LiquidBubble<Content: View>: View {
@@ -227,10 +251,6 @@ struct LiquidBubble<Content: View>: View {
         return ZStack {
             if showsGlow {
                 dropletShadow(shape)
-                if colorScheme == .dark {
-                    backdrop
-                        .offset(x: w.drift.width * diameter, y: w.drift.height * diameter)
-                }
             }
             // Before iOS 26 there's no real glass, so light mode draws a body.
             if !Self.hasLiquidGlass && colorScheme != .dark { lightBody(shape) }
@@ -254,10 +274,10 @@ struct LiquidBubble<Content: View>: View {
             // The shadow continues under the drop: the glass frosts what's
             // beneath it, so the part inside the outline is drawn over the glass,
             // faintly, as if seen through clear water.
-            if showsGlow {
+            if showsGlow && colorScheme != .dark {
                 dropletShadow(shape)
                     .mask(shape.frame(width: diameter, height: diameter))
-                    .opacity(colorScheme == .dark ? 0.1 : 0.8)
+                    .opacity(0.8)
             }
         }
         .frame(width: diameter, height: diameter)
@@ -265,42 +285,40 @@ struct LiquidBubble<Content: View>: View {
 
     /// Dark stage: a soft white glow around the bubble only, so the water
     /// itself stays dark and clear.
-    private var backdrop: some View {
-        // Soft light around and behind the drop; no cut-out, which left a dark
-        // gap beside a pulled drop.
-        Circle()
-            .fill(RadialGradient(
-                // Continuous behind the drop: a clear middle left a dark hole
-                // beside a stretched drop.
-                stops: [.init(color: .white.opacity(0.03), location: 0),
-                        .init(color: .white.opacity(0.035), location: 0.44),
-                        .init(color: .white.opacity(0.045), location: 0.5),
-                        .init(color: .white.opacity(0.015), location: 0.72),
-                        .init(color: .clear, location: 1)],
-                center: .center, startRadius: 0, endRadius: diameter * 1.1))
-            .frame(width: diameter * 2.3, height: diameter * 2.3)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
     /// Light stage: a large soft grey shadow all around, like a drop of water
     /// resting just above white paper.
     /// Like a droplet's shadow on the surface below: a thin soft ring that
     /// follows the drop's shape as it wobbles, sitting a little lower.
     private func dropletShadow(_ shape: BubbleShape) -> some View {
-        let dark = colorScheme == .dark
-        return ZStack {
-            shape
-                .stroke(.black.opacity(dark ? 0.32 : 0.06), lineWidth: diameter * (dark ? 0.11 : 0.06))
-                .blur(radius: diameter * (dark ? 0.075 : 0.045))
-            // Faint spread so the ring sits on the surface rather than floating.
-            shape
-                .stroke(.black.opacity(dark ? 0.16 : 0.025), lineWidth: diameter * (dark ? 0.24 : 0.16))
-                .blur(radius: diameter * (dark ? 0.13 : 0.1))
+        Group {
+            if colorScheme == .dark {
+                // A soft contact shadow on the grey surface right under the drop;
+                // the glass refracts it on its own.
+                ZStack {
+                    shape.fill(.black.opacity(0.55))
+                        .blur(radius: diameter * 0.07)
+                        .offset(y: diameter * 0.09)
+                    shape.fill(.black.opacity(0.3))
+                        .scaleEffect(1.08)
+                        .blur(radius: diameter * 0.14)
+                        .offset(y: diameter * 0.16)
+                }
+                .frame(width: diameter, height: diameter)
+            } else {
+                ZStack {
+                    shape
+                        .stroke(.black.opacity(0.06), lineWidth: diameter * 0.06)
+                        .blur(radius: diameter * 0.045)
+                    // Faint spread so the ring sits on the surface rather than floating.
+                    shape
+                        .stroke(.black.opacity(0.025), lineWidth: diameter * 0.16)
+                        .blur(radius: diameter * 0.1)
+                }
+                .frame(width: diameter, height: diameter)
+                .offset(y: diameter * 0.2)
+            }
         }
-        .frame(width: diameter, height: diameter)
-        .offset(y: diameter * 0.2)
-        // A real shadow: it lies on the surface under the drop and shows through the glass.
+        // A real shadow: it lies on the surface under the drop and follows it.
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
