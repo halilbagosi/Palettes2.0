@@ -265,12 +265,37 @@ struct IslandMorphStage<Orb: View>: View {
         let t = detach.value
         let fadeScale = fade && !reduceMotion ? Easing.lerp(0.9, 1, Easing.clamp01(t)) : 1
         let fadeBlur = fade && !reduceMotion ? (1 - Easing.smoothstep(0, 0.7, t)) * 8 : 0
+        // Dark stage: the glass rim would show as a grey circle against the
+        // black neck. While pulled, the orb's top melts into the neck instead,
+        // and the blend clears as it detaches. Light mode blends on its own.
+        let melt: Double = {
+            guard colorScheme == .dark, !fade else { return 0 }
+            switch controller.phase {
+            case .idle, .dragging: return 1
+            case .detaching: return 1 - Easing.smoothstep(0, 0.55, Easing.clamp01(t))
+            case .landed: return 0
+            }
+        }()
         ZStack {
             orb(frame.diameter)
                 .scaleEffect(fadeScale)
                 .blur(radius: fadeBlur)
-                .opacity(controller.orbOpacity)
+                .opacity(colorScheme == .dark && controller.phase == .dragging
+                         ? controller.orbOpacity * Easing.smoothstep(6, 60, controller.pull.value)
+                         : controller.orbOpacity)
                 .position(frame.center)
+            // Masking glass would render it against an empty layer (a visible
+            // square), so the melt is black laid over the orb's top instead.
+            if melt > 0 {
+                Circle()
+                    .fill(LinearGradient(stops: [.init(color: .black.opacity(melt), location: 0),
+                                                 .init(color: .black.opacity(melt * 0.55), location: 0.4),
+                                                 .init(color: .clear, location: 0.8)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .frame(width: frame.diameter, height: frame.diameter)
+                    .position(frame.center)
+                    .allowsHitTesting(false)
+            }
             // The goo sits above the glass: the island's black covers the part of
             // the orb still tucked behind it (so clear glass is never drawn over the
             // cutout, where it would read dark), and the neck's fade overlaps the
@@ -285,6 +310,7 @@ struct IslandMorphStage<Orb: View>: View {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 }
 
 // MARK: - Goo

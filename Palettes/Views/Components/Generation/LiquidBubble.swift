@@ -88,13 +88,15 @@ final class DropPhysics {
         for _ in 0..<sub {
             let h = dt / Double(sub)
             oval.step(toward: amount * cos(2 * phi), amount * sin(2 * phi), response: resp, damping: damp, dt: h)
-            bulge.step(toward: amount * 0.35 * cos(phi), amount * 0.35 * sin(phi), response: resp, damping: held ? 1 : 0.4, dt: h)
+            bulge.step(toward: amount * 0.2 * cos(phi), amount * 0.2 * sin(phi), response: resp, damping: held ? 1 : 0.4, dt: h)
             center.step(toward: shift * cos(phi), shift * sin(phi), response: held ? 0.14 : 0.36, damping: held ? 1 : 0.55, dt: h)
         }
 
         // Idle breathing on top: barely there, so it looks alive but never pulled.
         let swell = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * sin(t * 0.29)
-        let idleOval = energy * (0.006 + 0.012 * swell) * sin(t * 1.6)
+        // Subtle but always there, a touch livelier when busy.
+        let liveliness = 0.6 + 0.4 * energy
+        let idleOval = liveliness * (0.012 + 0.014 * swell) * sin(t * 1.3)
         let idleAngle = t * 0.45 + 0.9 * sin(t * 0.31)
         let a = oval.x + idleOval * cos(2 * idleAngle)
         let b = oval.y + idleOval * sin(2 * idleAngle)
@@ -110,10 +112,10 @@ final class DropPhysics {
             ovalAngle: atan2(b, a) / 2,
             bulge: hypot(bulge.x, bulge.y),
             bulgeAngle: atan2(bulge.y, bulge.x),
-            lobe: energy * 0.004 * sin(t * 2.3 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
+            lobe: liveliness * 0.005 * sin(t * 1.9 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
             lobeAngle: -t * 0.4,
-            drift: CGSize(width: center.x + energy * 0.004 * sin(t * 0.8 + 0.4),
-                          height: center.y + energy * 0.005 * sin(t * 0.63))
+            drift: CGSize(width: center.x + liveliness * 0.004 * sin(t * 0.7 + 0.4),
+                          height: center.y + liveliness * 0.005 * sin(t * 0.55))
         )
     }
 }
@@ -129,11 +131,17 @@ struct BubbleShape: Shape {
         let n = 96
         var points: [CGPoint] = []
         points.reserveCapacity(n)
+        // A true ellipse that keeps its area (a·b = 1), so a stretch only ever
+        // elongates the drop and never pinches its sides like it's splitting.
+        let a = 1 + wobble.oval
+        let b = 1 / a
         for i in 0..<n {
             let th = Double(i) / Double(n) * 2 * .pi
-            let k = 1 + wobble.oval * cos(2 * (th - wobble.ovalAngle))
-                      + wobble.bulge * cos(th - wobble.bulgeAngle)
-                      + wobble.lobe * cos(3 * (th - wobble.lobeAngle))
+            let rel = th - wobble.ovalAngle
+            let ellipse = (a * b) / sqrt(pow(b * cos(rel), 2) + pow(a * sin(rel), 2))
+            let k = ellipse
+                + wobble.bulge * cos(th - wobble.bulgeAngle)
+                + wobble.lobe * cos(3 * (th - wobble.lobeAngle))
             points.append(CGPoint(x: c.x + r * k * cos(th), y: c.y + r * k * sin(th)))
         }
         var path = Path()
@@ -213,8 +221,8 @@ struct LiquidBubble<Content: View>: View {
         let r = diameter / 2
         let center = CGPoint(x: r + w.drift.width * diameter, y: r + w.drift.height * diameter)
         // The lens follows the current oval.
-        let radii = CGSize(width: r * (1 + abs(w.oval)), height: r * (1 - abs(w.oval)))
-        let lensAngle = w.oval >= 0 ? w.ovalAngle : w.ovalAngle + .pi / 2
+        let radii = CGSize(width: r * (1 + w.oval), height: r / (1 + w.oval))
+        let lensAngle = w.ovalAngle
 
         return ZStack {
             if showsGlow {
@@ -249,7 +257,7 @@ struct LiquidBubble<Content: View>: View {
             if showsGlow {
                 dropletShadow(shape)
                     .mask(shape.frame(width: diameter, height: diameter))
-                    .opacity(colorScheme == .dark ? 0.5 : 0.8)
+                    .opacity(colorScheme == .dark ? 0.1 : 0.8)
             }
         }
         .frame(width: diameter, height: diameter)
@@ -281,11 +289,11 @@ struct LiquidBubble<Content: View>: View {
         let dark = colorScheme == .dark
         return ZStack {
             shape
-                .stroke(.black.opacity(dark ? 0.5 : 0.06), lineWidth: diameter * 0.06)
+                .stroke(.black.opacity(dark ? 0.08 : 0.06), lineWidth: diameter * 0.06)
                 .blur(radius: diameter * 0.045)
             // Faint spread so the ring sits on the surface rather than floating.
             shape
-                .stroke(.black.opacity(dark ? 0.22 : 0.025), lineWidth: diameter * 0.16)
+                .stroke(.black.opacity(dark ? 0.03 : 0.025), lineWidth: diameter * 0.16)
                 .blur(radius: diameter * 0.1)
         }
         .frame(width: diameter, height: diameter)
