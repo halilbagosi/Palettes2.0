@@ -95,13 +95,19 @@ struct EmptyStateArt: View {
                         let reach = size * (0.3 + 0.05 * sin(t * 0.5 + i * 1.7))
                         Circle()
                             .fill(color)
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size * 0.66, height: size * 0.66)
                             .offset(x: reach * cos(angle), y: reach * sin(angle) * 0.8)
                     }
                 }
-                .blur(radius: size * 0.13)
+                // A wide blur so the drops melt together, then an eased radial
+                // fade so the color thins out into the background with no edge.
+                .blur(radius: size * 0.22)
+                .frame(width: size * 2.6, height: size * 2.6)
+                .mask(SoftFade.radial(endRadius: size * 1.2))
                 .opacity(colorScheme == .dark ? 0.5 : 0.6)
             }
+            .frame(width: size * 2.6, height: size * 2.6)
+            // Lay out at the old footprint; the fade spills past it.
             .frame(width: size * 1.9, height: size * 1.6)
 
             Image(systemName: symbol)
@@ -118,6 +124,29 @@ struct EmptyStateArt: View {
             guard !reduceMotion else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { bounce.toggle() }
         }
+    }
+}
+
+/// Fades eased with smootherstep, so color thins out gradually instead of
+/// ending at a visible line, as a linear gradient does.
+enum SoftFade {
+    /// Opaque until `start` (0...1 of the way), then easing to clear at the end.
+    static func stops(from start: Double = 0, count: Int = 14) -> [Gradient.Stop] {
+        (0...count).map { i in
+            let x = Double(i) / Double(count)
+            let u = min(max((x - start) / (1 - start), 0), 1)
+            let fall = u * u * u * (u * (u * 6 - 15) + 10)
+            return .init(color: .black.opacity(1 - fall), location: x)
+        }
+    }
+
+    static func radial(endRadius: CGFloat, from start: Double = 0.15) -> RadialGradient {
+        RadialGradient(stops: stops(from: start), center: .center, startRadius: 0, endRadius: endRadius)
+    }
+
+    static func linear(from start: Double = 0, _ startPoint: UnitPoint = .top,
+                       _ endPoint: UnitPoint = .bottom) -> LinearGradient {
+        LinearGradient(stops: stops(from: start), startPoint: startPoint, endPoint: endPoint)
     }
 }
 

@@ -343,11 +343,13 @@ private struct PaletteWash: View {
                                   y: index.isMultiple(of: 2) ? -width * 0.08 : width * 0.04)
                 }
             }
-            .blur(radius: 60)
+            .blur(radius: 70)
             .opacity(colorScheme == .dark ? 0.32 : 0.4)
-            .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom))
+            // Eased, not linear, so the wash dissolves into the sheet with no
+            // line where it ends.
+            .mask(SoftFade.linear(from: 0.2))
         }
-        .frame(height: 360)
+        .frame(height: 440)
         .ignoresSafeArea(edges: .top)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
