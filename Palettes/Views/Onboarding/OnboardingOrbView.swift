@@ -55,7 +55,9 @@ struct OnboardingOrbView: View {
     /// Local pokes: a tap on the window jiggles the bubble.
     @State private var pokes = 0
 
-    static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.7 }
+    /// Most of the drop: the ink feather fades out well inside this, so the
+    /// image melts into the glass instead of stopping at a visible circle.
+    static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.86 }
 
     private var windowDiameter: CGFloat { Self.windowDiameter(for: diameter) }
 
@@ -92,29 +94,34 @@ struct OnboardingOrbView: View {
 
     private var window: some View {
         ZStack {
+            // A soft, blurred copy bleeds out past the image's edge, like ink
+            // wicking into paper, so its colors carry on into the water.
+            // (Not for the live camera: that would mean a second preview.)
+            if case .photo = content {
+                windowBody
+                    .blur(radius: windowDiameter * 0.07)
+                    .saturation(1.1)
+                    .mask(InkFeather(diameter: windowDiameter, reach: 1))
+                    .opacity(0.75)
+                    .id("bleed-" + content.key)
+                    .transition(.windowSwap)
+            }
             windowBody
+                .mask(InkFeather(diameter: windowDiameter, reach: 0.8))
                 .id(content.key)
                 .transition(.windowSwap)
             Circle()
                 .fill(.white)
                 .opacity(flash)
+                .mask(InkFeather(diameter: windowDiameter, reach: 0.8))
                 .allowsHitTesting(false)
         }
         .frame(width: windowDiameter, height: windowDiameter)
-        .mask(feather)
         .scaleEffect(windowScale)
         .contentShape(Circle())
         .gesture(tapGesture, including: isTappable ? .all : .none)
         .accessibilityAddTraits(isTappable ? .isButton : [])
         .animation(.easeInOut(duration: 0.4), value: content.key)
-    }
-
-    /// Radial feather: solid to 55% of the radius, clear at the rim.
-    private var feather: some View {
-        RadialGradient(
-            stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
-            center: .center, startRadius: 0, endRadius: windowDiameter / 2
-        )
     }
 
     @ViewBuilder
@@ -152,6 +159,73 @@ struct OnboardingOrbView: View {
 }
 
 // MARK: - Window pieces
+
+/// The window's mask, shaped like an ink blot soaking into paper: a dense
+/// core, an uneven edge of soft lobes that drift very slowly, and a fringe
+/// of fainter wisps bleeding past it. Everything is heavily blurred, so
+/// there is no ring where the fade starts, only density thinning out.
+/// `reach` scales how far it spreads (1 fills the window).
+struct InkFeather: View {
+    var diameter: CGFloat
+    var reach: CGFloat = 1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
+            let t = reduceMotion ? 0 : timeline.date.timeIntervalSince(start)
+            Canvas { ctx, size in
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let r = min(size.width, size.height) / 2 * reach
+
+                func blob(_ layer: inout GraphicsContext, angle: Double, distance: CGFloat,
+                          radius: CGFloat, opacity: Double) {
+                    let p = CGPoint(x: c.x + distance * cos(angle), y: c.y + distance * sin(angle))
+                    layer.fill(Circle().path(in: CGRect(x: p.x - radius, y: p.y - radius,
+                                                        width: radius * 2, height: radius * 2)),
+                               with: .color(.black.opacity(opacity)))
+                }
+
+                // Fringe: thin wisps reaching furthest, lightly blurred so they
+                // keep a little of an ink edge's texture.
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: r * 0.1))
+                    for i in 0..<11 {
+                        let k = Double(i)
+                        let a = k / 11 * 2 * .pi + 0.35 * sin(t * 0.11 + k * 1.7)
+                        let wave = sin(t * 0.17 + k * 2.3)
+                        blob(&layer, angle: a,
+                             distance: r * (0.52 + 0.07 * wave),
+                             radius: r * (0.14 + 0.03 * sin(k * 3.1 + t * 0.13)),
+                             opacity: 0.28 + 0.1 * wave)
+                    }
+                }
+                // Body: an uneven blot of overlapping lobes around a solid core.
+                ctx.drawLayer { layer in
+                    layer.addFilter(.blur(radius: r * 0.17))
+                    blob(&layer, angle: 0, distance: 0, radius: r * 0.42, opacity: 1)
+                    for i in 0..<7 {
+                        let k = Double(i)
+                        let a = k / 7 * 2 * .pi + 0.6 + 0.25 * sin(t * 0.09 + k)
+                        blob(&layer, angle: a,
+                             distance: r * (0.24 + 0.05 * sin(t * 0.14 + k * 1.9)),
+                             radius: r * (0.3 + 0.05 * sin(k * 2.7 + t * 0.12)),
+                             opacity: 0.9)
+                    }
+                }
+            }
+        }
+        .frame(width: diameter, height: diameter)
+        // Belt and braces: nothing may reach the window's square bounds.
+        .mask(RadialGradient(
+            stops: [.init(color: .black, location: 0),
+                    .init(color: .black, location: 0.7),
+                    .init(color: .black.opacity(0.5), location: 0.86),
+                    .init(color: .clear, location: 1)],
+            center: .center, startRadius: 0, endRadius: diameter / 2))
+        .allowsHitTesting(false)
+    }
+}
 
 private struct WindowSwap: Transition {
     func body(content: Content, phase: TransitionPhase) -> some View {
