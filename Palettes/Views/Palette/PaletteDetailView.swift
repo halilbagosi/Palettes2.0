@@ -20,6 +20,8 @@ struct PaletteDetailView: View {
     @State private var taggingColorIndex: Int?
     @State private var showDeleteAlert = false
     @State private var isExporting = false
+    /// True while a color's context menu is open (tracked from its preview).
+    @State private var menuOpen = false
     @Environment(\.dismiss) var dismiss
 
     private struct ColorBindingWrapper: Identifiable {
@@ -32,6 +34,12 @@ struct PaletteDetailView: View {
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == palette.id })
+    }
+
+    /// Anything presented over the detail; the onboarding extras sheet waits for it to clear.
+    private var isBusyWithOtherUI: Bool {
+        menuOpen || taggingColorIndex != nil || editColorIndex != nil
+            || isEditingPalette || isExporting || showDeleteAlert
     }
 
     private var livePalette: PaletteViewModel {
@@ -109,6 +117,12 @@ struct PaletteDetailView: View {
                             )
                             .frame(width: 360, height: 180)
                             .padding(4)
+                            // The menu opening is the long press the onboarding hint teaches.
+                            .onAppear {
+                                appData.coachMarkPaletteID = nil
+                                menuOpen = true
+                            }
+                            .onDisappear { menuOpen = false }
                         }
                     }
                 }
@@ -117,6 +131,8 @@ struct PaletteDetailView: View {
             .padding(.bottom, 24)
         }
         .navigationTitle(livePalette.name)
+        .onboardingCoachMark(for: palette.id)
+        .onboardingExtras(for: livePalette, isBusy: isBusyWithOtherUI)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

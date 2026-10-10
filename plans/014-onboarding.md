@@ -26,7 +26,7 @@
 - **New files:** auto-included by synchronized groups. Never edit `Palettes.xcodeproj/project.pbxproj`.
 - **Persistence:** read/write palettes only through `AppData`. Onboarding state is `@AppStorage("didCompleteOnboarding")` (a per-device flag; fine for v1).
 - **Parallel arrays:** `PaletteViewModel`'s `colors`, `hexCodes`, `colorNames`, `colorRoles` stay index-aligned (CLAUDE.md caveat).
-- **Camera permission:** add `NSCameraUsageDescription` (check whether it already exists for `CameraPicker` before adding). Ask only at step 2, after the orb settles. A denial or restriction routes to the photo/sample fallback, never a dead end.
+- **Camera permission:** add `NSCameraUsageDescription` (already present in `Palettes/AppInfo.plist`, used by `CameraPicker`; nothing to add). Ask only at step 2, after the orb settles. A denial or restriction routes to the photo/sample fallback, never a dead end.
 - **Simulator:** no camera. `OrbCameraPreview` must fall back to a bundled sample image under `#if targetEnvironment(simulator)` or when no capture device exists.
 - **Accessibility:** every step has Skip. Reduce Motion replaces the detach/bloom with a cross-fade. VoiceOver labels on the orb, Scan and Skip. Dynamic Type must not clip captions.
 - **Haptics:** one light impact per step change, one medium on Scan.
@@ -52,47 +52,54 @@
 ## Tasks
 
 ### Task 1: Onboarding shell and gating
-- [ ] Create `OnboardingStep` enum and `OnboardingModel` (current step, `advance()`, `skip()`, permission status, scanned RGB).
-- [ ] Create `OnboardingView` with placeholder content per step and a Skip button.
-- [ ] Gate in `MyApp.swift`: `fullScreenCover` over `PaletteTabView` on `!didCompleteOnboarding`; Skip and finish both set the flag.
-- [ ] Add a debug-only "Replay onboarding" row to `SettingsView` (also useful as a user-facing feature later).
-- [ ] Tests: `advance()` order, `skip()` ends the flow, flag is set on finish.
+- [x] Create `OnboardingStep` enum and `OnboardingModel` (current step, `advance()`, `skip()`, permission status, scanned RGB).
+- [x] Create `OnboardingView` with placeholder content per step and a Skip button.
+- [x] Gate (in `PaletteTabView`, not `MyApp.swift`): `fullScreenCover` over `PaletteTabView` on `!didCompleteOnboarding`; Skip and finish both set the flag.
+- [x] Add a user-facing "Replay onboarding" (Settings > About; not debug-only) row to `SettingsView` (also useful as a user-facing feature later).
+- [x] Tests: `advance()` order, `skip()` ends the flow, flag is set on finish.
 
 ### Task 2: Pull and orb detach (steps 0–1)
-- [ ] Drag-down gesture with rubber-band; at threshold, the orb separates from the top center and travels to the screen center.
-- [ ] Orb fill animates black → clear. iOS 26: glass effect; iOS 17–25: `.ultraThinMaterial` with a specular edge.
-- [ ] Reduce Motion: cross-fade the orb in at center.
-- [ ] Verify on the iPhone 17 Pro simulator (Dynamic Island position); check a notch-less device size for sensible fallback.
+- [x] Drag-down gesture with rubber-band; at threshold, the orb separates from the top center and travels to the screen center.
+- [x] Orb fill animates black → clear. iOS 26: glass effect; iOS 17–25: `.ultraThinMaterial` with a specular edge.
+- [x] Reduce Motion: cross-fade the orb in at center.
+- [x] Verify on the iPhone 17 Pro simulator (Dynamic Island position).
+- [ ] Check a notch-less device size for a sensible fallback (not yet verified).
 
 ### Task 3: Camera in the orb (step 2)
-- [ ] `OrbCameraPreview`: `AVCaptureVideoPreviewLayer` in a `UIViewRepresentable`, masked to a circle with a radial gradient mask so edges fade into the glass.
-- [ ] Permission pre-prompt line, then `AVCaptureDevice.requestAccess`. Handle `.denied`/`.restricted` by showing "Use a photo instead" (PhotosPicker) and the sample image.
-- [ ] Scan button captures a still (`AVCapturePhotoOutput`), freezes it in the orb, ripple, medium haptic.
-- [ ] Stop the session when leaving the step or backgrounding.
+- [x] `OrbCameraPreview`: `AVCaptureVideoPreviewLayer` in a `UIViewRepresentable`, masked to a circle with a radial gradient mask so edges fade into the glass.
+- [x] Permission pre-prompt line, then `AVCaptureDevice.requestAccess`. Handle `.denied`/`.restricted` by showing "Use a photo instead" (PhotosPicker) and the sample image.
+- [x] Scan button captures a still (`AVCapturePhotoOutput`), freezes it in the orb, ripple, medium haptic.
+- [x] Stop the session when leaving the step or backgrounding.
 
 ### Task 4: Sample, adjust, generate (steps 3–4)
-- [ ] Sample the center color of the still using `ImageColorExtractor`. Animate it dropping out of the orb into the selected color.
-- [ ] Tap on the frozen frame re-samples (use `PhotoLoupeGeometry` normalization as `PhotoColorPickerView` does).
-- [ ] Show brightness and saturation sliders via `AdjustmentSlider` + `ColorAdjustment`, plus a "Generate palette" button.
-- [ ] On tap, fade in the generation UI on the same screen with the color preselected inside the orb (`GenerationExperienceView`). Palette blooms from the orb.
-- [ ] Generated name: fill with `GeneratedGradient` (iOS 26 AI path); non-AI path shows a normal name.
-- [ ] Create the palette through `AppData`; keep `colors`/`hexCodes`/`colorNames` aligned.
+- [x] Sample the center color of the still using `ImageColorExtractor`. Animate it dropping out of the orb into the selected color.
+- [x] Tap on the frozen frame re-samples (use `PhotoLoupeGeometry` normalization as `PhotoColorPickerView` does).
+- [x] Show brightness and saturation sliders via `AdjustmentSlider` + `ColorAdjustment`, plus a "Generate palette" button.
+- [x] On tap, fade in the generation UI on the same screen with the color preselected inside the orb (`GenerationExperienceView`). Palette blooms from the orb.
+- [x] Generated name: fill with `GeneratedGradient` (iOS 26 AI path); non-AI path shows a normal name.
+- [x] Create the palette through `AppData`; keep `colors`/`hexCodes`/`colorNames` aligned.
 
 ### Task 5: Detail handoff and coach mark (step 5)
-- [ ] Dismiss onboarding and have `PaletteTabView` push `PaletteDetailView` for the new palette.
-- [ ] `OnboardingCoachMark`: non-modal overlay "Long press a color for options, or tag it." Dismiss on first long press or a tap on the hint; once shown, never again.
+- [x] Dismiss onboarding and have `PaletteTabView` push `PaletteDetailView` for the new palette.
+- [x] `OnboardingCoachMark`: non-modal overlay "Long press a color for options, or tag it." Dismiss on first long press or a tap on the hint; once shown, never again.
 
 ### Task 6: Extras cards (step 6, optional)
-- [ ] Share card: render with `PaletteImageRenderer`, button opens `ExportPaletteSheet`.
-- [ ] Siri card: "Ask Siri: generate a palette", plus a line that palettes appear in Spotlight (`EntityIndexer`).
-- [ ] Reserved widget slot: a `static let showsWidgetCard = false` constant; flip it when the widget ships.
-- [ ] iCloud line only if v1 ships with CloudKit enabled (see launch-data-model decision).
+- [x] Share card: render with `PaletteImageRenderer`, button opens `ExportPaletteSheet`.
+- [x] Siri card: "Ask Siri: generate a palette", plus a line that palettes appear in Spotlight (`EntityIndexer`).
+- [x] Reserved widget slot: a `static let showsWidgetCard = false` constant; flip it when the widget ships.
+- [x] iCloud line only if v1 ships with CloudKit enabled (see launch-data-model decision).
 
 ### Task 7: Polish and verification
-- [ ] Accessibility pass (VoiceOver order, Dynamic Type, Reduce Motion).
-- [ ] Run on iPhone 17 Pro simulator through all steps using the sample image; capture screenshots per step.
-- [ ] Full test run; zero new warnings.
-- [ ] Update `plans/README.md` status.
+- [x] Accessibility pass (VoiceOver order, Dynamic Type, Reduce Motion). Done in the simulator for Dynamic Type (AX3), Reduce Motion and dark mode; VoiceOver was reviewed from labels in code only (live VoiceOver needs a device).
+- [x] Run on iPhone 17 Pro simulator through all steps using the sample image; capture screenshots per step (`advisor-plans/onboarding-screens/`). Also walked on iPhone SE (3rd gen); landscape not verifiable with the headless simulator tooling.
+- [x] Full test run; zero new warnings.
+- [x] Update `plans/README.md` status.
+
+**Polish fixes (Task 7):** Skip capped at xxxLarge (it overlapped the orb at AX sizes); orb shrinks on accessibility sizes and short screens; captions capped at accessibility1 (no mid-word breaks in sliders and buttons); Generate button pinned below the scrolling captions; coach-mark banner capped at xxxLarge.
+
+**Needs on-device verification:** real camera (preview, capture, rotation coordinator, interruption and runtime-error handling, permission prompts), the Apple Intelligence generation path (gradient name, `isGenerated` badge), VoiceOver and the Actions rotor, landscape, iOS 17/18 runtime behavior (input could not be driven on the 17.5 simulator), notch-less hardware (SE walked in simulator only).
+- GenerateView orb on iOS 17/18 now has an ultraThinMaterial body behind the liquid (visual change); check it.
+- Library colors are saved on the debounce, like GenerateView; killing the app within ~300ms of saving can drop them.
 
 ## Verification
 
@@ -103,8 +110,17 @@
 5. iOS 17 simulator (if available): material orb renders; no iOS 26 API is called.
 6. `xcodebuild test` passes, including `OnboardingModelTests`.
 
+## Implementation notes (Tasks 1-2)
+
+- The cover is presented from `PaletteTabView` (after the environment objects, so reused views get `AppData`), not `MyApp`.
+- In-cover steps end at `.generate`; the detail coach mark and extras cards run after the cover dismisses, with their own `@AppStorage` keys.
+- `OnboardingModel` has no persistence: it reports `OnboardingFinishReason` (`.skipped` / `.completed(paletteID:)`) through `onFinish`, and `PaletteTabView` sets the flag and (Task 5) selects the palette.
+- Replay: Settings signals `OnboardingReplayCoordinator`; `PaletteView` clears the flag in the Settings sheet's `onDismiss`.
+
+- `isGenerated` on the onboarding palette (and its library colors) means AI-made: the deterministic builder path saves `false`.
+
 ## Open questions
 
 - Should the orb camera use the front or back camera? Default: back.
-- Is "Replay onboarding" user-facing in Settings or debug-only? Default: user-facing.
+- ~~Is "Replay onboarding" user-facing in Settings or debug-only?~~ Resolved: user-facing (Settings > About > Replay Onboarding).
 - Free-tier generation size for the onboarding palette (default 4; keep within the free sizes from plan 013).

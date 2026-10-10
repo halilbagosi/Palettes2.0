@@ -20,6 +20,7 @@ struct PaletteView: View {
     @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
     @EnvironmentObject var appData: AppData
+    @EnvironmentObject private var replay: OnboardingReplayCoordinator
 
     // MARK: - Display state
 
@@ -112,9 +113,12 @@ struct PaletteView: View {
                     ExportPaletteSheet(palette: palette)
                         .presentationDetents([.medium, .large])
                 }
-                .sheet(isPresented: $showSettings) {
+                .sheet(isPresented: $showSettings, onDismiss: {
+                    if replay.consume() { OnboardingKeys.resetForReplay() }
+                }) {
                     SettingsView()
                         .environmentObject(appData)
+                        .environmentObject(replay)
                 }
                 .alert("Delete Palette", isPresented: $showDeleteAlert, presenting: paletteToDelete) { palette in
                     Button("Delete", role: .destructive) {

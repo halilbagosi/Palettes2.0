@@ -667,20 +667,7 @@ struct GenerateView: View {
         ))
 
         // Add any newly generated colors to the Colors library.
-        for (i, paletteColor) in resultPaletteColors.enumerated() {
-            let hex = paletteColor.hex
-            guard !hex.isEmpty else { continue }
-            let alreadyExists = appData.colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
-            guard !alreadyExists else { continue }
-            let name = paletteColor.name.isEmpty ? "Color \(i + 1)" : paletteColor.name
-            appData.colors.append(ColorViewModel(
-                name: name,
-                color: paletteColor.color,
-                HEX: hex,
-                usedInPalette: true,
-                isGenerated: true
-            ))
-        }
+        appData.addPaletteColorsToLibrary(resultPaletteColors, isGenerated: true)
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
         withAnimation(.smooth(duration: 0.5)) { phase = .form }

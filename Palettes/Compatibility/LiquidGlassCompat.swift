@@ -43,6 +43,42 @@ extension View {
     }
 }
 
+/// The orb's glass shell, split in two layers so the colors inside stay crisp
+/// on every OS: `OrbShellBackground` goes behind the orb's contents and
+/// `OrbShellOverlay` on top.
+///
+/// iOS 26+: all the glass is the overlay (clear Liquid Glass refracting what
+/// sits behind). iOS 17-25: a frosted material behind the contents, plus only
+/// a specular rim on top, so the material never frosts the colors.
+struct OrbShellBackground: View {
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+        } else {
+            Circle().fill(.ultraThinMaterial)
+        }
+    }
+}
+
+struct OrbShellOverlay: View {
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            Circle()
+                .fill(.clear)
+                .glassEffect(.clear, in: .circle)
+        } else {
+            Circle().strokeBorder(
+                LinearGradient(
+                    colors: [.white.opacity(0.55), .white.opacity(0.05), .white.opacity(0.25)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
+            )
+        }
+    }
+}
+
 /// `GlassEffectContainer` on iOS 26+, a passthrough on earlier systems.
 struct GlassContainer<Content: View>: View {
     var spacing: CGFloat? = nil

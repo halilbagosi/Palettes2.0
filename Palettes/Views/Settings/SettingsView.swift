@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
+    @EnvironmentObject private var replay: OnboardingReplayCoordinator
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
@@ -71,6 +72,11 @@ struct SettingsView: View {
                     Link(destination: AppLinks.supportEmailURL) {
                         Label("Contact Support", systemImage: "envelope")
                     }
+                    Button {
+                        replayOnboarding()
+                    } label: {
+                        Label("Replay Onboarding", systemImage: "sparkles")
+                    }
                     LabeledContent("Version", value: versionString)
                 }
             }
@@ -97,6 +103,12 @@ struct SettingsView: View {
         }
     }
 
+    private func replayOnboarding() {
+        // The presenter restarts onboarding in the sheet's onDismiss.
+        replay.request()
+        dismiss()
+    }
+
     private func deleteAll() {
         if appData.deleteAllLibraryData() {
             dismiss()
@@ -108,4 +120,5 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
         .environmentObject(AppData(inMemory: true))
+        .environmentObject(OnboardingReplayCoordinator())
 }

@@ -28,3 +28,28 @@ extension View {
         }
     }
 }
+
+/// Frosted capsule button for systems without the glass button style.
+private struct MaterialCapsuleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay { Capsule().stroke(.white.opacity(0.18), lineWidth: 0.75) }
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+extension View {
+    /// Secondary capsule button: `.glass` on iOS 26+ (never `.glassProminent`,
+    /// which is always accent-tinted), a material capsule on earlier systems.
+    @ViewBuilder
+    func glassCapsuleButton() -> some View {
+        if #available(iOS 26.0, *) {
+            buttonStyle(.glass)
+        } else {
+            buttonStyle(MaterialCapsuleButtonStyle())
+        }
+    }
+}
