@@ -31,6 +31,9 @@ class AppData: ObservableObject {
     /// Transient: set once the coach mark is dismissed, arming the one-time
     /// onboarding extras sheet for that palette.
     @Published var extrasPaletteID: UUID?
+    /// Transient: "Start creating" on the extras sheet asked the Palettes
+    /// tab to return to its library and show its display and filter options.
+    @Published var libraryOptionsTourPending = false
 
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []

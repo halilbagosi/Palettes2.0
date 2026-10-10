@@ -168,7 +168,12 @@ struct OnboardingExtrasView: View {
                     .opacity(appeared ? 1 : 0)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                OnboardingPrimaryButton(title: "Start creating", systemImage: "arrow.right") { dismiss() }
+                OnboardingPrimaryButton(title: "Start creating", systemImage: "arrow.right") {
+                    // Back to the library, which then shows its options.
+                    appData.activeTab = .palettes
+                    appData.libraryOptionsTourPending = true
+                    dismiss()
+                }
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
                     .padding(.bottom, 8)
