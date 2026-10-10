@@ -6,7 +6,8 @@
 //  whose cutout sits centered at the top, and the top bezel everywhere else
 //  (iPad, iPhone Duo, landscape). There is no public API for the cutout's
 //  frame, so a centered cutout is recognised by the iPhone's screen size and
-//  the inset is mapped to the hardware's known sizes. Any other device,
+//  the inset (and, for the smaller iPhone 18 Pro island, the model) is
+//  mapped to the hardware's known sizes. Any other device,
 //  including one with an off-center cutout, pulls from the bezel.
 //
 
@@ -56,6 +57,9 @@ nonisolated struct IslandGeometry: Equatable {
         if screenSize.height > screenSize.width,
            centeredCutoutSizes.contains(Size(screenSize.width, screenSize.height)) {
             if topInset >= 59 {
+                if hasCompactIsland {
+                    return IslandGeometry(kind: .dynamicIsland, width: 84, height: 34, top: 13)
+                }
                 return IslandGeometry(kind: .dynamicIsland, width: 125, height: 37, top: topInset >= 62 ? 14 : 11)
             }
             if topInset >= 44 {
@@ -63,6 +67,28 @@ nonisolated struct IslandGeometry: Equatable {
             }
         }
         return .bezel
+    }
+
+    /// iPhone 18 Pro and Pro Max keep the 17 Pro's screen sizes and insets but
+    /// have a smaller Dynamic Island, so they're told apart by model: the
+    /// iPhone 18 family's identifiers start at iPhone19,x, and later models
+    /// are assumed to keep the smaller island.
+    static let hasCompactIsland: Bool = {
+        guard let identifier = modelIdentifier, identifier.hasPrefix("iPhone") else { return false }
+        let major = identifier.dropFirst("iPhone".count).prefix { $0.isNumber }
+        return (Int(major) ?? 0) >= 19
+    }()
+
+    /// The hardware model, e.g. "iPhone18,1"; the simulated one in Simulator.
+    private static var modelIdentifier: String? {
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
+            return simulated
+        }
+        var info = utsname()
+        uname(&info)
+        return withUnsafePointer(to: &info.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
+        }
     }
 
     /// A screen size rounded to whole points, so it can be looked up.

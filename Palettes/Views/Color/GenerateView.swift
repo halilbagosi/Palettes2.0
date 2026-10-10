@@ -841,7 +841,8 @@ struct GenerateView: View {
     }
 
     /// Square: as tall as the menus beside it, or as one of them when they're
-    /// stacked (`axis` is the menus' axis).
+    /// stacked (`axis` is the menus' axis). With a photo picked it widens to
+    /// show it and say what it's for.
     @ViewBuilder
     private func imageMenuButton(axis: Axis) -> some View {
         Menu {
@@ -860,30 +861,38 @@ struct GenerateView: View {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
             }
         } label: {
-            // The chosen photo fills the button; tapping it again replaces it.
-            ZStack {
+            // Picked, the button widens to show the photo, outlined, and what
+            // it's for; tapping it again replaces the photo.
+            HStack(spacing: 8) {
                 if let selectedImage {
                     Image(uiImage: selectedImage)
                         .resizable()
                         .scaledToFill()
+                        .frame(width: 42, height: 42)
+                        .clipShape(.rect(cornerRadius: 10))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(.tint, lineWidth: 2.5)
+                        }
+
+                    Text("Colors will be pulled from this photo")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.85)
+                        .frame(width: 78, alignment: .leading)
                         .transition(.opacity)
                 } else {
                     Image(systemName: "photo.on.rectangle.angled")
                         .font(.title3)
                         .foregroundStyle(.tint)
+                        .frame(width: 52)
                         .transition(.opacity)
                 }
             }
-            .frame(width: 52)
+            .padding(selectedImage == nil ? 0 : 5)
+            .padding(.trailing, selectedImage == nil ? 0 : 5)
             .frame(minHeight: 52, maxHeight: axis == .horizontal ? .infinity : 52)
-            .clipShape(.rect(cornerRadius: 14))
-            .overlay {
-                if selectedImage != nil {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(.tint, lineWidth: 2.5)
-                        .transition(.opacity)
-                }
-            }
             .contentShape(.rect(cornerRadius: 14))
             .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
         }
