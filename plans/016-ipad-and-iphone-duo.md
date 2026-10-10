@@ -63,8 +63,10 @@
 
 - **Libraries** (`MorphingCardGrid.foldSpan`): with a vertical crease, the same number of columns sit on each side, centred in each half, with none on the crease. `LazyMorphingCardGrid` measures it itself; `PaletteView` passes it in.
 - **Palette detail**: folded, the strip fills the side before the crease (the top, or the leading side in landscape) and the colors scroll on the other side. The title goes inline to give the strip room.
-- **Onboarding**: with a horizontal crease, the orb is centred above it and the text and buttons sit below. With a vertical crease, the orb is centred in the trailing side and the text and buttons are centred together in the leading side.
-- **Onboarding on the outer display**: the orb centres on the safe area (the same centre as the text), not the screen, and is 15% smaller when the bars sit on one side.
+- **One rule for every split** (`FoldSplit`): the visual (orb, palette strip) takes the side before the crease, the top or the left, and text, buttons and controls take the side after it.
+- **Onboarding**: with a horizontal crease, the orb is centred above it and the text and buttons sit below. With a vertical crease, the orb is on the left and the text and buttons are centred together on the right. Unfolded, the orb and text centre on the screen (the text is padded to match when the bars sit on one side).
+- **Onboarding on the outer display**: the orb centres on the safe area (the same centre as the text) and is 15% smaller.
+- **Generate**: folded, the orb is as large as its side allows (up to 460 pt), with size, mode, colors, vibe and Generate stacked on the other side. The generating stage splits the same way. Unfolded, the generating stage stays stacked and centred, and goes side by side only when the stage is under 520 pt tall. On a wide, short stage (the outer display in landscape), the size and mode menus sit in a column beside a strip three swatches wide, with the vibe field and Generate below.
 
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 

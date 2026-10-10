@@ -74,3 +74,30 @@ extension View {
         }
     }
 }
+
+/// Splits its space at `fold`: `visual` on the side before the crease (the
+/// top, or the leading side in landscape) and `controls` after it, so text,
+/// buttons and controls always end up on the trailing or bottom side.
+/// Measure `fold` on the view this fills, so the coordinates match.
+struct FoldSplit<Visual: View, Controls: View>: View {
+    let fold: Fold
+    @ViewBuilder var visual: Visual
+    @ViewBuilder var controls: Controls
+
+    var body: some View {
+        let span = fold.span
+        let vertical = fold.isVertical
+        let layout = vertical ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+        layout {
+            visual
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: vertical ? span.lowerBound : nil,
+                       height: vertical ? nil : span.lowerBound)
+            Color.clear
+                .frame(width: vertical ? span.upperBound - span.lowerBound : nil,
+                       height: vertical ? nil : span.upperBound - span.lowerBound)
+            controls
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}

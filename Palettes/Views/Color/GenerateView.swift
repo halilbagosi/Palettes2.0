@@ -28,6 +28,9 @@ struct GenerateView: View {
     @FocusState private var vibeFocused: Bool
     /// The stage's size, for its orientation and the generating orb's size.
     @State private var stageSize: CGSize = .zero
+    /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
+    /// the crease and the controls the side after it.
+    @State private var fold: Fold?
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -67,6 +70,13 @@ struct GenerateView: View {
         stageSize == .zero || stageSize.height > stageSize.width
     }
 
+    /// A wide, short stage (iPhone Duo's outer display or an iPhone in
+    /// landscape): the size and mode menus sit in a column beside a short
+    /// color row, so the vibe field and Generate stay in view below them.
+    private var isWideAndShort: Bool {
+        !isPortrait && (verticalSizeClass == .compact || stageSize.height < 500)
+    }
+
     /// iPad and iPhone Duo in portrait at full size: every color is shown in
     /// a grid that fills the space under the options, instead of a strip.
     private var showsColorGrid: Bool {
@@ -97,6 +107,8 @@ struct GenerateView: View {
                 .ignoresSafeArea()
             }
             .navigationTitle(phase == .form ? "Generate" : "")
+            // Folded, the orb needs the height a large title would take.
+            .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
             .toolbar(phase == .generating ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
@@ -116,6 +128,9 @@ struct GenerateView: View {
     private var stage: some View {
         stageContent
             .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            .onFoldChange { newFold in
+                withAnimation(.smooth(duration: 0.35)) { fold = newFold }
+            }
             .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
                 Button("Save Anyway") { performSave() }
                 Button("Cancel", role: .cancel) {}
@@ -163,50 +178,158 @@ struct GenerateView: View {
     }
 
     /// The orb, then the same copy and filling swatch row as onboarding.
-    /// Stacked when the stage is tall; side by side when it's wide (iPhone in
-    /// landscape, iPhone Duo's outer display, a wide iPad window), where a
-    /// stack would run off the bottom.
+    /// Stacked and centred on the stage; side by side only when the stage is
+    /// too short for the stack (iPhone in landscape, iPhone Duo's outer
+    /// display). Folded, the orb takes the side before the crease and the
+    /// copy the side after it.
+    @ViewBuilder
     private var generatingOrb: some View {
-        let layout = isPortrait
-            ? AnyLayout(VStackLayout(spacing: 28))
-            : AnyLayout(HStackLayout(spacing: 40))
-        let diameter = generatingOrbDiameter
-        return layout {
-            GenerationOrbView(
-                colors: arrivedColors,
-                photo: selectedImage,
-                showsProgress: true
-            )
-            .matchedGeometryEffect(id: "orb", in: orbNamespace)
-            .frame(width: diameter, height: diameter)
-            // Above the text: stretched over it, the glass bends it.
-            .zIndex(1)
-
-            VStack(spacing: 20) {
-                OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
-                GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+        if let fold {
+            FoldSplit(fold: fold) {
+                generationOrb(diameter: foldedOrbDiameter(fold))
+            } controls: {
+                generationCopy
                     .frame(maxWidth: 360)
             }
-            .frame(maxWidth: isPortrait ? nil : 360)
-            .padding(.horizontal, 24)
-            .transition(.blurFade)
+        } else {
+            let sideBySide = !isPortrait && stageSize.height < 520
+            let layout = sideBySide
+                ? AnyLayout(HStackLayout(spacing: 40))
+                : AnyLayout(VStackLayout(spacing: 28))
+            layout {
+                generationOrb(diameter: generatingOrbDiameter(sideBySide: sideBySide))
+                generationCopy
+                    .frame(maxWidth: sideBySide ? 360 : nil)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func generationOrb(diameter: CGFloat) -> some View {
+        GenerationOrbView(
+            colors: arrivedColors,
+            photo: selectedImage,
+            showsProgress: true
+        )
+        .matchedGeometryEffect(id: "orb", in: orbNamespace)
+        .frame(width: diameter, height: diameter)
+        // Above the text: stretched over it, the glass bends it.
+        .zIndex(1)
+    }
+
+    private var generationCopy: some View {
+        VStack(spacing: 20) {
+            OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
+            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+                .frame(maxWidth: 360)
+        }
+        .padding(.horizontal, 24)
+        .transition(.blurFade)
     }
 
     /// 300 pt where there's room, shrinking with the stage so the orb and its
     /// copy always fit together.
-    private var generatingOrbDiameter: CGFloat {
+    private func generatingOrbDiameter(sideBySide: Bool) -> CGFloat {
         guard stageSize != .zero else { return 300 }
-        let fit = isPortrait
-            ? min(stageSize.width * 0.7, stageSize.height * 0.45)
-            : min(stageSize.height * 0.7, stageSize.width * 0.4)
+        let fit = sideBySide
+            ? min(stageSize.height * 0.7, stageSize.width * 0.4)
+            : min(stageSize.width * 0.7, stageSize.height * 0.45)
         return min(300, max(160, fit))
     }
 
     // MARK: - Form
 
+    @ViewBuilder
     private var formContent: some View {
+        if let fold {
+            foldedForm(fold)
+        } else {
+            stackedForm
+        }
+    }
+
+    /// iPhone Duo half open: the orb, as large as its side allows, before the
+    /// crease (on the left in landscape, on top in portrait) and the size,
+    /// mode, colors, vibe and Generate stacked after it.
+    private func foldedForm(_ fold: Fold) -> some View {
+        FoldSplit(fold: fold) {
+            VStack(spacing: 16) {
+                formOrb(diameter: foldedOrbDiameter(fold))
+                Text(GenerateHeaderView.description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+            .padding()
+        } controls: {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
+                    colorsSection()
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) {
+                if phase == .form {
+                    pinnedControls
+                }
+            }
+        }
+    }
+
+    /// The orb's side of the fold, less room for the line of copy under it.
+    private func foldedOrbDiameter(_ fold: Fold) -> CGFloat {
+        let side = fold.span.lowerBound
+        let fit = fold.isVertical
+            ? min(side * 0.78, stageSize.height - 150)
+            : min(side - 120, stageSize.width * 0.7)
+        return min(460, max(120, fit))
+    }
+
+    /// The form's orb; it expands into the generation orb.
+    private func formOrb(diameter: CGFloat) -> some View {
+        ZStack {
+            if phase == .form {
+                GenerationOrbView(colors: selectedColors)
+                    .matchedGeometryEffect(id: "orb", in: orbNamespace)
+                    .frame(width: diameter, height: diameter)
+            }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    /// The photo chip, the vibe field and Generate, pinned above the keyboard
+    /// and home indicator, like the result view's describe-change field.
+    private var pinnedControls: some View {
+        VStack(spacing: 12) {
+            if let image = selectedImage {
+                imageChip(image)
+            }
+
+            vibeField
+
+            // While typing, the field's send arrow takes over — hide the bar.
+            if !vibeFocused && canGenerateFromSource {
+                generateBar
+                    .padding(.top, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal)
+        .padding(.bottom, 24)
+        .animation(.spring(response: 0.3), value: vibeFocused)
+    }
+
+    /// The orb and the options in one scrolling column, the vibe field and
+    /// Generate pinned under them.
+    private var stackedForm: some View {
         ScrollViewReader { scrollProxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -218,8 +341,15 @@ struct GenerateView: View {
                 )
                 .zIndex(1)
 
-                generationOptionsSection
-                colorsSection
+                if isWideAndShort {
+                    HStack(alignment: .top, spacing: 16) {
+                        generationOptions(axis: .vertical)
+                        colorsSection(maxVisibleColors: 3)
+                    }
+                } else {
+                    generationOptions(axis: .horizontal)
+                    colorsSection()
+                }
 
                 Color.clear
                     .frame(height: 1)
@@ -236,25 +366,7 @@ struct GenerateView: View {
         // view's describe-change field.
         .safeAreaInset(edge: .bottom) {
             if phase == .form {
-                VStack(spacing: 12) {
-                    if let image = selectedImage {
-                        imageChip(image)
-                    }
-
-                    vibeField
-
-                    // While typing, the field's send arrow takes over — hide the bar.
-                    if !vibeFocused && canGenerateFromSource {
-                        generateBar
-                            .padding(.top, 8)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-                .padding(.bottom, 24)
-                .animation(.spring(response: 0.3), value: vibeFocused)
+                pinnedControls
             }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
@@ -301,8 +413,13 @@ struct GenerateView: View {
     /// Keep the two generation controls together so they remain discoverable
     /// on both compact phones and wider iPad layouts. Menus avoid the
     /// six-segment squeeze that made the previous size control hard to use.
-    private var generationOptionsSection: some View {
-        HStack(alignment: .top, spacing: 12) {
+    /// Side by side normally; stacked in a column beside the colors (wide,
+    /// short stages) or above them (folded in landscape).
+    private func generationOptions(axis: Axis) -> some View {
+        let layout = axis == .horizontal
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            : AnyLayout(VStackLayout(spacing: 10))
+        return layout {
             Menu {
                 ForEach(sizeOptions, id: \.self) { size in
                     Button {
@@ -386,14 +503,17 @@ struct GenerateView: View {
 
     // MARK: - Colors
 
+    /// The user's colors to start from. `maxVisibleColors` narrows the strip
+    /// to that many swatches (beside the options on a wide, short stage).
     @ViewBuilder
-    private var colorsSection: some View {
+    private func colorsSection(maxVisibleColors: Int? = nil) -> some View {
         if !appData.colors.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    Text("Start From Your Colors")
+                    Text(maxVisibleColors == nil ? "Start From Your Colors" : "Your Colors")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
 
                     if !selectedColorIDs.isEmpty {
                         Text("· \(selectedColorIDs.count) selected")
@@ -415,13 +535,20 @@ struct GenerateView: View {
                     Spacer(minLength: 8)
                 }
 
-                if showsColorGrid {
+                if showsColorGrid && maxVisibleColors == nil {
                     colorGrid
                 } else {
                     colorStrip
                 }
             }
+            .frame(width: maxVisibleColors.map(Self.stripWidth(visibleColors:)))
         }
+    }
+
+    /// The width that shows `count` swatches of the strip (54 pt swatches,
+    /// 62 pt labels, 14 pt apart).
+    private static func stripWidth(visibleColors count: Int) -> CGFloat {
+        CGFloat(count) * 62 + CGFloat(count - 1) * 14 + 4
     }
 
     private var colorGrid: some View {
@@ -814,6 +941,8 @@ private struct GenerateHeaderView: View {
     let colors: [Color]
     let orbNamespace: Namespace.ID
 
+    static let description = "Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette."
+
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             // The orb is part of the scroll content, so it moves with the
@@ -831,7 +960,7 @@ private struct GenerateHeaderView: View {
             .padding(.top, 8)
             .zIndex(1)
 
-            Text("Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette.")
+            Text(Self.description)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

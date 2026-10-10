@@ -60,13 +60,30 @@ struct OnboardingView: View {
 
         var topInset: CGFloat { insets.top }
 
-        /// Bars on one side only (iPhone Duo's outer display puts the status
-        /// bar and controls along an edge): the safe area is off centre.
+        /// Bars on one side only (iPhone Duo puts the status bar and controls
+        /// along an edge): the safe area is off centre.
         var hasSideControls: Bool { abs(insets.leading - insets.trailing) > 8 }
 
-        /// The middle of the safe area, which the text and buttons centre on.
-        var safeCenterX: CGFloat {
-            insets.leading + (full.width - insets.leading - insets.trailing) / 2
+        /// iPhone Duo's outer display: a small screen with its bars on one
+        /// side. There the orb centres on the safe area, with the text, and is
+        /// a little smaller. Bigger screens keep everything centred on the
+        /// screen itself.
+        var centersOnSafeArea: Bool {
+            hasSideControls && min(full.width, full.height) < 600
+        }
+
+        /// The orb's and the text's shared centre line.
+        var centerX: CGFloat {
+            guard centersOnSafeArea else { return full.width / 2 }
+            return insets.leading + (full.width - insets.leading - insets.trailing) / 2
+        }
+
+        /// Padding that moves the text's centre from the safe area's to the
+        /// screen's, matching the orb, when bars sit on one side.
+        var textBalance: EdgeInsets {
+            guard !centersOnSafeArea else { return EdgeInsets() }
+            return EdgeInsets(top: 0, leading: max(0, insets.trailing - insets.leading),
+                              bottom: 0, trailing: max(0, insets.leading - insets.trailing))
         }
 
         private var baseOrbDiameter: CGFloat {
@@ -79,10 +96,10 @@ struct OnboardingView: View {
         }
 
         var orbDiameter: CGFloat {
-            let base = baseOrbDiameter * (hasSideControls ? 0.85 : 1)
+            let base = baseOrbDiameter * (centersOnSafeArea ? 0.85 : 1)
             guard let fold else { return base }
             if fold.isVertical {
-                let side = full.width - insets.trailing - fold.frame.maxX
+                let side = fold.frame.minX - insets.leading
                 let height = full.height - insets.top - insets.bottom
                 return max(120, min(base, side * 0.7, height * 0.62))
             }
@@ -94,19 +111,19 @@ struct OnboardingView: View {
         var restCenter: CGPoint {
             if let fold {
                 if fold.isVertical {
-                    // Centred in the side after the crease.
-                    let x = (fold.frame.maxX + full.width - insets.trailing) / 2
+                    // Centred in the side before the crease; the text takes the other.
+                    let x = (insets.leading + fold.frame.minX) / 2
                     let y = insets.top + (full.height - insets.top - insets.bottom) / 2
                     return CGPoint(x: x, y: y)
                 }
                 // Centred above the crease, below Skip.
-                return CGPoint(x: safeCenterX, y: (skipBottom + 12 + fold.frame.minY) / 2)
+                return CGPoint(x: centerX, y: (skipBottom + 12 + fold.frame.minY) / 2)
             }
             // 38% of the height; short screens keep the orb higher to leave room for the text.
             let highest = skipBottom + 12 + orbDiameter / 2
             let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
             // Roomy: up to 64 pt higher, stopping short of Skip.
-            return CGPoint(x: safeCenterX, y: roomy ? max(highest, y - 64) : y)
+            return CGPoint(x: centerX, y: roomy ? max(highest, y - 64) : y)
         }
         /// Safe-area-space top of the text region, under the orb (or, folded
         /// horizontally, under the crease).
@@ -114,11 +131,11 @@ struct OnboardingView: View {
             if let fold, !fold.isVertical { return fold.frame.maxY + 16 - topInset }
             return restCenter.y + orbDiameter / 2 + 28 - topInset
         }
-        /// Folded vertically, the safe-area-space width the text and buttons
-        /// keep to, before the crease.
-        var leadingColumnWidth: CGFloat? {
+        /// Folded vertically, the width the text and buttons keep to: the
+        /// side after the crease, up to the safe area's trailing edge.
+        var trailingColumnWidth: CGFloat? {
             guard let fold, fold.isVertical else { return nil }
-            return max(0, fold.frame.minX - insets.leading)
+            return max(0, full.width - insets.trailing - fold.frame.maxX)
         }
         var placement: IslandMorphController.Placement {
             .init(island: island, screenWidth: full.width, restCenter: restCenter, restDiameter: orbDiameter)
@@ -411,7 +428,7 @@ struct OnboardingView: View {
     @ViewBuilder
     private func stepLayer(layout: Layout, content: OnboardingStepContent) -> some View {
         let shown = controlsShown(travels: layout.island.hasMorph && !reduceMotion)
-        if let columnWidth = layout.leadingColumnWidth {
+        if let columnWidth = layout.trailingColumnWidth {
             sideStepLayer(columnWidth: columnWidth, content: content, shown: shown)
         } else {
             stackedStepLayer(layout: layout, content: content, shown: shown)
@@ -419,9 +436,10 @@ struct OnboardingView: View {
     }
 
     /// iPhone Duo half open in landscape: the text and buttons, centred
-    /// together, in the side before the crease; the orb has the other side.
+    /// together, in the side after the crease; the orb has the side before it.
     private func sideStepLayer(columnWidth: CGFloat, content: OnboardingStepContent, shown: Bool) -> some View {
         HStack(spacing: 0) {
+            Spacer(minLength: 0)
             GeometryReader { region in
                 ScrollView {
                     VStack(spacing: 0) {
@@ -434,7 +452,6 @@ struct OnboardingView: View {
                 .scrollBounceBehavior(.basedOnSize)
             }
             .frame(width: columnWidth)
-            Spacer(minLength: 0)
         }
         .opacity(shown ? 1 : 0)
         .allowsHitTesting(shown)
@@ -457,8 +474,11 @@ struct OnboardingView: View {
             .opacity(shown ? 1 : 0)
             .animation(.easeOut(duration: 0.4), value: shown)
         }
+        // Centred on the same line as the orb.
+        .padding(layout.textBalance)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             actionBar(content: content)
+                .padding(layout.textBalance)
                 .opacity(shown ? 1 : 0)
                 .allowsHitTesting(shown)
                 .animation(.easeOut(duration: 0.4), value: shown)

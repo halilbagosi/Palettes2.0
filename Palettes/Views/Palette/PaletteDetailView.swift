@@ -238,32 +238,14 @@ struct PaletteDetailView: View {
         .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
     }
 
-    @ViewBuilder
     private func foldedContent(_ fold: Fold) -> some View {
-        let span = fold.span
-        if fold.isVertical {
-            HStack(spacing: 0) {
-                heroStrip(fillsHeight: true)
+        FoldSplit(fold: fold) {
+            heroStrip(fillsHeight: true)
+                .padding()
+        } controls: {
+            ScrollView {
+                colorGrid
                     .padding()
-                    .frame(width: span.lowerBound)
-                Color.clear
-                    .frame(width: span.upperBound - span.lowerBound)
-                ScrollView {
-                    colorGrid
-                        .padding()
-                }
-            }
-        } else {
-            VStack(spacing: 0) {
-                heroStrip(fillsHeight: true)
-                    .padding()
-                    .frame(height: span.lowerBound)
-                Color.clear
-                    .frame(height: span.upperBound - span.lowerBound)
-                ScrollView {
-                    colorGrid
-                        .padding()
-                }
             }
         }
     }
