@@ -105,7 +105,8 @@ private struct OnboardingExtrasModifier: ViewModifier {
         else { return }
         task?.cancel()
         task = Task {
-            try? await Task.sleep(for: .seconds(2))
+            // Just long enough for the color menu to finish closing.
+            try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled,
                   OnboardingExtrasLogic.shouldStartTimer(
                     target: appData.extrasPaletteID, paletteID: palette.id, alreadyShown: didShow, isBusy: isBusy)

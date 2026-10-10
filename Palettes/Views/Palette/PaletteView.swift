@@ -223,6 +223,10 @@ struct PaletteView: View {
                 }
                 .padding()
                 .padding(.bottom, 88)
+                // Implicit as well as the binding's withAnimation: a change from a
+                // Toggle (the onboarding options card) arrives in the Toggle's own
+                // transaction and would otherwise snap.
+                .animation(.spring(response: 0.35, dampingFraction: 0.9), value: layout)
             }
         }
     }

@@ -194,8 +194,8 @@ private struct AdjustInterimBody: View {
     }
 }
 
-/// The generate step, waiting and ready. The eyebrow and the words above the
-/// swatches cross-fade ("Mixing your palette" becomes the palette's name)
+/// The generate step, waiting and ready. The words above the swatches
+/// cross-fade ("Mixing your palette" becomes the palette's name)
 /// in a slot of fixed height, while the row below keeps filling in place.
 private struct GenerateInterimBody: View {
     @ObservedObject var flow: OnboardingInterimFlow
@@ -207,36 +207,31 @@ private struct GenerateInterimBody: View {
 
     var body: some View {
         let made = self.made
-        VStack(spacing: 24) {
-            VStack(spacing: 14) {
-                ZStack {
-                    if made != nil {
-                        OnboardingEyebrow(title: "Your first palette", systemImage: "checkmark.seal.fill")
-                            .transition(.blurBridge)
-                    } else {
-                        OnboardingEyebrow(title: "Generating", systemImage: "sparkles")
-                            .transition(.blurBridge)
-                    }
-                }
-                ZStack {
-                    if let made {
-                        OnboardingPaletteName(name: made.palette.name, usesGradient: made.usedAI)
-                            .transition(.blurFade)
-                    } else {
-                        OnboardingStepText(
-                            title: "Mixing your palette",
-                            subtitle: "Finding colors that go beautifully with yours."
-                        )
+        // Kept short (no eyebrow, smaller swatches) so the row sits well clear
+        // of the pinned "See my palette" button.
+        VStack(spacing: 18) {
+            ZStack {
+                if let made {
+                    OnboardingPaletteName(name: made.palette.name, usesGradient: made.usedAI)
+                        // Never taller than the waiting copy it replaces.
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
                         .transition(.blurFade)
-                    }
+                } else {
+                    OnboardingStepText(
+                        title: "Mixing your palette",
+                        subtitle: "Finding colors that go beautifully with yours."
+                    )
+                    .transition(.blurFade)
                 }
-                // As tall as the waiting copy, so the row doesn't jump when
-                // a shorter name replaces it.
-                .frame(minHeight: 92)
             }
+            // As tall as the waiting copy, so the row doesn't jump when
+            // a shorter name replaces it.
+            .frame(minHeight: 92)
             GenerationSwatchRow(colors: made?.palette.colors ?? flow.genColors,
-                                expected: made?.palette.colors.count ?? OnboardingPaletteMaker.paletteSize)
-                .frame(maxWidth: 360)
+                                expected: made?.palette.colors.count ?? OnboardingPaletteMaker.paletteSize,
+                                maxSize: 46)
+                .frame(maxWidth: 300)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Palette colors")
                 .accessibilityValue(made.map { $0.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; ") } ?? "")
