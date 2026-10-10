@@ -71,8 +71,7 @@ struct GenerateView: View {
     }
 
     /// A wide, short stage (iPhone Duo's outer display or an iPhone in
-    /// landscape): the size and mode menus sit in a column beside a short
-    /// color row, so the vibe field and Generate stay in view below them.
+    /// landscape), laid out by `wideShortForm`.
     private var isWideAndShort: Bool {
         !isPortrait && (verticalSizeClass == .compact || stageSize.height < 500)
     }
@@ -246,9 +245,46 @@ struct GenerateView: View {
     private var formContent: some View {
         if let split = formSplit {
             splitForm(split)
+        } else if isWideAndShort {
+            wideShortForm
         } else {
             stackedForm
         }
+    }
+
+    /// A wide, short stage (iPhone Duo's outer display in landscape, iPhone
+    /// in landscape): the orb on the left, the size and mode menus beside it,
+    /// the colors in a column on the right that scrolls vertically, and the
+    /// vibe field and Generate along the bottom.
+    private var wideShortForm: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 20) {
+                formOrb(diameter: wideShortOrbDiameter)
+                    // Above the menus: stretched over them, the glass bends them.
+                    .zIndex(1)
+                generationOptions(axis: .vertical)
+                    .frame(maxWidth: 240)
+                Spacer(minLength: 0)
+                if !appData.colors.isEmpty {
+                    colorColumn
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .frame(maxHeight: .infinity)
+
+            if phase == .form {
+                pinnedControls
+            }
+        }
+        .sensoryFeedback(.selection, trigger: selectedColorIDs)
+        .sensoryFeedback(.selection, trigger: paletteSize)
+        .sensoryFeedback(.impact, trigger: phase == .generating)
+    }
+
+    /// As large as the height left over by the vibe field and Generate allows.
+    private var wideShortOrbDiameter: CGFloat {
+        min(220, max(96, stageSize.height - 200))
     }
 
     /// Where the form splits into orb and controls: iPhone Duo's fold while
@@ -266,12 +302,10 @@ struct GenerateView: View {
     /// Generate stacked after it. The colors are a grid that scrolls on its
     /// own, between the menus and the pinned vibe field.
     private func splitForm(_ fold: Fold) -> some View {
-        // Half open in landscape the colors run down beside the orb.
-        let colorsBesideOrb = self.fold != nil && fold.isVertical && !appData.colors.isEmpty
-        return FoldSplit(fold: fold) {
+        FoldSplit(fold: fold) {
             HStack(spacing: 12) {
                 VStack(spacing: 16) {
-                    formOrb(diameter: foldedOrbDiameter(fold, besideColors: colorsBesideOrb))
+                    formOrb(diameter: foldedOrbDiameter(fold))
                         // Above the copy: stretched over it, the glass bends it.
                         .zIndex(1)
                     Text(GenerateHeaderView.description)
@@ -282,17 +316,13 @@ struct GenerateView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .zIndex(1)
-
-                if colorsBesideOrb {
-                    colorColumn
-                }
             }
             .padding()
         } controls: {
             VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 20) {
                 generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
-                if !appData.colors.isEmpty && !colorsBesideOrb {
+                if !appData.colors.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         colorsHeader(short: false)
                         // Fills the space down to the vibe field and scrolls
@@ -325,7 +355,8 @@ struct GenerateView: View {
     /// How far scrolling content fades in and out at a cut edge.
     private static var scrollFade: CGFloat { 18 }
 
-    /// The colors as one column that scrolls vertically, beside the orb.
+    /// The colors as one column that scrolls vertically, beside the orb on a
+    /// wide, short stage.
     private var colorColumn: some View {
         VStack(spacing: 6) {
             Text("Colors")
@@ -360,10 +391,9 @@ struct GenerateView: View {
 
     private static var colorColumnWidth: CGFloat { 84 }
 
-    /// The orb's side of the fold, less room for the line of copy under it
-    /// (and for the color column, when it's beside the orb).
-    private func foldedOrbDiameter(_ fold: Fold, besideColors: Bool = false) -> CGFloat {
-        let side = fold.span.lowerBound - (besideColors ? Self.colorColumnWidth + 12 + 32 : 0)
+    /// The orb's side of the fold, less room for the line of copy under it.
+    private func foldedOrbDiameter(_ fold: Fold) -> CGFloat {
+        let side = fold.span.lowerBound
         let fit = fold.isVertical
             ? min(side * 0.78, stageSize.height - 150)
             : min(side - 120, stageSize.width * 0.7)
@@ -421,17 +451,8 @@ struct GenerateView: View {
                 )
                 .zIndex(1)
 
-                if isWideAndShort {
-                    // Narrow menus, so the color row gets most of the width.
-                    HStack(alignment: .top, spacing: 16) {
-                        generationOptions(axis: .vertical)
-                            .frame(width: 190)
-                        colorsSection(shortHeader: true)
-                    }
-                } else {
-                    generationOptions(axis: .horizontal)
-                    colorsSection()
-                }
+                generationOptions(axis: .horizontal)
+                colorsSection()
 
                 Color.clear
                     .frame(height: 1)

@@ -221,7 +221,10 @@ struct ColorDetailView: View {
                             palettesSection
                         }
                         .padding(.vertical)
+                        .padding(.vertical, 6)
                     }
+                    // Content fades out at the cut edges as it scrolls.
+                    .fadingEdges([.top, .bottom], length: 18)
                 }
             } else {
                 ScrollView {

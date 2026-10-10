@@ -98,6 +98,12 @@
 - **Fold detection**: `onFoldChange` and `onVerticalFoldSpanChange` read the reserved regions from a background `GeometryReader`, as Apple's examples do. `onGeometryChange` only re-measures on size or position changes, and folding changes neither, so a fold made while a screen was showing went unnoticed. That's why Generate never showed its folded layout.
 - **Fades instead of overlap**: Generate's vibe field and Generate button now sit in the stack under the scroll views. The content ends above them and fades out (`fadingEdges`) rather than scrolling behind them, and the white band is gone. The split form's grid fades at both ends. The palette detail's folded color list fades at its cut edges.
 
+### Round 8
+
+- **Generate on a wide, short stage** (outer display in landscape): the orb is on the left, the size and mode menus sit beside it, and the colors form a vertically scrolling column with faded ends on the right. The vibe field and Generate run along the bottom (`wideShortForm`).
+- **Generate half open in landscape**: back to the scrolling grid on the right, as when fully open.
+- **Color detail half open**: the scrolling values and palettes fade at their cut edges.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.
