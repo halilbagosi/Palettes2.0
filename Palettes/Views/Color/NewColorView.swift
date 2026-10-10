@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Standalone "New Color" sheet for the Colors tab. A thin host around the
-/// shared `ColorInputView` engine (same surface the palette add/create sheets
-/// use), specialised to save a single color into the global library.
+/// Standalone "New Color" sheet for the Colors tab. Built like the color's
+/// detail page it's about to become: a large color window over a wash of the
+/// color, both following every change live, with the shared `ColorInputView`
+/// engine (Pick / Scan) below to shape it.
 struct NewColorView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
@@ -18,24 +19,37 @@ struct NewColorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                ColorInputView(
-                    sources: [.pick, .scan],
-                    scanExtraction: .dominant,
-                    addButtonTitle: "Create",
-                    onAdd: { entry in create(entry) },
-                    showsAddButton: false,
-                    controller: inputController
-                )
-                .environmentObject(appData)
+                VStack(spacing: 0) {
+                    SwatchHero(
+                        color: inputController.previewColor,
+                        hex: inputController.previewHex,
+                        placeholder: "Take or choose a photo to start"
+                    )
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+
+                    ColorInputView(
+                        sources: [.pick, .scan],
+                        scanExtraction: .dominant,
+                        addButtonTitle: "Create",
+                        onAdd: { entry in create(entry) },
+                        showsAddButton: false,
+                        showsPreview: false,
+                        controller: inputController
+                    )
+                    .environmentObject(appData)
+                }
                 .padding(.bottom, 20)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .background(
+                ColorWashBackground(color: inputController.previewColor)
+                    .animation(.easeOut(duration: 0.25), value: inputController.previewHex)
+            )
+            .navigationTitle("New Color")
             .navigationBarTitleDisplayMode(.inline)
             .softScrollEdge()
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("New Color")
-                        .font(.headline)
-                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
@@ -50,6 +64,8 @@ struct NewColorView: View {
                         .disabled(!inputController.canAdd)
                 }
             }
+            // Sheets cover the app-root toast overlay, so host one here too.
+            .toastOverlay()
             .alert("Color Already Exists", isPresented: $showDuplicateAlert) {
                 Button("Overwrite") {
                     if let entry = duplicateEntry { overwriteExisting(with: entry) }
@@ -109,5 +125,5 @@ struct NewColorView: View {
 
 #Preview {
     NewColorView()
-        .environmentObject(AppData())
+        .environmentObject(AppData(inMemory: true))
 }

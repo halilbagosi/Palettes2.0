@@ -6,11 +6,14 @@ enum ColorInputMode {
     case combined
 }
 
-/// Color wheel with live-synced editable HEX and RGB fields.
-/// All inputs are views of the same color: editing any one updates the others.
+/// The Pick surface: a name, hue/saturation/brightness sliders (with the system
+/// picker's eyedropper and spectrum), and editable HEX and RGB values. All are
+/// views of one color: editing any of them updates the rest.
 /// `.combined` (the default) shows both value rows; `.hex`/`.rgb` show one.
 struct InteractiveColorPicker: View {
     var mode: ColorInputMode = .combined
+    /// Swatch beside the name; off when the host shows its own large preview.
+    var showsSwatch: Bool = true
 
     @Binding var colorValue: Color
     @Binding var internalName: String
@@ -19,195 +22,143 @@ struct InteractiveColorPicker: View {
     @Binding var currentHEX: String
     @Binding var hexError: Bool
 
-    // Internal state for RGB editing
     @State private var rString: String = "128"
     @State private var gString: String = "128"
     @State private var bString: String = "128"
 
-    @State private var isUpdatingFromComponents = false
-
     var body: some View {
         VStack(spacing: 16) {
-            // Live Preview
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(colorValue.gradient)
-                .frame(height: 120)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-                )
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            ColorNameField(color: showsSwatch ? colorValue : nil, name: $internalName)
 
-            // Color Name Field
-            TextField("Color Name", text: $internalName)
-                .font(.system(size: 18, weight: .medium))
-                .padding()
-                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
-                .padding(.horizontal)
-
-            // The Color Wheel
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Color Wheel")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-
-                ColorPicker("Select Color", selection: $colorValue, supportsOpacity: false)
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .scaleEffect(CGSize(width: 1.5, height: 1.5))
-                    .padding(.vertical, 16)
-                    .onChange(of: colorValue) { _, _ in
-                        if !isUpdatingFromComponents {
-                            syncComponentsToColor()
-                        }
-                    }
+            HSBSlidersCard(color: colorValue) { newColor in
+                colorValue = newColor
+                syncFields(from: newColor)
             }
             .padding(.horizontal)
 
-            // Value Fields
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Values")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
+            VStack(spacing: 8) {
+                SheetSectionHeader(title: "Values")
+                valuesCard
+            }
+        }
+        .onAppear {
+            syncFields(from: colorValue)
+        }
+    }
 
-                if mode != .rgb {
-                HStack {
-                    Text("HEX")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 40, alignment: .leading)
+    // MARK: - Values
 
-                    Text("#")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
-                        .foregroundColor(.secondary)
+    private var valuesCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if mode != .rgb {
+                hexRow
+            }
 
-                    TextField("808080", text: $currentHEX)
-                        .font(.system(size: 16, design: .monospaced))
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .onChange(of: currentHEX) { _, newValue in
-                            guard !isUpdatingFromComponents else { return }
-                            hexError = false
-                            updateColorFromHex(newValue)
-                        }
-
-                    Spacer()
-
-                    Button {
-                        copyToClipboard(currentHEX, label: "Copied HEX")
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(12)
-                .liquidGlass(.regular, in: .rect(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(hexError ? Color.red : Color.clear, lineWidth: 1.5)
-                )
-                .padding(.horizontal)
-
-                if hexError {
-                    Text("Invalid HEX code. Use 6-character format like FF5D00.")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal)
-                }
-                }
-
-                if mode != .hex {
-                HStack(spacing: 12) {
+            if mode != .hex {
+                HStack(spacing: 10) {
                     rgbField(label: "R", text: $rString)
                     rgbField(label: "G", text: $gString)
                     rgbField(label: "B", text: $bString)
-
-                    Button {
-                        copyToClipboard("\(rString), \(gString), \(bString)", label: "Copied RGB")
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.leading, 4)
-                }
-                .padding(.horizontal)
                 }
             }
 
-            Spacer()
+            if hexError {
+                Text("Invalid HEX code. Use 6-character format like FF5D00.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            } else if mode != .rgb, !currentHEX.isEmpty, currentHEX.count < 6 {
+                Text("HEX codes have six characters, like FF5D00.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .onAppear {
-            syncComponentsToColor()
+        .padding(12)
+        .liquidGlass(.regular, in: .rect(cornerRadius: 20))
+        .padding(.horizontal)
+    }
+
+    private var hexRow: some View {
+        HStack(spacing: 8) {
+            Text("HEX")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            Text("#")
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+
+            TextField("808080", text: hexBinding)
+                .font(.system(size: 16, design: .monospaced))
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+
+            Button {
+                copyToClipboard("#\(currentHEX)", label: "Copied HEX")
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(currentHEX.count != 6)
+            .accessibilityLabel("Copy HEX")
         }
+        .padding(12)
+        .background(fieldBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(hexError ? Color.red : Color.clear, lineWidth: 1.5)
+        )
     }
 
     @ViewBuilder
     private func rgbField(label: String, text: Binding<String>) -> some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.secondary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
 
-            TextField("0", text: text)
-                .font(.system(size: 16, design: .monospaced))
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.center)
-                .onChange(of: text.wrappedValue) { _, newValue in
-                    let filtered = newValue.filter { "0123456789".contains($0) }
-                    if filtered != newValue {
-                        text.wrappedValue = filtered
-                    }
-                    guard !isUpdatingFromComponents else { return }
+            TextField("0", text: Binding(
+                get: { text.wrappedValue },
+                set: { newValue in
+                    text.wrappedValue = String(newValue.filter { $0.isASCII && $0.isNumber }.prefix(3))
                     updateColorFromRGB()
                 }
+            ))
+            .font(.system(size: 16, design: .monospaced))
+            .keyboardType(.numberPad)
+            .multilineTextAlignment(.center)
         }
         .padding(12)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
+        .background(fieldBackground)
     }
 
-    private func syncComponentsToColor() {
-        isUpdatingFromComponents = true
-
-        let c = colorValue.rgbComponents
-        let rInt = Int(round(c.r))
-        let gInt = Int(round(c.g))
-        let bInt = Int(round(c.b))
-
-        rString = "\(rInt)"
-        gString = "\(gInt)"
-        bString = "\(bInt)"
-
-        // Only update currentHEX if it actually changed to prevent cursor jumping
-        let newHex = String(format: "%02X%02X%02X", rInt, gInt, bInt)
-        if currentHEX != newHex {
-            currentHEX = newHex
-        }
-
-        isUpdatingFromComponents = false
+    /// Fields sit inside a glass card, so they get a quiet fill rather than
+    /// glass of their own.
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.primary.opacity(0.06))
     }
 
-    private func updateColorFromHex(_ hex: String) {
-        let cleanHex = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard cleanHex.count == 6 else {
-            hexError = true
-            return
-        }
-        if let newColor = Color(hex: cleanHex) {
-            isUpdatingFromComponents = true
-            colorValue = newColor
+    // MARK: - Sync
 
-            let c = newColor.rgbComponents
-            rString = "\(Int(round(c.r)))"
-            gString = "\(Int(round(c.g)))"
-            bString = "\(Int(round(c.b)))"
-
-            isUpdatingFromComponents = false
-        } else {
-            hexError = true
-        }
+    /// Typing filters to hex digits (so a pasted "#ff5d00" just works) and
+    /// applies the color once all six are in.
+    private var hexBinding: Binding<String> {
+        Binding(
+            get: { currentHEX },
+            set: { newValue in
+                let cleaned = String(newValue.uppercased().filter { $0.isHexDigit }.prefix(6))
+                currentHEX = cleaned
+                hexError = false
+                guard cleaned.count == 6, let newColor = Color(hex: cleaned) else { return }
+                colorValue = newColor
+                let c = newColor.rgbComponents
+                rString = "\(Self.channel(c.r))"
+                gString = "\(Self.channel(c.g))"
+                bString = "\(Self.channel(c.b))"
+            }
+        )
     }
 
     private func updateColorFromRGB() {
@@ -215,11 +166,31 @@ struct InteractiveColorPicker: View {
               let gVal = Int(gString), gVal <= 255,
               let bVal = Int(bString), bVal <= 255 else { return }
 
-        isUpdatingFromComponents = true
-        let newColor = Color(red: Double(rVal) / 255, green: Double(gVal) / 255, blue: Double(bVal) / 255)
-        colorValue = newColor
-
+        colorValue = Color(red: Double(rVal) / 255, green: Double(gVal) / 255, blue: Double(bVal) / 255)
         currentHEX = String(format: "%02X%02X%02X", rVal, gVal, bVal)
-        isUpdatingFromComponents = false
+        hexError = false
+    }
+
+    private func syncFields(from color: Color) {
+        let c = color.rgbComponents
+        let r = Self.channel(c.r)
+        let g = Self.channel(c.g)
+        let b = Self.channel(c.b)
+
+        rString = "\(r)"
+        gString = "\(g)"
+        bString = "\(b)"
+
+        // Only write on change to keep the cursor where it is.
+        let newHex = String(format: "%02X%02X%02X", r, g, b)
+        if currentHEX != newHex {
+            currentHEX = newHex
+        }
+        hexError = false
+    }
+
+    /// 0–255 channel, clamped: wide-gamut picks can land outside sRGB.
+    private static func channel(_ value: Double) -> Int {
+        Int(round(min(max(value, 0), 255)))
     }
 }

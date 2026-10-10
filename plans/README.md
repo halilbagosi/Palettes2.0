@@ -25,6 +25,7 @@ without `xcodebuild` do the file work and report verification as pending.
 | 012 | App Store readiness (iCloud v1): privacy manifest, export hardening, Spotlight queue, delete-all/export, Settings + privacy policy, accessibility | P0/P1 | L | — | DONE (feature/app-store-readiness @ d1f5ec9; PR #2) |
 | 013 | Generation redesign: model brief + deterministic OKLCH builder (60/30/10), swatch-checked names and titles, modes with vibe | P1 | L | 012 | DONE (feature/generation-redesign) |
 | 014 | Onboarding: pull-down orb, camera scan in orb, adjust, generate, palette detail coach mark, optional share/Siri cards | P1 | M | — | DONE (device verification pending: camera + rotation, Apple Intelligence path, VoiceOver, landscape, iOS 17/18) |
+| 016 | Sheet redesign: Settings, New Palette, New Color, Add/Edit Color share the detail pages' and Generate result's look; flow fixes | P2 | M | — | DONE (feature/sheet-redesign; xcodebuild + device checks pending) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

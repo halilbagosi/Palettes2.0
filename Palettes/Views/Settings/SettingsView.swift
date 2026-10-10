@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  Palettes
 //
-//  iCloud status, library export/deletion, privacy policy, and support.
+//  A header with the user's library, then iCloud status, library export,
+//  help, legal, and — on its own at the bottom — deleting all data.
 //
 
 import SwiftUI
@@ -16,6 +17,7 @@ struct SettingsView: View {
     @AppStorage(OnboardingDebug.aiOverrideKey) private var debugAI = OnboardingDebug.AIOverride.automatic.rawValue
     #endif
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
 
@@ -30,11 +32,64 @@ struct SettingsView: View {
         return "\(version) (\(build))"
     }
 
+    private var librarySummary: String {
+        "\(plural(appData.palettes.count, "palette")) · \(plural(appData.colors.count, "color"))"
+    }
+
+    /// What "Delete All Data" removes, counted when there's anything to count.
+    private var deleteScope: String {
+        guard !libraryIsEmpty else { return "every color, palette, and tag" }
+        let palettes = plural(appData.palettes.count, "palette")
+        let colors = plural(appData.colors.count, "color")
+        return "\(palettes), \(colors), and every tag"
+    }
+
+    private var libraryIsEmpty: Bool {
+        appData.palettes.isEmpty && appData.colors.isEmpty
+    }
+
+    /// The most recent palette's colors stand in for an app icon in the
+    /// header, so Settings wears the user's own work; a spectrum until then.
+    private var headerColors: [Color] {
+        if let palette = appData.palettes.last, palette.colors.count >= 2 {
+            return Array(palette.colors.prefix(5))
+        }
+        return [0.0, 0.12, 0.3, 0.55, 0.75].map { Color(hue: $0, saturation: 0.65, brightness: 0.92) }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("iCloud", value: isSignedInToICloud ? "Signed In" : "Not Signed In")
+                    header
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+
+                Section {
+                    HStack {
+                        SettingsRowLabel(
+                            title: "iCloud Sync",
+                            systemImage: "icloud.fill",
+                            tint: .blue
+                        )
+                        Label(
+                            isSignedInToICloud ? "On" : "Off",
+                            systemImage: isSignedInToICloud ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+                        )
+                        .labelStyle(.titleAndIcon)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(isSignedInToICloud ? Color.green : Color.orange)
+                    }
+                    .accessibilityElement(children: .combine)
+
+                    if !isSignedInToICloud {
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        } label: {
+                            SettingsRowLabel(title: "Open Settings", systemImage: "gear", tint: .gray, accessory: .external)
+                        }
+                    }
                 } header: {
                     Text("Sync")
                 } footer: {
@@ -47,42 +102,61 @@ struct SettingsView: View {
                     Button {
                         exportLibrary()
                     } label: {
-                        Label("Export Library", systemImage: "square.and.arrow.up")
+                        SettingsRowLabel(
+                            title: "Export Library",
+                            subtitle: "Every color, palette, and tag as a JSON file",
+                            systemImage: "square.and.arrow.up",
+                            tint: .indigo
+                        )
                     }
+                    .disabled(libraryIsEmpty)
+                } header: {
+                    Text("Library")
+                }
+
+                Section("Help") {
+                    Button {
+                        replayOnboarding()
+                    } label: {
+                        SettingsRowLabel(
+                            title: "Replay Onboarding",
+                            subtitle: "See the welcome tour again",
+                            systemImage: "sparkles",
+                            tint: .purple
+                        )
+                    }
+                    Link(destination: AppLinks.supportEmailURL) {
+                        SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill", tint: .green, accessory: .external)
+                    }
+                }
+
+                Section("Legal") {
+                    NavigationLink {
+                        PrivacyPolicyView()
+                    } label: {
+                        SettingsRowLabel(title: "Privacy Policy", systemImage: "hand.raised.fill", tint: .blue)
+                    }
+                    Link(destination: AppLinks.termsOfUse) {
+                        SettingsRowLabel(title: "Terms of Use", systemImage: "doc.text.fill", tint: .gray, accessory: .external)
+                    }
+                }
+
+                // On its own, last, and away from Export: the one action here
+                // that can't be undone.
+                Section {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
                     } label: {
-                        Label("Delete All Data", systemImage: "trash")
+                        Text("Delete All Data")
+                            .frame(maxWidth: .infinity)
                     }
                     .confirmationDialog("Delete all data?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
                         Button("Delete All Data", role: .destructive) { deleteAll() }
                     } message: {
-                        Text("This permanently deletes every color, palette, and tag, your recent searches, and Siri and Spotlight suggestions. If iCloud sync is on, they're also removed from your other devices. This can't be undone.")
+                        Text("This permanently deletes \(deleteScope), your recent searches, and Siri and Spotlight suggestions. If iCloud sync is on, they're also removed from your other devices. This can't be undone.")
                     }
-                } header: {
-                    Text("Your Data")
                 } footer: {
-                    Text("Export saves every color, palette, and tag as a JSON file.")
-                }
-
-                Section("About") {
-                    NavigationLink {
-                        PrivacyPolicyView()
-                    } label: {
-                        Label("Privacy Policy", systemImage: "hand.raised")
-                    }
-                    Link(destination: AppLinks.termsOfUse) {
-                        Label("Terms of Use", systemImage: "doc.text")
-                    }
-                    Link(destination: AppLinks.supportEmailURL) {
-                        Label("Contact Support", systemImage: "envelope")
-                    }
-                    Button {
-                        replayOnboarding()
-                    } label: {
-                        Label("Replay Onboarding", systemImage: "sparkles")
-                    }
-                    LabeledContent("Version", value: versionString)
+                    Text("Permanently removes your library from this device and iCloud.")
                 }
 
                 #if DEBUG
@@ -136,6 +210,46 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 0) {
+                ForEach(headerColors.indices, id: \.self) { index in
+                    Rectangle()
+                        .fill(headerColors[index])
+                        .padding(.horizontal, -0.5)
+                }
+            }
+            .frame(width: 76, height: 76)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+            .accessibilityHidden(true)
+
+            VStack(spacing: 2) {
+                Text("Palettes")
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                Text(librarySummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Version \(versionString)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func plural(_ count: Int, _ noun: String) -> String {
+        "\(count) \(noun)\(count == 1 ? "" : "s")"
+    }
+
     private func exportLibrary() {
         do {
             let data = try appData.libraryExport().jsonData()
@@ -157,6 +271,55 @@ struct SettingsView: View {
             dismiss()
             ToastManager.shared.show("All data deleted", icon: "trash.fill")
         }
+    }
+}
+
+/// A Settings row: a tinted icon tile, a title with an optional subtitle and,
+/// for links that leave the app, an outbound arrow. Reads in the primary
+/// color (not the accent tint buttons and links would otherwise get).
+private struct SettingsRowLabel: View {
+    enum Accessory {
+        case none
+        case external
+    }
+
+    let title: String
+    var subtitle: String? = nil
+    let systemImage: String
+    let tint: Color
+    var accessory: Accessory = .none
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(tint.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if accessory == .external {
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.45)
     }
 }
 

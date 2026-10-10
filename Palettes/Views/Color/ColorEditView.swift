@@ -76,71 +76,45 @@ struct ColorEditView: View {
                     }
                     .padding(.horizontal)
                     
-                    // MARK: - Color Picker (Real-time wheel representation using standard component for robust hue selection)
+                    // MARK: - Color
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Color Wheel")
+                        Text("Color")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
-                        
-                        ColorPicker("Select Color", selection: Binding(
-                            get: { internalColorValue },
-                            set: { newValue in
-                                internalColorValue = newValue
-                                syncTextToColor()
-                            }
-                        ), supportsOpacity: false)
-                            .labelsHidden()
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .scaleEffect(CGSize(width: 1.5, height: 1.5))
-                            .padding(.vertical, 16)
+
+                        // Same hue/saturation/brightness card as the New Color sheet.
+                        HSBSlidersCard(color: internalColorValue) { newColor in
+                            internalColorValue = newColor
+                            syncTextToColor()
+                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
-                    
-                    // MARK: - Sliders
-                    VStack(alignment: .leading, spacing: 16) {
+
+                    // MARK: - Temperature
+                    // Saturation and brightness live on the card above; warmth
+                    // is the one shift it can't make directly.
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Adjustments")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
-                        
-                        VStack(spacing: 16) {
-                            AdjustmentSlider(
-                                title: "Temperature",
-                                valueLabel: ColorAdjustment.offsetLabel(temperatureValue, positive: "warm", negative: "cool"),
-                                leftLabel: "Cool",
-                                rightLabel: "Warm",
-                                value: Binding(
-                                    get: { temperatureValue },
-                                    set: { v in temperatureValue = v; applySliderAdjustments() }
-                                )
+
+                        AdjustmentSlider(
+                            title: "Temperature",
+                            valueLabel: ColorAdjustment.offsetLabel(temperatureValue, positive: "warm", negative: "cool"),
+                            leftLabel: "Cool",
+                            rightLabel: "Warm",
+                            value: Binding(
+                                get: { temperatureValue },
+                                set: { v in temperatureValue = v; applySliderAdjustments() }
                             )
-                            AdjustmentSlider(
-                                title: "Saturation",
-                                valueLabel: ColorAdjustment.offsetLabel(saturationValue),
-                                leftLabel: "Muted",
-                                rightLabel: "Vivid",
-                                value: Binding(
-                                    get: { saturationValue },
-                                    set: { v in saturationValue = v; applySliderAdjustments() }
-                                )
-                            )
-                            AdjustmentSlider(
-                                title: "Brightness",
-                                valueLabel: ColorAdjustment.offsetLabel(brightnessValue),
-                                leftLabel: "Dark",
-                                rightLabel: "Light",
-                                value: Binding(
-                                    get: { brightnessValue },
-                                    set: { v in brightnessValue = v; applySliderAdjustments() }
-                                )
-                            )
-                        }
-                        .padding(14)
+                        )
+                        .padding(16)
                         .liquidGlass(.regular, in: .rect(cornerRadius: 20))
                         .padding(.horizontal)
                     }
-                    
+
                     // MARK: - Values Editor
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Values")

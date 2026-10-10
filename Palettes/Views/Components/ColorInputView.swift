@@ -19,21 +19,31 @@ enum ScanExtraction {
     case palette(count: Int)
 }
 
+/// How the colors pulled from a photo join the colors already in a palette.
+enum ScanMergeMode {
+    case replace
+    case append
+}
+
 /// Lets a host drive the add action from its own UI (e.g. a toolbar Create
-/// button) instead of the inline bottom button. The view keeps `canAdd`
-/// current and points `submit` at the active source's add action.
+/// button) instead of the inline bottom button. The view keeps `canAdd` and
+/// `previewHex` current and points `submit` at the active source's add action.
 @MainActor
 @Observable
 final class ColorInputController {
     var canAdd = false
+    /// "#RRGGBB" of the color being composed (Pick, or Scan once a photo is
+    /// in); nil when there is none.
+    var previewHex: String? = nil
+    var previewColor: Color? { previewHex.flatMap { Color(hex: $0) } }
     @ObservationIgnored var submit: () -> Void = {}
 }
 
-/// Shared color input surface used by the palette create/add sheets.
-/// Hosts own the draft; this view resolves colors and reports them via `onAdd`
-/// (single colors) and `onScanPalette` (multi-color image extraction).
-/// Duplicate hexes in `excludedHexes` are rejected with a toast, and library
-/// rows for them show an "Added" state.
+/// Shared color input surface used by the New Color sheet and the palette
+/// create/add sheets. Hosts own the draft; this view resolves colors and
+/// reports them via `onAdd` (single colors) and `onScanPalette` (multi-color
+/// image extraction). Colors whose hex is in `excludedHexes` can't be added
+/// again: the add button and library rows show them as added.
 /// Not a ScrollView — hosts embed it in their own scroll container.
 struct ColorInputView: View {
     var sources: [ColorInputSource] = [.pick, .scan]
@@ -44,6 +54,9 @@ struct ColorInputView: View {
     var onAdd: (ColorInputEntry) -> Void
     var onScanPalette: (([ColorInputEntry]) -> Void)? = nil
     var showsAddButton: Bool = true
+    /// Small swatch beside the name field. Hosts that show their own large
+    /// preview (driven by `controller.previewHex`) turn it off.
+    var showsPreview: Bool = true
     var controller: ColorInputController? = nil
 
     // isSourceTypeAvailable(.camera) probes capture hardware and is slow;
@@ -55,15 +68,19 @@ struct ColorInputView: View {
     @State private var source: ColorInputSource = .pick
     @State private var didSetInitialSource = false
 
-    // Pick state
-    @State private var pickColor: Color = .red
+    // Pick state — starts on a fresh, pleasant color rather than pure red.
+    @State private var pickColor = Color(hue: Double.random(in: 0..<1), saturation: 0.65, brightness: 0.88)
     @State private var pickName = ""
+    /// The last name we filled in, so the name follows the color only until
+    /// the user types their own.
+    @State private var lastAutoPickName = ""
     @State private var currentHEX = ""
     @State private var hexError = false
 
     // Scan state
     @State private var selectedImage: UIImage?
     @State private var photosPickerItem: PhotosPickerItem?
+    @State private var showPhotoLibrary = false
     @State private var showCamera = false
     @State private var didCameraCapture = false
     @State private var showTrueToneAlert = false
@@ -77,6 +94,9 @@ struct ColorInputView: View {
     @State private var baseB: Double = 128
     @State private var hasExtractedColor = false
     @State private var showPhotoPicker = false
+
+    // Library state
+    @State private var librarySearch = ""
 
     private var adjustedRGB: (r: Double, g: Double, b: Double) {
         guard hasExtractedColor else { return (128, 128, 128) }
@@ -98,17 +118,29 @@ struct ColorInputView: View {
         return ColorAdjustment.color(r: c.r, g: c.g, b: c.b)
     }
 
+    private var pickIsValid: Bool { currentHEX.count == 6 && !hexError }
+    private var isPickDuplicate: Bool { excludedHexes.contains("#\(currentHEX.uppercased())") }
+    private var isScanDuplicate: Bool { excludedHexes.contains(adjustedHex.uppercased()) }
+
+    /// The color being composed, for hosts with their own preview.
+    private var composedHex: String? {
+        switch source {
+        case .pick: return pickIsValid ? "#\(currentHEX.uppercased())" : nil
+        case .scan: return hasExtractedColor ? adjustedHex : nil
+        case .library: return nil
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             if sources.count > 1 {
-                Picker("Input", selection: $source) {
+                Picker("Source", selection: $source) {
                     ForEach(sources, id: \.self) { s in
                         Text(s.rawValue).tag(s)
                     }
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
-                .padding(.top, 12)
             }
 
             switch source {
@@ -120,6 +152,7 @@ struct ColorInputView: View {
                 libraryContent
             }
         }
+        .padding(.top, 16)
         .sensoryFeedback(.selection, trigger: source)
         .onAppear {
             if !didSetInitialSource {
@@ -128,6 +161,7 @@ struct ColorInputView: View {
             }
             controller?.submit = { submitCurrentSource() }
             controller?.canAdd = canAddCurrentSource
+            controller?.previewHex = composedHex
             presentTrueToneWarningIfNeeded()
         }
         .onChange(of: source) { _, newValue in
@@ -135,6 +169,9 @@ struct ColorInputView: View {
         }
         .onChange(of: canAddCurrentSource) { _, newValue in
             controller?.canAdd = newValue
+        }
+        .onChange(of: composedHex) { _, newValue in
+            controller?.previewHex = newValue
         }
         .onChange(of: currentHEX) { _, _ in
             if source == .pick { autoFillPickName() }
@@ -154,6 +191,7 @@ struct ColorInputView: View {
                 didCameraCapture = false
             }
         }
+        .photosPicker(isPresented: $showPhotoLibrary, selection: $photosPickerItem, matching: .images)
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker(image: $selectedImage, didCapture: $didCameraCapture, isPresented: $showCamera)
         }
@@ -169,12 +207,33 @@ struct ColorInputView: View {
         showTrueToneAlert = true
     }
 
+    // MARK: - Add Button
+
+    /// Full-width primary action. A color that's already in the draft reads
+    /// "Already Added" instead of failing with a toast after the tap.
+    private func addButton(isDuplicate: Bool, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(
+                isDuplicate ? "Already Added" : addButtonTitle,
+                systemImage: isDuplicate ? "checkmark.circle.fill" : "plus.circle.fill"
+            )
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+        }
+        .glassButton(prominent: true)
+        .tint(.accentColor)
+        .disabled(!isEnabled || isDuplicate)
+        .padding(.horizontal)
+        .animation(.easeInOut(duration: 0.2), value: isDuplicate)
+    }
+
     // MARK: - Pick
 
     private var pickContent: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             InteractiveColorPicker(
-                mode: .combined,
+                showsSwatch: showsPreview,
                 colorValue: $pickColor,
                 internalName: $pickName,
                 currentHEX: $currentHEX,
@@ -182,18 +241,9 @@ struct ColorInputView: View {
             )
 
             if showsAddButton {
-                Button {
+                addButton(isDuplicate: isPickDuplicate, isEnabled: pickIsValid) {
                     addFromPick()
-                } label: {
-                    Label(addButtonTitle, systemImage: "plus.circle.fill")
-                        .font(.headline)
-                        .padding(10)
                 }
-                .glassButton(prominent: true)
-                .tint(.accentColor)
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .disabled(currentHEX.count != 6 || hexError)
             }
         }
     }
@@ -204,32 +254,6 @@ struct ColorInputView: View {
         VStack(spacing: 16) {
             photoArea
 
-            HStack(spacing: 12) {
-                if Self.cameraAvailable {
-                    Button {
-                        showCamera = true
-                    } label: {
-                        Label("Camera", systemImage: "camera.fill")
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain)
-                    .tint(.primary)
-                }
-
-                PhotosPicker(selection: $photosPickerItem, matching: .images) {
-                    Label("Library", systemImage: "photo.on.rectangle")
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
-                }
-                .tint(.primary)
-            }
-            .padding(.horizontal)
-
             if case .dominant = scanExtraction, hasExtractedColor {
                 dominantScanControls
             }
@@ -238,125 +262,101 @@ struct ColorInputView: View {
 
     private var dominantScanControls: some View {
         VStack(spacing: 16) {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(adjustedColor.gradient)
-                .frame(height: 120)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-                )
+            ColorNameField(color: showsPreview ? adjustedColor : nil, name: $scanName)
+
+            VStack(spacing: 8) {
+                SheetSectionHeader(title: "Fine-tune")
+
+                VStack(spacing: 18) {
+                    AdjustmentSlider(
+                        title: "Temperature",
+                        valueLabel: ColorAdjustment.offsetLabel(temperatureValue, positive: "warm", negative: "cool"),
+                        leftLabel: "Cool",
+                        rightLabel: "Warm",
+                        value: $temperatureValue
+                    )
+                    AdjustmentSlider(
+                        title: "Saturation",
+                        valueLabel: ColorAdjustment.offsetLabel(saturationValue),
+                        leftLabel: "Muted",
+                        rightLabel: "Vivid",
+                        value: $saturationValue
+                    )
+                    AdjustmentSlider(
+                        title: "Brightness",
+                        valueLabel: ColorAdjustment.offsetLabel(brightnessValue),
+                        leftLabel: "Dark",
+                        rightLabel: "Light",
+                        value: $brightnessValue
+                    )
+                }
+                .padding(16)
+                .liquidGlass(.regular, in: .rect(cornerRadius: 20))
                 .padding(.horizontal)
-                .animation(.easeOut(duration: 0.15), value: temperatureValue)
-                .animation(.easeOut(duration: 0.15), value: saturationValue)
-                .animation(.easeOut(duration: 0.15), value: brightnessValue)
+            }
 
-            TextField("Color Name", text: $scanName)
-                .font(.system(size: 18, weight: .medium))
-                .padding()
-                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+            VStack(spacing: 8) {
+                SheetSectionHeader(title: "Values")
+
+                EditableValuesView(color: adjustedColor) { newColor in
+                    let c = newColor.rgbComponents
+                    baseR = Double(Int(round(c.r)))
+                    baseG = Double(Int(round(c.g)))
+                    baseB = Double(Int(round(c.b)))
+
+                    temperatureValue = 0.5
+                    saturationValue = 0.5
+                    brightnessValue = 0.5
+                }
                 .padding(.horizontal)
-
-            VStack(spacing: 18) {
-                AdjustmentSlider(
-                    title: "Temperature",
-                    valueLabel: ColorAdjustment.offsetLabel(temperatureValue, positive: "warm", negative: "cool"),
-                    leftLabel: "Cool",
-                    rightLabel: "Warm",
-                    value: $temperatureValue
-                )
-                AdjustmentSlider(
-                    title: "Saturation",
-                    valueLabel: ColorAdjustment.offsetLabel(saturationValue),
-                    leftLabel: "Muted",
-                    rightLabel: "Vivid",
-                    value: $saturationValue
-                )
-                AdjustmentSlider(
-                    title: "Brightness",
-                    valueLabel: ColorAdjustment.offsetLabel(brightnessValue),
-                    leftLabel: "Dark",
-                    rightLabel: "Light",
-                    value: $brightnessValue
-                )
             }
-            .padding(14)
-            .liquidGlass(.regular, in: .rect(cornerRadius: 20))
-            .padding(.horizontal)
-
-            EditableValuesView(color: adjustedColor) { newColor in
-                let c = newColor.rgbComponents
-                baseR = Double(Int(round(c.r)))
-                baseG = Double(Int(round(c.g)))
-                baseB = Double(Int(round(c.b)))
-
-                temperatureValue = 0.5
-                saturationValue = 0.5
-                brightnessValue = 0.5
-            }
-            .padding(.horizontal)
 
             if showsAddButton {
-                Button {
+                addButton(isDuplicate: isScanDuplicate, isEnabled: hasExtractedColor) {
                     addFromScan()
-                } label: {
-                    Label(addButtonTitle, systemImage: "plus.circle.fill")
-                        .font(.headline)
-                        .padding(10)
                 }
-                .glassButton(prominent: true)
-                .tint(.accentColor)
-                .padding(.horizontal)
             }
         }
     }
 
+    /// One surface for the photo: an empty prompt with Camera / Photos, then
+    /// the photo itself with a replace menu (and, for a single color, a tap
+    /// to pick the exact spot).
+    @ViewBuilder
     private var photoArea: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.clear)
-                .liquidGlass(.regular, in: .rect(cornerRadius: 20))
-
+        Group {
             if let image = selectedImage {
-                if case .dominant = scanExtraction {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .overlay(alignment: .bottom) {
+                Color.clear
+                    .frame(height: 220)
+                    .overlay {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(alignment: .bottom) {
+                        if case .dominant = scanExtraction {
                             Label("Tap to pick a color", systemImage: "eyedropper")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(.ultraThinMaterial, in: Capsule())
-                                .padding(.bottom, 10)
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .liquidGlass(.regular, in: .capsule)
+                                .padding(.bottom, 12)
+                                .allowsHitTesting(false)
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture { showPhotoPicker = true }
-                } else {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .onTapGesture {
+                        if case .dominant = scanExtraction { showPhotoPicker = true }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        replacePhotoMenu
+                    }
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 36))
-                        .foregroundColor(.secondary)
-                    Text(scanPlaceholderText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 24)
+                emptyPhotoPrompt
             }
         }
-        .frame(height: 200)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal)
-        .padding(.top, 8)
         .fullScreenCover(isPresented: $showPhotoPicker) {
             if let image = selectedImage {
                 PhotoColorPickerView(
@@ -381,14 +381,80 @@ struct ColorInputView: View {
         }
     }
 
+    private var emptyPhotoPrompt: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 34))
+                .foregroundStyle(.secondary)
+
+            Text(scanPlaceholderText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 10) {
+                if Self.cameraAvailable {
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("Camera", systemImage: "camera.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .glassButton()
+                }
+
+                Button {
+                    showPhotoLibrary = true
+                } label: {
+                    Label("Photos", systemImage: "photo.on.rectangle")
+                        .frame(maxWidth: .infinity)
+                }
+                .glassButton()
+            }
+            .font(.subheadline.weight(.semibold))
+            .controlSize(.large)
+            .tint(.primary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, minHeight: 220)
+        .liquidGlass(.regular, in: .rect(cornerRadius: 20))
+    }
+
+    private var replacePhotoMenu: some View {
+        Menu {
+            if Self.cameraAvailable {
+                Button("Take Photo", systemImage: "camera") { showCamera = true }
+            }
+            Button("Choose Photo", systemImage: "photo.on.rectangle") { showPhotoLibrary = true }
+        } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .liquidGlass(.interactive, in: .circle)
+        }
+        .padding(10)
+        .accessibilityLabel("Replace Photo")
+    }
+
     private var scanPlaceholderText: String {
         if case .palette = scanExtraction {
-            return "Pick or take a photo to extract colors"
+            return "Take or choose a photo to pull a palette from it."
         }
-        return "Pick or take a photo to extract the dominant color"
+        return "Take or choose a photo to pull its main color."
     }
 
     // MARK: - Library
+
+    /// Newest first, like the library's default sort, filtered by the search.
+    private var libraryColors: [ColorViewModel] {
+        let items = Array(appData.colors.reversed())
+        let query = librarySearch.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return items }
+        return items.filter {
+            $0.name.localizedCaseInsensitiveContains(query) || $0.HEX.localizedCaseInsensitiveContains(query)
+        }
+    }
 
     private var libraryContent: some View {
         LazyVStack(spacing: 10) {
@@ -396,72 +462,107 @@ struct ColorInputView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "circle.grid.cross")
                         .font(.system(size: 32))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Text("No saved colors yet. Use Pick or Scan to add one.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                ForEach(appData.colors) { colorItem in
-                    libraryRow(for: colorItem)
+                if appData.colors.count > 6 {
+                    librarySearchField
+                }
+
+                let colors = libraryColors
+                if colors.isEmpty {
+                    Text("No colors match \u{201C}\(librarySearch)\u{201D}.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                } else {
+                    ForEach(colors) { colorItem in
+                        libraryRow(for: colorItem)
+                    }
                 }
             }
         }
         .padding(.horizontal)
-        .padding(.top, 12)
+    }
+
+    private var librarySearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search Colors", text: $librarySearch)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+            if !librarySearch.isEmpty {
+                Button {
+                    librarySearch = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(12)
+        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
     }
 
     @ViewBuilder
     private func libraryRow(for colorItem: ColorViewModel) -> some View {
         let alreadyIn = excludedHexes.contains(colorItem.HEX.uppercased())
 
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(colorItem.color.gradient)
-                .frame(width: 50, height: 50)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(.white.opacity(0.2), lineWidth: 1)
-                )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(colorItem.name)
-                    .font(.system(size: 15, weight: .semibold))
-                HStack(spacing: 6) {
-                    Text(colorItem.HEX)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    Text(colorItem.color.rgbString)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                }
-                .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            if alreadyIn {
-                Label("Added", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-            } else {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-            }
-        }
-        .padding(10)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
-        .opacity(alreadyIn ? 0.55 : 1)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            guard !alreadyIn else { return }
+        Button {
             haptic()
             onAdd(ColorInputEntry(name: colorItem.name, hex: colorItem.HEX, color: colorItem.color))
+        } label: {
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(colorItem.color.gradient)
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(colorItem.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(colorItem.HEX)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if alreadyIn {
+                    Label("Added", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .labelStyle(.titleAndIcon)
+                } else {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                }
+            }
+            .padding(10)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .disabled(alreadyIn)
+        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+        .opacity(alreadyIn ? 0.55 : 1)
         .animation(.spring(response: 0.25), value: alreadyIn)
+        .accessibilityLabel(alreadyIn ? "\(colorItem.name), added" : "Add \(colorItem.name)")
     }
 
     // MARK: - Actions
@@ -470,8 +571,8 @@ struct ColorInputView: View {
     /// inline buttons' enabled states for hosts using a toolbar button.
     private var canAddCurrentSource: Bool {
         switch source {
-        case .pick: return currentHEX.count == 6 && !hexError
-        case .scan: return hasExtractedColor
+        case .pick: return pickIsValid && !isPickDuplicate
+        case .scan: return hasExtractedColor && !isScanDuplicate
         case .library: return false   // rows add directly on tap
         }
     }
@@ -498,8 +599,6 @@ struct ColorInputView: View {
 
         haptic()
         onAdd(ColorInputEntry(name: name, hex: hex, color: pickColor))
-        currentHEX = ""
-        pickName = ""
     }
 
     private func addFromScan() {
@@ -554,10 +653,16 @@ struct ColorInputView: View {
         }
     }
 
+    /// Names the picked color after its hex until the user types a name of
+    /// their own; from then on their name stays put while the color changes.
     private func autoFillPickName() {
         let raw = currentHEX.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard raw.count == 6, Color(hex: raw) != nil else { return }
-        pickName = autoName(forRawHex: raw)
+        let suggestion = autoName(forRawHex: raw)
+        if pickName.isEmpty || pickName == lastAutoPickName {
+            pickName = suggestion
+        }
+        lastAutoPickName = suggestion
     }
 
     /// Existing-color lookup first, then ColorNamer — identical naming across all sheets.
