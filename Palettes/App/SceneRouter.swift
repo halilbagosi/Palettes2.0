@@ -12,6 +12,7 @@
 //
 
 import SwiftUI
+import Combine
 
 @MainActor
 final class SceneRouter: ObservableObject {
