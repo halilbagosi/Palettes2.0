@@ -48,13 +48,28 @@ struct OnboardingView: View {
 
     private struct Layout {
         let full: CGSize
-        let topInset: CGFloat
+        /// The safe area's insets from `full`.
+        let insets: EdgeInsets
         let island: IslandGeometry
         let compact: Bool
         /// The step needs more room below the orb (the sliders): the orb rises.
         var roomy = false
+        /// iPhone Duo half open, in `full`'s coordinates. The orb takes one
+        /// side of the crease and the text and buttons the other.
+        var fold: Fold? = nil
 
-        var orbDiameter: CGFloat {
+        var topInset: CGFloat { insets.top }
+
+        /// Bars on one side only (iPhone Duo's outer display puts the status
+        /// bar and controls along an edge): the safe area is off centre.
+        var hasSideControls: Bool { abs(insets.leading - insets.trailing) > 8 }
+
+        /// The middle of the safe area, which the text and buttons centre on.
+        var safeCenterX: CGFloat {
+            insets.leading + (full.width - insets.leading - insets.trailing) / 2
+        }
+
+        private var baseOrbDiameter: CGFloat {
             if compact { return min(240, full.width * 0.62) }
             let phone = min(310, full.width * 0.76)
             // iPad and iPhone Duo: grows with the screen, leaving room under it for the text.
@@ -62,17 +77,49 @@ struct OnboardingView: View {
             let shortSide = min(full.width, full.height)
             return max(phone, min(460, shortSide * 0.5, full.height * 0.4))
         }
+
+        var orbDiameter: CGFloat {
+            let base = baseOrbDiameter * (hasSideControls ? 0.85 : 1)
+            guard let fold else { return base }
+            if fold.isVertical {
+                let side = full.width - insets.trailing - fold.frame.maxX
+                let height = full.height - insets.top - insets.bottom
+                return max(120, min(base, side * 0.7, height * 0.62))
+            }
+            let above = fold.frame.minY - skipBottom - 12
+            return max(120, min(base, above * 0.78, full.width * 0.6))
+        }
         /// Skip's pill: 6 below the top safe area, 30 tall.
         var skipBottom: CGFloat { topInset + 6 + 30 }
         var restCenter: CGPoint {
+            if let fold {
+                if fold.isVertical {
+                    // Centred in the side after the crease.
+                    let x = (fold.frame.maxX + full.width - insets.trailing) / 2
+                    let y = insets.top + (full.height - insets.top - insets.bottom) / 2
+                    return CGPoint(x: x, y: y)
+                }
+                // Centred above the crease, below Skip.
+                return CGPoint(x: safeCenterX, y: (skipBottom + 12 + fold.frame.minY) / 2)
+            }
             // 38% of the height; short screens keep the orb higher to leave room for the text.
             let highest = skipBottom + 12 + orbDiameter / 2
             let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
             // Roomy: up to 64 pt higher, stopping short of Skip.
-            return CGPoint(x: full.width / 2, y: roomy ? max(highest, y - 64) : y)
+            return CGPoint(x: safeCenterX, y: roomy ? max(highest, y - 64) : y)
         }
-        /// Safe-area-space top of the text region, under the orb.
-        var contentTop: CGFloat { restCenter.y + orbDiameter / 2 + 28 - topInset }
+        /// Safe-area-space top of the text region, under the orb (or, folded
+        /// horizontally, under the crease).
+        var contentTop: CGFloat {
+            if let fold, !fold.isVertical { return fold.frame.maxY + 16 - topInset }
+            return restCenter.y + orbDiameter / 2 + 28 - topInset
+        }
+        /// Folded vertically, the safe-area-space width the text and buttons
+        /// keep to, before the crease.
+        var leadingColumnWidth: CGFloat? {
+            guard let fold, fold.isVertical else { return nil }
+            return max(0, fold.frame.minX - insets.leading)
+        }
         var placement: IslandMorphController.Placement {
             .init(island: island, screenWidth: full.width, restCenter: restCenter, restDiameter: orbDiameter)
         }
@@ -98,12 +145,13 @@ struct OnboardingView: View {
                               height: geo.size.height + insets.top + insets.bottom)
             let layout = Layout(
                 full: full,
-                topInset: insets.top,
+                insets: insets,
                 island: .make(topInset: insets.top, screenSize: full),
                 compact: dynamicTypeSize.isAccessibilitySize || full.height < 700,
                 // The generate step's name and swatches need the room too; the
                 // orb stays where adjust left it.
-                roomy: model.step == .adjust || model.step == .generate
+                roomy: model.step == .adjust || model.step == .generate,
+                fold: geo.activeFold?.dividing(geo.size)?.offsetBy(dx: insets.leading, dy: insets.top)
             )
             // Reduce Motion fades the orb in at rest.
             let travels = layout.island.hasMorph && !reduceMotion
@@ -360,9 +408,43 @@ struct OnboardingView: View {
         landed || (model.step == .pull && !travels)
     }
 
+    @ViewBuilder
     private func stepLayer(layout: Layout, content: OnboardingStepContent) -> some View {
         let shown = controlsShown(travels: layout.island.hasMorph && !reduceMotion)
-        return VStack(spacing: 0) {
+        if let columnWidth = layout.leadingColumnWidth {
+            sideStepLayer(columnWidth: columnWidth, content: content, shown: shown)
+        } else {
+            stackedStepLayer(layout: layout, content: content, shown: shown)
+        }
+    }
+
+    /// iPhone Duo half open in landscape: the text and buttons, centred
+    /// together, in the side before the crease; the orb has the other side.
+    private func sideStepLayer(columnWidth: CGFloat, content: OnboardingStepContent, shown: Bool) -> some View {
+        HStack(spacing: 0) {
+            GeometryReader { region in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        textBlock(content)
+                            .padding(.horizontal, 24)
+                        actionBar(content: content)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: region.size.height)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            .frame(width: columnWidth)
+            Spacer(minLength: 0)
+        }
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .animation(.easeOut(duration: 0.4), value: shown)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    }
+
+    /// The orb above, the text under it and the buttons pinned at the bottom.
+    private func stackedStepLayer(layout: Layout, content: OnboardingStepContent, shown: Bool) -> some View {
+        VStack(spacing: 0) {
             Color.clear.frame(height: layout.contentTop)
             GeometryReader { region in
                 ScrollView {

@@ -57,11 +57,20 @@
 | Fixed 300 pt orb over the copy | Orb sized to the stage, stacked or side by side | Motion only works if the moving element and its context stay on screen. The orb's morph into the stage now ends inside the visible area. |
 | Share popover anchored to an arbitrary corner, or not anchored at all | Anchored under the top trailing bar, mirrored for right-to-left | Popovers should come from where the action lives. With no anchor, iPad crashes. |
 
+## Part 1b — fold layouts (done, from Device Hub screenshots)
+
+`Compatibility/FoldCompat.swift` reads the active `.division` reserved region (iOS 27.1, behind `#if compiler(>=6.4)`. Note this means Xcode 27.0 can't build the branch; use 27.1+ or Xcode 26) and hands layouts a `Fold`.
+
+- **Libraries** (`MorphingCardGrid.foldSpan`): with a vertical crease, the same number of columns sit on each side, centred in each half, with none on the crease. `LazyMorphingCardGrid` measures it itself; `PaletteView` passes it in.
+- **Palette detail**: folded, the strip fills the side before the crease (the top, or the leading side in landscape) and the colors scroll on the other side. The title goes inline to give the strip room.
+- **Onboarding**: with a horizontal crease, the orb is centred above it and the text and buttons sit below. With a vertical crease, the orb is centred in the trailing side and the text and buttons are centred together in the leading side.
+- **Onboarding on the outer display**: the orb centres on the safe area (the same centre as the text), not the screen, and is 15% smaller when the bars sit on one side.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.
 
-1. **Fold-aware grids.** In `MorphingCardGrid`, read `GeometryProxy.reservedRegions(kind: .division)`. While a division `isActive`, round the column count down to an even number. Also add the division's width to the gap between the middle columns, so no card sits on the fold. This applies to the Palettes and Colors libraries and the palette detail color grid (`LazyVGrid` → `MorphingCardGrid`).
+1. ~~**Fold-aware grids.**~~ Done in part 1b, for the libraries. The palette detail's `LazyVGrid` scrolls in one half instead. Original note: in `MorphingCardGrid`, read `GeometryProxy.reservedRegions(kind: .division)`. While a division `isActive`, round the column count down to an even number. Also add the division's width to the gap between the middle columns, so no card sits on the fold. This applies to the Palettes and Colors libraries and the palette detail color grid (`LazyVGrid` → `MorphingCardGrid`).
 2. **Floating + button vs. vertical bars.** The FAB sits at bottom trailing. When `@Environment(\.toolbarVerticalEdge) == .trailing`, the HIG puts frequent actions in the bar instead. Either move "New" into the toolbar there with `.visibilityPriority(.high)`, or align the FAB to the opposite edge.
 3. **Arrangement views.** Replace the `AnyLayout` switch in `GenerateView.generatingOrb` with `ArrangementView { orb } secondary: { copy }` and `.arrangementViewStyle(.split)`, which also avoids the fold. Consider `.overlay` for the photo eyedropper (`PhotoColorPickerView`): photo as the secondary view, loupe and swatch as the primary. When half open, the photo takes one half and the controls the other.
 4. **Bar compression.** Use `.toolbarVerticalCompressionBehavior(.prefersToolbarItems)` on task screens (Generate result, New Palette, Color Edit), and the default `.prefersTabBar` on the libraries.

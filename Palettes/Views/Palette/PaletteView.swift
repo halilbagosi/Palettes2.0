@@ -17,6 +17,8 @@ struct PaletteView: View {
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
+    /// iPhone Duo's fold across the grid (see `MorphingCardGrid.foldSpan`).
+    @State private var foldSpan: ClosedRange<CGFloat>?
     /// The one-time options card after onboarding's "Start creating".
     @State private var showsOptionsTour = false
     @State private var optionsTourTask: Task<Void, Never>?
@@ -221,11 +223,17 @@ struct PaletteView: View {
                     minColumnWidth: layout == .compact ? 320 : 340,
                     maxColumnWidth: 560,
                     rowHeight: layout == .compact ? 108 : 180,
-                    spacing: layout == .compact ? 10 : 20
+                    spacing: layout == .compact ? 10 : 20,
+                    foldSpan: foldSpan
                 ) {
                     ForEach(displayedPalettes) { palette in
                         paletteCard(palette)
                     }
+                }
+                .onGeometryChange(for: ClosedRange<CGFloat>?.self) { proxy in
+                    proxy.verticalFoldSpan
+                } action: { newValue in
+                    foldSpan = newValue
                 }
                 .padding()
                 .padding(.bottom, 88)

@@ -28,8 +28,23 @@ struct MorphingCardGrid: Layout {
     /// Total number of items when only a window of them is passed as subviews
     /// (each tagged with `MorphingGridIndex`); nil means every item is a subview.
     var itemCount: Int? = nil
+    /// The x extent (grid-local) of iPhone Duo's fold while half open in
+    /// landscape. The columns then split evenly either side of it, each side
+    /// centred in its half, and no card sits on the crease.
+    var foldSpan: ClosedRange<CGFloat>? = nil
+
+    /// Column origins (grid-local x) and the shared column width.
+    private struct Columns {
+        var originXs: [CGFloat]
+        var width: CGFloat
+        var count: Int { originXs.count }
+    }
 
     func columnCount(forWidth width: CGFloat) -> Int {
+        columns(forWidth: width).count
+    }
+
+    private func fittingCount(in width: CGFloat) -> Int {
         guard width > 0 else { return 1 }
         return max(1, Int((width + spacing) / (minColumnWidth + spacing)))
     }
@@ -38,6 +53,35 @@ struct MorphingCardGrid: Layout {
         let totalSpacing = spacing * CGFloat(count - 1)
         let raw = (width - totalSpacing) / CGFloat(count)
         return min(raw, maxColumnWidth)
+    }
+
+    /// `count` columns of `width` centred in `start..<start + available`.
+    private func origins(count: Int, width: CGFloat, start: CGFloat, available: CGFloat) -> [CGFloat] {
+        let content = CGFloat(count) * width + CGFloat(count - 1) * spacing
+        let first = start + max(0, (available - content) / 2)
+        return (0..<count).map { first + CGFloat($0) * (width + spacing) }
+    }
+
+    private func columns(forWidth width: CGFloat) -> Columns {
+        if let fold = foldSpan {
+            let leading = fold.lowerBound
+            let trailing = width - fold.upperBound
+            if leading > 0, trailing > 0 {
+                // The same number of columns on each side, sized by the narrower side.
+                let side = min(leading, trailing)
+                let perSide = fittingCount(in: side)
+                let colWidth = max(0, columnWidth(forWidth: side, count: perSide))
+                return Columns(
+                    originXs: origins(count: perSide, width: colWidth, start: 0, available: leading)
+                        + origins(count: perSide, width: colWidth, start: fold.upperBound, available: trailing),
+                    width: colWidth
+                )
+            }
+        }
+        let count = fittingCount(in: width)
+        let colWidth = columnWidth(forWidth: width, count: count)
+        return Columns(originXs: origins(count: count, width: colWidth, start: 0, available: width),
+                       width: colWidth)
     }
 
     /// Indices of the items whose rows overlap the vertical span `minY...maxY`.
@@ -60,17 +104,15 @@ struct MorphingCardGrid: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let count = columnCount(forWidth: bounds.width)
-        let colWidth = columnWidth(forWidth: bounds.width, count: count)
-        let contentWidth = CGFloat(count) * colWidth + CGFloat(count - 1) * spacing
-        let startX = bounds.minX + max(0, (bounds.width - contentWidth) / 2)
-        let sizeProposal = ProposedViewSize(width: colWidth, height: rowHeight)
+        let columns = columns(forWidth: bounds.width)
+        let count = columns.count
+        let sizeProposal = ProposedViewSize(width: columns.width, height: rowHeight)
 
         for (offset, subview) in subviews.enumerated() {
             let index = subview[MorphingGridIndex.self] ?? offset
             let row = index / count
             let col = index % count
-            let x = startX + CGFloat(col) * (colWidth + spacing)
+            let x = bounds.minX + columns.originXs[col]
             let y = bounds.minY + CGFloat(row) * (rowHeight + spacing)
             subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: sizeProposal)
         }
@@ -98,6 +140,8 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
     /// Visible region of the scroll view in grid-local coordinates, snapped to
     /// `Self.snap` so scrolling only re-renders the grid every few rows.
     @State private var viewport: CGRect = .zero
+    /// iPhone Duo's fold across the grid (see `MorphingCardGrid.foldSpan`).
+    @State private var foldSpan: ClosedRange<CGFloat>?
 
     private static var snap: CGFloat { 256 }
     /// Cards mounted before measurement, so the first frame isn't empty.
@@ -112,6 +156,7 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
     var body: some View {
         var layout = grid
         layout.itemCount = items.count
+        layout.foldSpan = foldSpan
 
         return layout {
             ForEach(mountedSlots) { slot in
@@ -124,6 +169,11 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
         } action: { newValue in
             viewport = newValue
         }
+        .onGeometryChange(for: ClosedRange<CGFloat>?.self) { proxy in
+            proxy.verticalFoldSpan
+        } action: { newValue in
+            foldSpan = newValue
+        }
     }
 
     private var mountedSlots: [Slot] {
@@ -135,7 +185,8 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
         let minY = viewport.minY - overscan
         let maxY = viewport.maxY + overscan
         var indices = IndexSet()
-        for config in [grid] + morphTargets {
+        for var config in [grid] + morphTargets {
+            config.foldSpan = foldSpan
             indices.insert(integersIn: config.itemRange(
                 fromY: minY, toY: maxY, width: viewport.width, itemCount: items.count
             ))

@@ -22,6 +22,8 @@ struct PaletteDetailView: View {
     @State private var isExporting = false
     /// True while a color's context menu is open (tracked from its preview).
     @State private var menuOpen = false
+    /// iPhone Duo's fold while half open (see `FoldCompat`).
+    @State private var fold: Fold?
     @Environment(\.dismiss) var dismiss
 
     private struct ColorBindingWrapper: Identifiable {
@@ -57,224 +59,284 @@ struct PaletteDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // MARK: Hero Palette Strip
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 0) {
-                        ForEach(livePalette.colors.indices, id: \.self) { index in
-                            Rectangle()
-                                .fill(livePalette.colors[index])
-                        }
-                    }
-                    .frame(height: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
-
-                    Text("\(livePalette.colors.count) color\(livePalette.colors.count == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 4)
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
-
-                // MARK: Color Cards
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)], spacing: 20) {
-                    ForEach(Array(livePalette.colors.enumerated()), id: \.offset) { index, _ in
-                        let colorVM = colorViewModel(at: index, from: livePalette)
-                        let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
-                        ColorCellBig(
-                            colorName: colorVM.name,
-                            hexCode: colorVM.HEX,
-                            color: colorVM.color,
-                            isUsedInPalette: true,
-                            onCardTap: { editColorIndex = index }
-                        )
-                        .overlay(alignment: .topTrailing) {
-                            if let role {
-                                Button {
-                                    openTagging(for: index)
-                                } label: {
-                                    RoleBadge(role: role)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(ColorCellBig.overlayInset)
-                                .transition(.scale(scale: 0.8).combined(with: .opacity))
-                            }
-                        }
-                        .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
-                        .draggable(colorVM.HEX)
-                        .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
-                            ColorMorphCard(
-                                colorName: colorVM.name,
-                                hexCode: colorVM.HEX,
-                                color: colorVM.color,
-                                isCompact: false
-                            )
-                            .frame(width: 360, height: 180)
-                            .padding(4)
-                            // The menu opening is the long press the onboarding hint teaches.
-                            .onAppear {
-                                appData.coachMarkPaletteID = nil
-                                menuOpen = true
-                            }
-                            .onDisappear { menuOpen = false }
-                        }
+        detailContent
+            .navigationTitle(livePalette.name)
+            .onboardingCoachMark(for: palette.id)
+            .onboardingExtras(for: livePalette, isBusy: isBusyWithOtherUI)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        savePaletteAsPNG()
+                    } label: {
+                        Label("Export as PNG", systemImage: "square.and.arrow.up")
                     }
                 }
-                .padding(.horizontal)
             }
-            .padding(.bottom, 24)
-        }
-        .navigationTitle(livePalette.name)
-        .onboardingCoachMark(for: palette.id)
-        .onboardingExtras(for: livePalette, isBusy: isBusyWithOtherUI)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            .overflowMenu {
+                Button {
+                    isEditingPalette = true
+                } label: {
+                    Label("Edit Palette", systemImage: "pencil")
+                }
+
+                Button {
+                    toggleFavorite()
+                } label: {
+                    Label(livePalette.isFavorite ? "Remove Favorite" : "Favorite",
+                          systemImage: livePalette.isFavorite ? "star.slash" : "star")
+                }
+
+                Button {
+                    let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
+                    ShareSheetPresenter.present(items: [textToShare])
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    isExporting = true
+                } label: {
+                    Label("Export…", systemImage: "square.and.arrow.up.on.square")
+                }
+
                 Button {
                     savePaletteAsPNG()
                 } label: {
-                    Label("Export as PNG", systemImage: "square.and.arrow.up")
+                    Label("Export as PNG", systemImage: "photo")
+                }
+
+                Button {
+                    let hexes = livePalette.hexCodes.joined(separator: ", ")
+                    copyToClipboard(hexes, label: "Copied HEX")
+                } label: {
+                    Label("Copy as HEX", systemImage: "number")
+                }
+
+                Button {
+                    let rgbs = livePalette.colors.map { $0.rgbString }.joined(separator: " | ")
+                    copyToClipboard(rgbs, label: "Copied RGB")
+                } label: {
+                    Label("Copy as RGB", systemImage: "paintpalette")
+                }
+
+                Button {
+                    let safePaletteName = livePalette.name.lowercased().replacingOccurrences(of: " ", with: "-")
+                    var cssLines = ["/* \(livePalette.name) */", ":root {"]
+                    for (index, colorName) in livePalette.colorNames.enumerated() {
+                        if index < livePalette.hexCodes.count {
+                            let safeColorName = colorName.lowercased().replacingOccurrences(of: " ", with: "-")
+                            let finalName = safeColorName.isEmpty ? "color-\(index + 1)" : safeColorName
+                            cssLines.append("  --\(safePaletteName)-\(finalName): \(livePalette.hexCodes[index]);")
+                        }
+                    }
+                    cssLines.append("}")
+                    copyToClipboard(cssLines.joined(separator: "\n"), label: "Copied CSS")
+                } label: {
+                    Label("Export as CSS", systemImage: "curlybraces.square")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    showDeleteAlert = true
+                } label: {
+                    Label("Delete Palette", systemImage: "trash")
                 }
             }
-        }
-        .overflowMenu {
-            Button {
-                isEditingPalette = true
-            } label: {
-                Label("Edit Palette", systemImage: "pencil")
+            .sheet(isPresented: $isEditingPalette) {
+                PaletteEditSheet(paletteName: livePalette.name, palette: palette)
+                    .environmentObject(appData)
+                    .formPresentationSizing()
             }
-
-            Button {
-                toggleFavorite()
-            } label: {
-                Label(livePalette.isFavorite ? "Remove Favorite" : "Favorite",
-                      systemImage: livePalette.isFavorite ? "star.slash" : "star")
-            }
-
-            Button {
-                let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
-                ShareSheetPresenter.present(items: [textToShare])
-            } label: {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-
-            Button {
-                isExporting = true
-            } label: {
-                Label("Export…", systemImage: "square.and.arrow.up.on.square")
-            }
-
-            Button {
-                savePaletteAsPNG()
-            } label: {
-                Label("Export as PNG", systemImage: "photo")
-            }
-
-            Button {
-                let hexes = livePalette.hexCodes.joined(separator: ", ")
-                copyToClipboard(hexes, label: "Copied HEX")
-            } label: {
-                Label("Copy as HEX", systemImage: "number")
-            }
-
-            Button {
-                let rgbs = livePalette.colors.map { $0.rgbString }.joined(separator: " | ")
-                copyToClipboard(rgbs, label: "Copied RGB")
-            } label: {
-                Label("Copy as RGB", systemImage: "paintpalette")
-            }
-
-            Button {
-                let safePaletteName = livePalette.name.lowercased().replacingOccurrences(of: " ", with: "-")
-                var cssLines = ["/* \(livePalette.name) */", ":root {"]
-                for (index, colorName) in livePalette.colorNames.enumerated() {
-                    if index < livePalette.hexCodes.count {
-                        let safeColorName = colorName.lowercased().replacingOccurrences(of: " ", with: "-")
-                        let finalName = safeColorName.isEmpty ? "color-\(index + 1)" : safeColorName
-                        cssLines.append("  --\(safePaletteName)-\(finalName): \(livePalette.hexCodes[index]);")
+            .sheet(item: Binding(
+                get: {
+                    if let index = editColorIndex,
+                       index < livePalette.paletteColors.count {
+                        return ColorBindingWrapper(id: index)
+                    }
+                    return nil
+                },
+                set: { newValue in
+                    if newValue == nil {
+                        editColorIndex = nil
                     }
                 }
-                cssLines.append("}")
-                copyToClipboard(cssLines.joined(separator: "\n"), label: "Copied CSS")
-            } label: {
-                Label("Export as CSS", systemImage: "curlybraces.square")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                showDeleteAlert = true
-            } label: {
-                Label("Delete Palette", systemImage: "trash")
-            }
-        }
-        .sheet(isPresented: $isEditingPalette) {
-            PaletteEditSheet(paletteName: livePalette.name, palette: palette)
-                .environmentObject(appData)
-                .formPresentationSizing()
-        }
-        .sheet(item: Binding(
-            get: {
-                if let index = editColorIndex,
-                   index < livePalette.paletteColors.count {
-                    return ColorBindingWrapper(id: index)
-                }
-                return nil
-            },
-            set: { newValue in
-                if newValue == nil {
-                    editColorIndex = nil
+            )) { wrapper in
+                if let paletteIdx = paletteIndex,
+                   wrapper.id < appData.palettes[paletteIdx].paletteColors.count {
+                    ColorEditView(
+                        colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
+                        hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
+                        colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
+                        promptOnNameMatch: true,
+                        onSaveWithAction: { isOverwrite in
+                            syncEditedPaletteColor(at: wrapper.id, isOverwrite: isOverwrite)
+                        }
+                    )
+                    .environmentObject(appData)
+                    .presentationDetents([.large])
+                    .formPresentationSizing()
                 }
             }
-        )) { wrapper in
-            if let paletteIdx = paletteIndex,
-               wrapper.id < appData.palettes[paletteIdx].paletteColors.count {
-                ColorEditView(
-                    colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
-                    hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
-                    colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
-                    promptOnNameMatch: true,
-                    onSaveWithAction: { isOverwrite in
-                        syncEditedPaletteColor(at: wrapper.id, isOverwrite: isOverwrite)
-                    }
+            .sheet(item: Binding(
+                get: { taggingColorIndex.map { TaggingTarget(id: $0) } },
+                set: { newValue in taggingColorIndex = newValue?.id }
+            )) { target in
+                RolePickerSheet(
+                    currentRole: target.id < livePalette.paletteColors.count ? livePalette.paletteColors[target.id].role : nil,
+                    palette: livePalette,
+                    colorIndex: target.id
                 )
                 .environmentObject(appData)
-                .presentationDetents([.large])
-                .formPresentationSizing()
-            }
-        }
-        .sheet(item: Binding(
-            get: { taggingColorIndex.map { TaggingTarget(id: $0) } },
-            set: { newValue in taggingColorIndex = newValue?.id }
-        )) { target in
-            RolePickerSheet(
-                currentRole: target.id < livePalette.paletteColors.count ? livePalette.paletteColors[target.id].role : nil,
-                palette: livePalette,
-                colorIndex: target.id
-            )
-            .environmentObject(appData)
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $isExporting) {
-            ExportPaletteSheet(palette: livePalette)
                 .presentationDetents([.medium, .large])
-        }
-        .alert("Delete Palette", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                withAnimation(.spring()) {
-                    appData.palettes.removeAll(where: { $0.id == palette.id })
-                }
-                dismiss()
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to delete \"\(livePalette.name)\"?")
+            .sheet(isPresented: $isExporting) {
+                ExportPaletteSheet(palette: livePalette)
+                    .presentationDetents([.medium, .large])
+            }
+            .alert("Delete Palette", isPresented: $showDeleteAlert) {
+                Button("Delete", role: .destructive) {
+                    withAnimation(.spring()) {
+                        appData.palettes.removeAll(where: { $0.id == palette.id })
+                    }
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to delete \"\(livePalette.name)\"?")
+            }
+    }
+
+    // MARK: - Layout
+
+    /// The palette strip, then its colors. On iPhone Duo half open, the strip
+    /// takes the side before the crease (the top, or the leading side in
+    /// landscape) and the colors scroll on the other, so nothing sits on the
+    /// crease.
+    private var detailContent: some View {
+        ZStack {
+            if let fold {
+                foldedContent(fold)
+            } else {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        heroStrip(fillsHeight: false)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                        colorGrid
+                            .padding(.horizontal)
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onFoldChange { newFold in
+            withAnimation(.smooth(duration: 0.35)) { fold = newFold }
+        }
+        // Folded, the strip needs the height a large title would take.
+        .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
+    }
+
+    @ViewBuilder
+    private func foldedContent(_ fold: Fold) -> some View {
+        let span = fold.span
+        if fold.isVertical {
+            HStack(spacing: 0) {
+                heroStrip(fillsHeight: true)
+                    .padding()
+                    .frame(width: span.lowerBound)
+                Color.clear
+                    .frame(width: span.upperBound - span.lowerBound)
+                ScrollView {
+                    colorGrid
+                        .padding()
+                }
+            }
+        } else {
+            VStack(spacing: 0) {
+                heroStrip(fillsHeight: true)
+                    .padding()
+                    .frame(height: span.lowerBound)
+                Color.clear
+                    .frame(height: span.upperBound - span.lowerBound)
+                ScrollView {
+                    colorGrid
+                        .padding()
+                }
+            }
+        }
+    }
+
+    /// Every color of the palette side by side, with the count under it.
+    /// `fillsHeight` stretches the strip to the space it's given.
+    private func heroStrip(fillsHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 0) {
+                ForEach(livePalette.colors.indices, id: \.self) { index in
+                    Rectangle()
+                        .fill(livePalette.colors[index])
+                }
+            }
+            .frame(height: fillsHeight ? nil : 120)
+            .frame(maxHeight: fillsHeight ? .infinity : nil)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
+
+            Text("\(livePalette.colors.count) color\(livePalette.colors.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.leading, 4)
+        }
+    }
+
+    private var colorGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)], spacing: 20) {
+            ForEach(Array(livePalette.colors.enumerated()), id: \.offset) { index, _ in
+                let colorVM = colorViewModel(at: index, from: livePalette)
+                let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
+                ColorCellBig(
+                    colorName: colorVM.name,
+                    hexCode: colorVM.HEX,
+                    color: colorVM.color,
+                    isUsedInPalette: true,
+                    onCardTap: { editColorIndex = index }
+                )
+                .overlay(alignment: .topTrailing) {
+                    if let role {
+                        Button {
+                            openTagging(for: index)
+                        } label: {
+                            RoleBadge(role: role)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(ColorCellBig.overlayInset)
+                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                    }
+                }
+                .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
+                .draggable(colorVM.HEX)
+                .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
+                    ColorMorphCard(
+                        colorName: colorVM.name,
+                        hexCode: colorVM.HEX,
+                        color: colorVM.color,
+                        isCompact: false
+                    )
+                    .frame(width: 360, height: 180)
+                    .padding(4)
+                    // The menu opening is the long press the onboarding hint teaches.
+                    .onAppear {
+                        appData.coachMarkPaletteID = nil
+                        menuOpen = true
+                    }
+                    .onDisappear { menuOpen = false }
+                }
+            }
         }
     }
 
