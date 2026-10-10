@@ -168,6 +168,11 @@ struct PaletteView: View {
                 .onChange(of: path.count) { _, count in
                     // Opening a palette puts the card away.
                     if count > 0, showsOptionsTour { endOptionsTour() }
+                    // Back at the library after closing the extras sheet with ×.
+                    if count == 0, appData.libraryOptionsTourOnReturn {
+                        appData.libraryOptionsTourOnReturn = false
+                        showOptionsTour(after: .milliseconds(450))
+                    }
                 }
                 .onReceive(appData.$pendingOpenPaletteID) { id in
                     guard let id, let palette = appData.palettes.first(where: { $0.id == id }) else { return }
@@ -453,11 +458,27 @@ struct PaletteView: View {
                 try? await Task.sleep(for: .milliseconds(550))
                 guard !Task.isCancelled else { return }
             }
-            exitSelection()
-            guard !appData.palettes.isEmpty else { return }
-            withAnimation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(duration: 0.5, bounce: 0.2)) {
-                showsOptionsTour = true
-            }
+            presentOptionsTour()
+        }
+    }
+
+    /// Brings in the card over the library as it is, after `delay` (the pop
+    /// back to the library finishing).
+    private func showOptionsTour(after delay: Duration) {
+        appData.libraryOptionsTourPending = false
+        optionsTourTask?.cancel()
+        optionsTourTask = Task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, path.isEmpty else { return }
+            presentOptionsTour()
+        }
+    }
+
+    private func presentOptionsTour() {
+        exitSelection()
+        guard !appData.palettes.isEmpty else { return }
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(duration: 0.5, bounce: 0.2)) {
+            showsOptionsTour = true
         }
     }
 

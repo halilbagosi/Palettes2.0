@@ -34,6 +34,10 @@ class AppData: ObservableObject {
     /// Transient: "Start creating" on the extras sheet asked the Palettes
     /// tab to return to its library and show its display and filter options.
     @Published var libraryOptionsTourPending = false
+    /// Transient: the extras sheet was closed without "Start creating" (×
+    /// or a swipe), so the options card waits for the user to return to the
+    /// palette library on their own.
+    @Published var libraryOptionsTourOnReturn = false
 
     private var container: ModelContainer?
     private var cancellables: Set<AnyCancellable> = []

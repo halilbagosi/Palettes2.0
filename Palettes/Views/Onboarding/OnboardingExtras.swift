@@ -126,6 +126,8 @@ struct OnboardingExtrasView: View {
     @State private var image: UIImage?
     @State private var isExporting = false
     @State private var appeared = false
+    /// Left through "Start creating" rather than × or a swipe.
+    @State private var startedCreating = false
     @AppStorage(OnboardingKeys.didShowExtras) private var didShow = false
     @AccessibilityFocusState private var titleFocused: Bool
 
@@ -171,6 +173,7 @@ struct OnboardingExtrasView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 OnboardingPrimaryButton(title: "Start creating", systemImage: "arrow.right") {
                     // Back to the library, which then shows its options.
+                    startedCreating = true
                     appData.activeTab = .palettes
                     appData.libraryOptionsTourPending = true
                     dismiss()
@@ -198,6 +201,11 @@ struct OnboardingExtrasView: View {
             titleFocused = true
             image = renderImage()
             withAnimation(.easeOut(duration: 0.5)) { appeared = true }
+        }
+        .onDisappear {
+            // Closed another way: show the library's options once the user
+            // gets back to it by themselves.
+            if !startedCreating { appData.libraryOptionsTourOnReturn = true }
         }
         .sheet(isPresented: $isExporting) {
             ExportPaletteSheet(palette: palette)
