@@ -468,7 +468,7 @@ struct IslandGooCanvas: View {
         // mismatch with the hardware then shows as more neck, not as grey.
         let solidDepth = island.kind == .bezel
             ? 0 : Self.filletRadius(rodWidth: rodWidth) + 4
-        let fadeStart = island.drawnBottom + solidDepth
+        let fadeStart = island.bottom + solidDepth
         // Clear by the blob's upper third while the neck holds; as it thins and snaps the
         // fade pulls up to the blob's top so no gray wedge of blob is left on the orb.
         let connected = controller.neckConnected

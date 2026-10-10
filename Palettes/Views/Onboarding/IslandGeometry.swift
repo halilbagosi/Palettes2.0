@@ -63,13 +63,10 @@ nonisolated struct IslandGeometry: Equatable {
             if topInset >= 59 {
                 // 37 pt tall, its bottom 11 pt above the safe area (top 14 at a
                 // 62 pt inset, 11 at 59). iPhone 18 Pro's and Pro Max's are as
-                // tall and sit as high, only narrower. The drawn capsule must
-                // stay inside the hardware, so it's the widest that fits: 95 pt
-                // on the Pro (a capsule itself), 99 pt on the Pro Max (whose
-                // island is ~118 pt wide, but with rounder ends than a capsule,
-                // which a wider drawn one pokes out past).
+                // tall and sit as high, only narrower: 95 pt, measured from a
+                // screen recording, rather than 125.
                 let height: CGFloat = 37
-                let width: CGFloat = hasCompactIsland ? (screenSize.width >= 440 ? 99 : 95) : 125
+                let width: CGFloat = hasCompactIsland ? 95 : 125
                 return IslandGeometry(kind: .dynamicIsland, width: width,
                                       height: height, top: topInset - 11 - height)
             }
@@ -88,6 +85,11 @@ nonisolated struct IslandGeometry: Equatable {
     /// iPhone 18 family's identifiers start at iPhone19,x, and later models
     /// are assumed to keep the smaller island.
     static let hasCompactIsland: Bool = {
+        // Simulator also names the device it's simulating.
+        if let name = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"],
+           name.contains("iPhone 18 Pro") {
+            return true
+        }
         guard let identifier = modelIdentifier, identifier.hasPrefix("iPhone") else { return false }
         let major = identifier.dropFirst("iPhone".count).prefix { $0.isNumber }
         return (Int(major) ?? 0) >= 19
@@ -136,16 +138,19 @@ nonisolated struct IslandGeometry: Equatable {
         var cornerCenterY: CGFloat
     }
 
+    /// The hardware's bottom edge, not the drawn shape's (1 pt inside it):
+    /// a corner tangent to the drawn edge would cross the real one at an
+    /// angle and read as sharp.
     var bottomEdge: BottomEdge? {
         switch kind {
         case .dynamicIsland:
-            let radius = drawnHeight / 2
-            return BottomEdge(flatHalfWidth: (width - 2 * Self.drawInset) / 2 - radius,
-                              cornerRadius: radius, cornerCenterY: drawnBottom - radius)
+            let radius = height / 2
+            return BottomEdge(flatHalfWidth: width / 2 - radius,
+                              cornerRadius: radius, cornerCenterY: bottom - radius)
         case .notch:
-            let radius = Self.notchBottomRadius - Self.drawInset
-            return BottomEdge(flatHalfWidth: (width - 2 * Self.drawInset) / 2 - radius,
-                              cornerRadius: radius, cornerCenterY: drawnBottom - radius)
+            let radius = Self.notchBottomRadius
+            return BottomEdge(flatHalfWidth: width / 2 - radius,
+                              cornerRadius: radius, cornerCenterY: bottom - radius)
         case .bezel, .none:
             return nil
         }
