@@ -100,14 +100,23 @@ struct GenerationResultView: View {
     private var nameField: some View {
         ZStack {
             if !nameFocused {
-                OnboardingPaletteName(name: name.isEmpty ? "Untitled Palette" : name, usesGradient: true)
-                    .lineLimit(2)
-                    .contentShape(Rectangle())
-                    .onTapGesture { nameFocused = true }
-                    .accessibilityHidden(true)
+                // The pencil says the name can be changed; tapping either renames.
+                OnboardingPaletteName(name: name.isEmpty ? "Untitled Palette" : name,
+                                      usesGradient: true, trailingSymbol: "pencil")
+                .lineLimit(2)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+                .onTapGesture { nameFocused = true }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Palette name, \(name)")
+                .accessibilityHint("Renames the palette")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { nameFocused = true }
             }
             nameTextField
                 .opacity(nameFocused ? 1 : 0)
+                .accessibilityHidden(!nameFocused)
         }
     }
 

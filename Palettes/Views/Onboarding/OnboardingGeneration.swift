@@ -127,19 +127,31 @@ enum OnboardingPaletteSaver {
 struct OnboardingPaletteName: View {
     let name: String
     let usesGradient: Bool
+    /// An SF Symbol after the last word, in secondary ink (e.g. an edit cue).
+    var trailingSymbol: String? = nil
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if #available(iOS 26.0, *), usesGradient {
             TimelineView(.animation) { timeline in
                 label.foregroundStyle(GeneratedGradient.style(phase: GeneratedGradient.phase(at: timeline.date)))
             }
+            // The pastel gradient washes out on a light stage; a soft shadow lifts it.
+            .shadow(color: .black.opacity(colorScheme == .light ? 0.45 : 0), radius: 0.6, y: 1)
+            .shadow(color: .black.opacity(colorScheme == .light ? 0.2 : 0), radius: 4, y: 2)
         } else {
             label
         }
     }
 
     private var label: some View {
-        Text(name)
+        var text = Text(name)
+        if let trailingSymbol {
+            text = text + Text("  ") + Text(Image(systemName: trailingSymbol))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        return text
             .font(.system(.title, design: .rounded).weight(.bold))
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
