@@ -389,10 +389,6 @@ struct GenerateView: View {
     /// `compact` puts Generate beside the field, for short stages.
     private func pinnedControls(compact: Bool) -> some View {
         VStack(spacing: compact ? 8 : 12) {
-            if let image = selectedImage {
-                imageChip(image)
-            }
-
             if compact {
                 HStack(spacing: 12) {
                     vibeField
@@ -837,37 +833,6 @@ struct GenerateView: View {
         .fixedSize()
     }
 
-    private func imageChip(_ image: UIImage) -> some View {
-        HStack(spacing: 10) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            Text("Colors will be pulled from this photo")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                withAnimation(.spring(response: 0.3)) {
-                    selectedImage = nil
-                    photosPickerItem = nil
-                }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(8)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
-        .transition(.pop)
-    }
-
     @ViewBuilder
     private var imageMenuButton: some View {
         Menu {
@@ -886,15 +851,50 @@ struct GenerateView: View {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
             }
         } label: {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 52)
-                .frame(minHeight: 50, maxHeight: .infinity)
-                .contentShape(.rect(cornerRadius: 14))
-                .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
+            // The chosen photo fills the button; tapping it again replaces it.
+            ZStack {
+                if let selectedImage {
+                    Image(uiImage: selectedImage)
+                        .resizable()
+                        .scaledToFill()
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: 52)
+            .frame(minHeight: 50, maxHeight: .infinity)
+            .clipShape(.rect(cornerRadius: 14))
+            .contentShape(.rect(cornerRadius: 14))
+            .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
         }
-        .accessibilityLabel("Add photo")
+        .accessibilityLabel(selectedImage == nil ? "Add photo" : "Replace photo")
+        .overlay(alignment: .topTrailing) {
+            if selectedImage != nil {
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedImage = nil
+                        photosPickerItem = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.body)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.6))
+                        // A larger target than the glyph.
+                        .padding(6)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .offset(x: 10, y: -10)
+                .accessibilityLabel("Remove photo")
+                .transition(.pop)
+            }
+        }
+        .animation(.spring(response: 0.3), value: selectedImage != nil)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photosPickerItem, matching: .images)
         .onChange(of: photosPickerItem) { _, newItem in
             Task {
