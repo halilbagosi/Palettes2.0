@@ -104,6 +104,11 @@
 - **Generate half open in landscape**: back to the scrolling grid on the right, as when fully open.
 - **Color detail half open**: the scrolling values and palettes fade at their cut edges.
 
+### Round 9
+
+- **Generate on iPad (and the Duo inner display) in portrait**: the orb and menus stay fixed and only the color grid scrolls, with faded edges, above the pinned vibe field (`gridForm`).
+- **Generate in landscape on iPhone** (and the Duo outer display, which the app can't tell apart from an iPhone): the same split as iPad. The orb is on the left, sized to the height and without its copy. On the right are the menus side by side, a scrolling grid, and the vibe field with a compact Generate button in one row. This replaces round 8's color column.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.

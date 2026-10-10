@@ -70,14 +70,14 @@ struct GenerateView: View {
         stageSize == .zero || stageSize.height > stageSize.width
     }
 
-    /// A wide, short stage (iPhone Duo's outer display or an iPhone in
-    /// landscape), laid out by `wideShortForm`.
+    /// A wide, short stage (an iPhone, or iPhone Duo's outer display, in
+    /// landscape), where `splitForm` packs its controls tighter.
     private var isWideAndShort: Bool {
         !isPortrait && (verticalSizeClass == .compact || stageSize.height < 500)
     }
 
     /// iPad and iPhone Duo in portrait at full size: every color is shown in
-    /// a grid that fills the space under the options, instead of a strip.
+    /// a grid that scrolls under the options (`gridForm`), instead of a strip.
     private var showsColorGrid: Bool {
         horizontalSizeClass == .regular && verticalSizeClass == .regular && isPortrait
     }
@@ -245,36 +245,62 @@ struct GenerateView: View {
     private var formContent: some View {
         if let split = formSplit {
             splitForm(split)
-        } else if isWideAndShort {
-            wideShortForm
+        } else if showsColorGrid {
+            gridForm
         } else {
             stackedForm
         }
     }
 
-    /// A wide, short stage (iPhone Duo's outer display in landscape, iPhone
-    /// in landscape): the orb on the left, the size and mode menus beside it,
-    /// the colors in a column on the right that scrolls vertically, and the
-    /// vibe field and Generate along the bottom.
-    private var wideShortForm: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 20) {
-                formOrb(diameter: wideShortOrbDiameter)
-                    // Above the menus: stretched over them, the glass bends them.
+    /// Where the form splits into orb and controls: iPhone Duo's fold while
+    /// half open, or down the middle of any other landscape stage (an iPhone,
+    /// iPhone Duo's displays, iPad), where the side-by-side layout reads
+    /// better than one long column.
+    private var formSplit: Fold? {
+        if let fold { return fold }
+        guard !isPortrait, stageSize != .zero else { return nil }
+        return Fold(frame: CGRect(x: stageSize.width / 2, y: 0, width: 0, height: stageSize.height))
+    }
+
+    /// The orb, as large as its side allows, before the split (on the left in
+    /// landscape, on top in portrait), and the size, mode, colors, vibe and
+    /// Generate stacked after it. The colors are a grid that scrolls on its
+    /// own, between the menus and the pinned vibe field. On a short stage
+    /// (an iPhone in landscape) the orb drops its copy, the menus sit side by
+    /// side and Generate joins the vibe field's row, leaving the grid room.
+    private func splitForm(_ fold: Fold) -> some View {
+        let compact = isWideAndShort && fold.isVertical
+        return FoldSplit(fold: fold) {
+            VStack(spacing: 16) {
+                formOrb(diameter: foldedOrbDiameter(fold, showsCopy: !compact))
+                    // Above the copy: stretched over it, the glass bends it.
                     .zIndex(1)
-                generationOptions(axis: .vertical)
-                    .frame(maxWidth: 240)
-                Spacer(minLength: 0)
-                if !appData.colors.isEmpty {
-                    colorColumn
+                if !compact {
+                    Text(GenerateHeaderView.description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
                 }
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
+            .padding(compact ? 8 : 16)
+        } controls: {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: compact ? 12 : 20) {
+                    generationOptions(axis: fold.isVertical && !compact ? .vertical : .horizontal)
+                    scrollingColors(shortHeader: compact)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity)
 
-            if phase == .form {
-                pinnedControls
+                // In the stack, not an inset: the grid ends above the vibe field
+                // (fading out) instead of scrolling behind it.
+                if phase == .form {
+                    pinnedControls(compact: compact)
+                }
             }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
@@ -282,122 +308,66 @@ struct GenerateView: View {
         .sensoryFeedback(.impact, trigger: phase == .generating)
     }
 
-    /// As large as the height left over by the vibe field and Generate allows.
-    private var wideShortOrbDiameter: CGFloat {
-        min(220, max(96, stageSize.height - 200))
-    }
-
-    /// Where the form splits into orb and controls: iPhone Duo's fold while
-    /// half open, or down the middle of any other large landscape stage (the
-    /// inner display fully open, iPad), where the side-by-side layout reads
-    /// better than one long column.
-    private var formSplit: Fold? {
-        if let fold { return fold }
-        guard !isPortrait, !isWideAndShort, stageSize != .zero else { return nil }
-        return Fold(frame: CGRect(x: stageSize.width / 2, y: 0, width: 0, height: stageSize.height))
-    }
-
-    /// The orb, as large as its side allows, before the split (on the left in
-    /// landscape, on top in portrait), and the size, mode, colors, vibe and
-    /// Generate stacked after it. The colors are a grid that scrolls on its
-    /// own, between the menus and the pinned vibe field.
-    private func splitForm(_ fold: Fold) -> some View {
-        FoldSplit(fold: fold) {
-            HStack(spacing: 12) {
-                VStack(spacing: 16) {
-                    formOrb(diameter: foldedOrbDiameter(fold))
-                        // Above the copy: stretched over it, the glass bends it.
-                        .zIndex(1)
-                    Text(GenerateHeaderView.description)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 360)
-                }
-                .frame(maxWidth: .infinity)
+    /// iPad and iPhone Duo's inner display in portrait: the orb and menus
+    /// stay put at the top, and only the color grid scrolls, between them
+    /// and the pinned vibe field, as it does in landscape.
+    private var gridForm: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 24) {
+                GenerateHeaderView(
+                    showsOrb: phase == .form,
+                    orbDiameter: formOrbDiameter,
+                    colors: selectedColors,
+                    orbNamespace: orbNamespace
+                )
                 .zIndex(1)
-            }
-            .padding()
-        } controls: {
-            VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 20) {
-                generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
-                if !appData.colors.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        colorsHeader(short: false)
-                        // Fills the space down to the vibe field and scrolls
-                        // under its fade; the top edge fades too.
-                        ScrollView {
-                            colorGrid
-                                .padding(.vertical, Self.scrollFade)
-                        }
-                        .scrollDismissesKeyboard(.interactively)
-                        .fadingEdges([.top, .bottom], length: Self.scrollFade)
-                    }
-                } else {
-                    Spacer(minLength: 0)
-                }
+
+                generationOptions(axis: .horizontal)
+                scrollingColors(shortHeader: false)
             }
             .padding(.horizontal)
             .padding(.top, 8)
             .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
             .frame(maxWidth: .infinity)
 
-            // In the stack, not an inset: the grid ends above the vibe field
-            // (fading out) instead of scrolling behind it.
             if phase == .form {
-                pinnedControls
+                pinnedControls(compact: false)
             }
+        }
+        .sensoryFeedback(.selection, trigger: selectedColorIDs)
+        .sensoryFeedback(.selection, trigger: paletteSize)
+        .sensoryFeedback(.impact, trigger: phase == .generating)
+    }
+
+    /// The colors header over a grid that fills the space left and scrolls
+    /// on its own, its cut edges fading.
+    @ViewBuilder
+    private func scrollingColors(shortHeader: Bool) -> some View {
+        if !appData.colors.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                colorsHeader(short: shortHeader)
+                ScrollView {
+                    colorGrid
+                        .padding(.vertical, Self.scrollFade)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .fadingEdges([.top, .bottom], length: Self.scrollFade)
             }
+        } else {
+            Spacer(minLength: 0)
         }
     }
 
     /// How far scrolling content fades in and out at a cut edge.
     private static var scrollFade: CGFloat { 18 }
 
-    /// The colors as one column that scrolls vertically, beside the orb on a
-    /// wide, short stage.
-    private var colorColumn: some View {
-        VStack(spacing: 6) {
-            Text("Colors")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 14) {
-                    ForEach(appData.colors) { colorItem in
-                        colorSwatch(colorItem)
-                    }
-                }
-                .padding(.vertical, Self.scrollFade)
-                .padding(.horizontal, 6)
-            }
-            .fadingEdges([.top, .bottom], length: Self.scrollFade)
-
-            if !selectedColorIDs.isEmpty {
-                Button("Clear") {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        selectedColorIDs.removeAll()
-                    }
-                }
-                .font(.caption.weight(.medium))
-                .buttonStyle(.plain)
-                .foregroundStyle(.tint)
-                .transition(.opacity)
-            }
-        }
-        .frame(width: Self.colorColumnWidth)
-    }
-
-    private static var colorColumnWidth: CGFloat { 84 }
-
-    /// The orb's side of the fold, less room for the line of copy under it.
-    private func foldedOrbDiameter(_ fold: Fold) -> CGFloat {
+    /// The orb's side of the fold, less room for the copy under it.
+    private func foldedOrbDiameter(_ fold: Fold, showsCopy: Bool = true) -> CGFloat {
         let side = fold.span.lowerBound
         let fit = fold.isVertical
-            ? min(side * 0.78, stageSize.height - 150)
+            ? min(side * 0.78, stageSize.height - (showsCopy ? 150 : 24))
             : min(side - 120, stageSize.width * 0.7)
-        return min(460, max(120, fit))
+        return min(460, max(showsCopy ? 120 : 80, fit))
     }
 
     /// The form's orb; it expands into the generation orb.
@@ -414,25 +384,36 @@ struct GenerateView: View {
 
     /// The photo chip, the vibe field and Generate, pinned above the keyboard
     /// and home indicator, like the result view's describe-change field.
-    private var pinnedControls: some View {
-        VStack(spacing: 12) {
+    /// `compact` puts Generate beside the field, for short stages.
+    private func pinnedControls(compact: Bool) -> some View {
+        VStack(spacing: compact ? 8 : 12) {
             if let image = selectedImage {
                 imageChip(image)
             }
 
-            vibeField
+            if compact {
+                HStack(spacing: 12) {
+                    vibeField
+                    if !vibeFocused && canGenerateFromSource {
+                        compactGenerateButton
+                            .transition(.pop)
+                    }
+                }
+            } else {
+                vibeField
 
-            // While typing, the field's send arrow takes over — hide the bar.
-            if !vibeFocused && canGenerateFromSource {
-                generateBar
-                    .padding(.top, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                // While typing, the field's send arrow takes over — hide the bar.
+                if !vibeFocused && canGenerateFromSource {
+                    generateBar
+                        .padding(.top, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity)
         .padding(.horizontal)
-        .padding(.bottom, 24)
+        .padding(.bottom, compact ? 8 : 24)
         .animation(.spring(response: 0.3), value: vibeFocused)
     }
 
@@ -472,15 +453,14 @@ struct GenerateView: View {
         // Pinned above the keyboard and home indicator, like the result
         // view's describe-change field.
         if phase == .form {
-            pinnedControls
+            pinnedControls(compact: false)
         }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
         .sensoryFeedback(.selection, trigger: paletteSize)
         .sensoryFeedback(.impact, trigger: phase == .generating)
         .onChange(of: vibeFocused) { _, focused in
-            // The grid is already in view; scrolling to its end would hide the options.
-            guard focused, !showsColorGrid else { return }
+            guard focused else { return }
             // Scroll fully down once the keyboard inset lands, so the color
             // strip isn't hidden behind the pinned field.
             Task { @MainActor in
@@ -519,8 +499,8 @@ struct GenerateView: View {
     /// Keep the two generation controls together so they remain discoverable
     /// on both compact phones and wider iPad layouts. Menus avoid the
     /// six-segment squeeze that made the previous size control hard to use.
-    /// Side by side normally; stacked in a column beside the colors (wide,
-    /// short stages) or above them (folded in landscape).
+    /// Side by side normally; stacked above the colors on the controls side
+    /// of a landscape split.
     private func generationOptions(axis: Axis) -> some View {
         let layout = axis == .horizontal
             ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
@@ -609,19 +589,15 @@ struct GenerateView: View {
 
     // MARK: - Colors
 
-    /// The user's colors to start from: a grid on large portrait stages, a
-    /// strip otherwise. `shortHeader` trims the title for narrow columns.
+    /// The user's colors to start from, as a strip (compact portrait; larger
+    /// stages use `scrollingColors`).
     @ViewBuilder
-    private func colorsSection(shortHeader: Bool = false) -> some View {
+    private func colorsSection() -> some View {
         if !appData.colors.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                colorsHeader(short: shortHeader)
+                colorsHeader(short: false)
 
-                if showsColorGrid {
-                    colorGrid
-                } else {
-                    colorStrip
-                }
+                colorStrip
             }
         }
     }
@@ -840,6 +816,21 @@ struct GenerateView: View {
             }
             .frame(maxWidth: .infinity)
         }
+    }
+
+    /// Generate as a single glass button, beside the vibe field on short stages.
+    private var compactGenerateButton: some View {
+        Button {
+            startGeneration()
+        } label: {
+            Label("Generate", systemImage: "sparkles")
+                .font(.headline)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+        }
+        .glassButton(prominent: true)
+        .keyboardShortcut(.return, modifiers: .command)
+        .fixedSize()
     }
 
     private func imageChip(_ image: UIImage) -> some View {
