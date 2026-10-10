@@ -31,6 +31,10 @@ struct GenerateView: View {
     /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
     /// the crease and the controls the side after it.
     @State private var fold: Fold?
+    /// The larger side inset, for centring the generating orb and the result
+    /// on the screen in landscape. Measured here, where it's settled long
+    /// before either appears.
+    @State private var sideInset: CGFloat = 0
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -63,6 +67,11 @@ struct GenerateView: View {
         if case .available = SystemLanguageModel.default.availability { return true }
         return false
         #endif
+    }
+
+    /// In landscape the bars sit along one side; centre on the screen there.
+    private var screenMargin: CGFloat? {
+        isPortrait ? nil : sideInset
     }
 
     /// The stage is taller than it is wide (or hasn't been measured yet).
@@ -129,6 +138,7 @@ struct GenerateView: View {
     private var stage: some View {
         stageContent
             .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            .onSideInsetChange { sideInset = $0 }
             .onFoldChange { newFold in
                 withAnimation(.smooth(duration: 0.35)) { fold = newFold }
             }
@@ -166,7 +176,7 @@ struct GenerateView: View {
                         startGeneration()
                     },
                     onSave: saveResult,
-                    centersOnScreen: !isPortrait
+                    screenMargin: screenMargin
                 )
                 .environmentObject(appData)
                 .transition(.blurReplace)
@@ -205,7 +215,7 @@ struct GenerateView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             // In landscape the bars sit on one side; centre on the screen.
-            .centeredOnScreen(!isPortrait)
+            .centeredOnScreen(margin: screenMargin)
         }
     }
 

@@ -207,32 +207,28 @@ struct FoldAwareGrid<Content: View>: View {
 
 extension View {
     /// Centres the view on the screen rather than on the safe area, for when
-    /// bars sit along one side (iPhone Duo in landscape): the side with less
-    /// inset is padded to match the other.
-    func centeredOnScreen(_ enabled: Bool = true) -> some View {
-        modifier(ScreenCentering(enabled: enabled))
+    /// bars sit along one side (iPhone Duo and iPhone in landscape): both
+    /// sides are inset by `margin`, the larger side inset, and the uneven
+    /// safe area is ignored. nil leaves the view in the safe area.
+    ///
+    /// Measure `margin` with `onSideInsetChange` on a view that's already on
+    /// screen, not on the view being centred: measured as it appears, the
+    /// inset arrives a moment late and the view jumps sideways.
+    func centeredOnScreen(margin: CGFloat?) -> some View {
+        padding(.horizontal, margin ?? 0)
+            .ignoresSafeArea(.container, edges: margin == nil ? [] : .horizontal)
     }
-}
 
-private struct ScreenCentering: ViewModifier {
-    let enabled: Bool
-
-    /// Measured in the same pass as the layout, not stored after it: a
-    /// stored inset starts at zero, so the view would first appear off
-    /// centre and then slide over once the measurement landed.
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if enabled {
-            GeometryReader { proxy in
-                let side = max(proxy.safeAreaInsets.leading, proxy.safeAreaInsets.trailing)
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, side)
-            }
-            // Only the side insets: the keyboard and bars still push it as before.
-            .ignoresSafeArea(.container, edges: .horizontal)
-        } else {
-            content
+    /// Reports the larger of the view's leading and trailing safe-area insets.
+    func onSideInsetChange(_ action: @escaping (CGFloat) -> Void) -> some View {
+        background {
+            Color.clear
+                .ignoresSafeArea()
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    max(proxy.safeAreaInsets.leading, proxy.safeAreaInsets.trailing)
+                } action: { newValue in
+                    action(newValue)
+                }
         }
     }
 }
