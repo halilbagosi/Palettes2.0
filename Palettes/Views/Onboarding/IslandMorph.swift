@@ -414,6 +414,44 @@ struct IslandGooCanvas: View {
     /// Room above the screen so the blur and the notch overhang are not cut off.
     private static let topMargin: CGFloat = 60
 
+    /// The neck's fillet radius where it meets the island at full width. It
+    /// shrinks with the neck as it thins, and on a small island it's capped so
+    /// the flare stays under the island's flat bottom (give or take a point of
+    /// its curve, which the junction's tuck hides).
+    static let maxFilletRadius: CGFloat = 14
+
+    static func filletRadius(island: IslandGeometry, rodWidth: CGFloat) -> CGFloat {
+        let scaled = maxFilletRadius * min(1, rodWidth / IslandMorphController.neckWidth)
+        guard island.kind == .dynamicIsland else { return scaled }
+        let drawnWidth = island.width - 2 * IslandGeometry.drawInset
+        let room = (drawnWidth - rodWidth) / 2 - 6
+        return max(0, min(scaled, room))
+    }
+
+    /// A rod `width` wide from `junction` down to `bottom`, its top corners
+    /// flared out by quarter circles of `radius` so it meets the island's
+    /// bottom edge tangentially, plus a block up to `tuckTop` that fuses it
+    /// into the island.
+    static func filletedNeck(centerX: CGFloat, junction: CGFloat, tuckTop: CGFloat,
+                             bottom: CGFloat, width: CGFloat, radius: CGFloat) -> Path {
+        let left = centerX - width / 2
+        let right = centerX + width / 2
+        let flare = radius + 1
+        var path = Path()
+        path.move(to: CGPoint(x: right + flare, y: junction))
+        path.addArc(tangent1End: CGPoint(x: right, y: junction),
+                    tangent2End: CGPoint(x: right, y: bottom), radius: radius)
+        path.addLine(to: CGPoint(x: right, y: bottom))
+        path.addLine(to: CGPoint(x: left, y: bottom))
+        path.addArc(tangent1End: CGPoint(x: left, y: junction),
+                    tangent2End: CGPoint(x: left - flare, y: junction), radius: radius)
+        path.addLine(to: CGPoint(x: left - flare, y: junction))
+        path.addLine(to: CGPoint(x: left - flare, y: min(tuckTop, junction)))
+        path.addLine(to: CGPoint(x: right + flare, y: min(tuckTop, junction)))
+        path.closeSubpath()
+        return path
+    }
+
     var body: some View {
         let placement = controller.placement
         let island = placement.island
@@ -450,10 +488,20 @@ struct IslandGooCanvas: View {
                                              width: rodWidth, height: bottom - top)
                             layer.fill(Rectangle().path(in: rod), with: .color(.black))
                         } else {
-                            let bottom = max(blobTop + 14, top + 1)
-                            let rod = CGRect(x: frame.center.x - rodWidth / 2, y: top,
-                                             width: rodWidth, height: bottom - top)
-                            layer.fill(Capsule().path(in: rod), with: .color(.black))
+                            // Flared into the island with circular fillets, so the
+                            // neck meets the cutout in round corners on every
+                            // island and notch, rather than the tight, angular
+                            // ones the blur alone would leave.
+                            let bottom = max(frame.center.y, island.drawnBottom + 1)
+                            let path = Self.filletedNeck(
+                                centerX: frame.center.x,
+                                junction: island.drawnBottom - 1,
+                                tuckTop: top,
+                                bottom: bottom,
+                                width: rodWidth,
+                                radius: Self.filletRadius(island: island, rodWidth: rodWidth)
+                            )
+                            layer.fill(path, with: .color(.black))
                         }
                     }
                     if island.kind == .bezel {
