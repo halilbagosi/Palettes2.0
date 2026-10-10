@@ -36,11 +36,27 @@ enum OnboardingPaletteMaker {
         #endif
     }
 
-    /// Whether the AI path will run on this device.
+    /// Whether onboarding takes the Apple Intelligence path on this device
+    /// (pick a color, generate around it). DEBUG can force it either way.
     static var usesAI: Bool {
+        switch OnboardingDebug.aiOverride {
+        case .on: return true
+        case .off: return false
+        case .automatic: return deviceHasAI
+        }
+    }
+
+    /// For the DEBUG settings footer.
+    static var deviceAIStatus: String { deviceHasAI ? "available" : "unavailable" }
+
+    private static var deviceHasAI: Bool {
         if #available(iOS 26.0, *) { return modelAvailable }
         return false
     }
+
+    /// DEBUG forced the AI path on a device that can't run the model: the
+    /// palette is built deterministically but treated as generated.
+    private static var simulatesAI: Bool { usesAI && !deviceHasAI }
 
     /// `onColors` receives the palette's colors as they arrive, for the orb.
     /// `revealDelay` paces the deterministic path (0 = all at once).
@@ -51,7 +67,7 @@ enum OnboardingPaletteMaker {
         revealDelay: Duration = .zero,
         onColors: @escaping @MainActor ([Color]) -> Void
     ) async throws -> Made {
-        if #available(iOS 26.0, *), modelAvailable {
+        if usesAI, #available(iOS 26.0, *), modelAvailable {
             let palette = try await PaletteGenerator.generate(
                 baseColors: [.init(hex: anchorHex, name: "")],
                 size: size,
@@ -74,7 +90,7 @@ enum OnboardingPaletteMaker {
         } else {
             onColors(colors)
         }
-        return Made(palette: palette, usedAI: false, anchorHex: anchorHex)
+        return Made(palette: palette, usedAI: simulatesAI, anchorHex: anchorHex)
     }
 
     /// Without Apple Intelligence: the photo's most salient colors become the

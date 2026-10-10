@@ -105,6 +105,36 @@ enum OnboardingDebug {
         #endif
     }
 
+    // MARK: Apple Intelligence
+
+    /// Which onboarding path to take, regardless of the device: with Apple
+    /// Intelligence (pick a color, generate around it) or without (palette
+    /// straight from the photo).
+    enum AIOverride: String, CaseIterable, Identifiable {
+        case automatic, on, off
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .automatic: "Automatic"
+            case .on: "On"
+            case .off: "Off"
+            }
+        }
+    }
+
+    /// Settings picker key; `-onboardingAI on|off` sets it from the launch arguments.
+    static let aiOverrideKey = "onboardingAI"
+
+    static var aiOverride: AIOverride {
+        #if DEBUG
+        return UserDefaults.standard.string(forKey: aiOverrideKey).flatMap(AIOverride.init) ?? .automatic
+        #else
+        return .automatic
+        #endif
+    }
+
     // MARK: Settings (DEBUG "Try Onboarding")
 
     /// Records the step for the next presentation. Settings then asks the replay
