@@ -79,6 +79,8 @@ final class IslandMorphController: ObservableObject {
     private var virtualStart: Double = 0
     private var release = Frame(center: .zero, diameter: 0)
     private var isSnapped = false
+    /// Detach progress at the moment the drop snapped free of the island; nil before.
+    private(set) var separatedAt: Double?
     private let rigid = UIImpactFeedbackGenerator(style: .rigid)
     private let soft = UIImpactFeedbackGenerator(style: .soft)
 
@@ -195,6 +197,7 @@ final class IslandMorphController: ObservableObject {
         let travel = placement.restCenter.y - from.center.y
         let normalised = travel > 1 ? min(max(velocity * Self.pullTravelRatio / travel, 0), Self.maxHandoffVelocity) : 0
         phase = .detaching
+        separatedAt = isSnapped ? 0 : nil
         onCommit?()
         detach.jump(to: 0)
         detach.animate(to: 1, response: 0.6, dampingFraction: 0.86, initialVelocity: normalised)
@@ -234,6 +237,7 @@ final class IslandMorphController: ObservableObject {
         let gap = neckGap
         if !isSnapped, gap >= Self.snapGap {
             isSnapped = true
+            if phase == .detaching, separatedAt == nil { separatedAt = detach.value }
             if phase != .landed { rigid.impactOccurred(intensity: 0.7) }
         } else if isSnapped, gap < Self.snapGap - 6 {
             isSnapped = false
@@ -277,9 +281,11 @@ struct IslandMorphStage<Orb: View>: View {
         // glass fades in only as the neck snaps. Light mode blends on its own.
         let glassReveal: Double = {
             guard colorScheme == .dark, !fade, controller.phase != .landed else { return 1 }
-            // Stays black until it has fully separated from the island, then fades into glass.
-            guard controller.phase == .detaching, controller.neckConnected <= 0.001 else { return 0 }
-            return Easing.smoothstep(0.3, 0.8, Easing.clamp01(t))
+            // Stays black while joined to the island. From the moment it separates
+            // it eases into glass over the travel, so the change is one smooth fade.
+            guard controller.phase == .detaching, controller.neckConnected <= 0.001,
+                  let start = controller.separatedAt else { return 0 }
+            return Easing.smoothstep(start, min(start + 0.55, 0.95), Easing.clamp01(t))
         }()
         ZStack {
             orb(frame.diameter)

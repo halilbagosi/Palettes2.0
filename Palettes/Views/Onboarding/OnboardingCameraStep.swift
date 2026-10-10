@@ -16,8 +16,8 @@ extension OnboardingCameraFlow {
             return OnboardingStepContent(
                 key: "picked",
                 title: "Pick your color",
-                subtitle: "Tap the photo to choose a spot.",
-                primary: .init(title: "Choose color", action: chooseColor),
+                subtitle: "Open the photo and drag to the color you love.",
+                primary: .init(title: "Pick Color", systemImage: "eyedropper", action: chooseColor),
                 secondary: .button("Retake") { [self] in retake() }
             )
         }

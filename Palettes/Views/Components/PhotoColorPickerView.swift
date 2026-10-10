@@ -11,9 +11,19 @@ struct PhotoColorPickerView: View {
     /// Seeds the preview before the user drags (e.g. the auto-extracted
     /// dominant color), so there is always a valid initial selection.
     var initialRGB: (r: Double, g: Double, b: Double)? = nil
+    /// Onboarding: a plain black (dark) or white (light) stage instead of the
+    /// always-dark viewer, with the photo centred in the space above the panel.
+    var adaptiveStage = false
+    /// Replaces `dismiss()` when the picker is shown as an overlay, not a cover.
+    var onClose: (() -> Void)? = nil
     let onUse: (_ rgb: (r: Double, g: Double, b: Double)) -> Void
+    /// Also called on Use, with where the color was sampled (normalized image
+    /// coordinates), or nil when the seed color was used untouched.
+    var onUseSample: ((_ rgb: (r: Double, g: Double, b: Double), _ point: CGPoint?) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var sampledPoint: CGPoint?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var currentRGB: (r: Double, g: Double, b: Double) = (128, 128, 128)
@@ -35,15 +45,15 @@ struct PhotoColorPickerView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let rect = PhotoLoupeGeometry.imageRect(imageSize: image.size, in: geo.size)
+                // The adaptive stage keeps the photo clear of the bottom panel.
+                let rect = PhotoLoupeGeometry.imageRect(
+                    imageSize: image.size,
+                    in: adaptiveStage ? CGSize(width: geo.size.width, height: max(0, geo.size.height - 130)) : geo.size)
 
                 ZStack {
-                    Color.black.ignoresSafeArea()
+                    (adaptiveStage && colorScheme == .light ? Color.white : Color.black).ignoresSafeArea()
 
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: geo.size.width, height: geo.size.height)
+                    photo(in: rect, container: geo.size)
                         .accessibilityLabel("Photo")
                         .accessibilityHint("Use the actions to pick the center or the suggested color, or double-tap and hold, then drag.")
                         .accessibilityAction(named: "Pick Color at Center") {
@@ -57,6 +67,7 @@ struct PhotoColorPickerView: View {
                                     currentRGB = seed
                                     hasSample = true
                                     marker = nil
+                                    sampledPoint = nil
                                     currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
                                     UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
                                 }
@@ -91,15 +102,16 @@ struct PhotoColorPickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").foregroundStyle(.white)
+                    Button { close() } label: {
+                        Image(systemName: "xmark").foregroundStyle(adaptiveStage ? Color.primary : .white)
                     }
                     .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use") {
                         onUse(currentRGB)
-                        dismiss()
+                        onUseSample?(currentRGB, sampledPoint)
+                        close()
                     }
                     .fontWeight(.semibold)
                     .disabled(!hasSample)
@@ -115,7 +127,27 @@ struct PhotoColorPickerView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(adaptiveStage ? nil : .dark)
+    }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
+
+    /// The photo, aspect-fit. On the adaptive stage it is drawn in its own rect.
+    @ViewBuilder
+    private func photo(in rect: CGRect, container: CGSize) -> some View {
+        if adaptiveStage {
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+        } else {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: container.width, height: container.height)
+        }
     }
 
     // MARK: - Sampling
@@ -127,6 +159,7 @@ struct PhotoColorPickerView: View {
         )
         marker = clamped
         let normalized = PhotoLoupeGeometry.normalizedPoint(in: rect, at: clamped)
+        sampledPoint = normalized
         let rgb = sampler?.color(at: normalized, radius: 2)
             ?? ImageColorExtractor.sampleColor(from: image, at: normalized, radius: 2)
         currentRGB = rgb

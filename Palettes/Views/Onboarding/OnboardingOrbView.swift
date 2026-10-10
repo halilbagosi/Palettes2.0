@@ -55,18 +55,25 @@ struct OnboardingOrbView: View {
     @State private var pokes = 0
 
     static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.7 }
-    /// The liquid color fill grows to this fraction of the orb.
-    static let colorFillFraction: CGFloat = 0.78
 
     private var windowDiameter: CGFloat { Self.windowDiameter(for: diameter) }
+
+    private var liquidColors: [Color] {
+        switch content {
+        case .color(let color): [color]
+        case .drops(let colors): colors
+        default: []
+        }
+    }
     private var isTappable: Bool { onWindowTap != nil }
 
     var body: some View {
         LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes, pullable: true, showsGlow: showsGlow) {
             ZStack {
                 window
-                if case .color(let color) = content {
-                    OrbLiquidFill(color: color, size: diameter * Self.colorFillFraction)
+                // Colors float in the whole drop, as in the generate orb.
+                if !liquidColors.isEmpty {
+                    OrbLiquidDrops(colors: liquidColors, diameter: diameter)
                         .transition(.windowSwap)
                         .allowsHitTesting(false)
                 }
@@ -124,12 +131,9 @@ struct OnboardingOrbView: View {
                 .scaledToFill()
                 .frame(width: windowDiameter, height: windowDiameter)
                 .clipped()
-        case .color:
-            // Drawn outside the window, so the feather doesn't clip its growth.
+        case .color, .drops:
+            // Drawn across the whole drop, outside the feathered window.
             Color.clear
-        case .drops(let colors):
-            OrbDrops(colors: colors)
-                .frame(width: windowDiameter, height: windowDiameter)
         }
     }
 
@@ -160,69 +164,39 @@ private extension Transition where Self == WindowSwap {
     static var windowSwap: WindowSwap { WindowSwap() }
 }
 
-/// The picked color as liquid in the orb: a disc with a soft radial highlight
-/// that grows into place.
-struct OrbLiquidFill: View {
-    var color: Color
-    var size: CGFloat
-    @State private var grown = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        let shown = grown || reduceMotion
-        Circle()
-            .fill(color)
-            .overlay {
-                Circle().fill(RadialGradient(
-                    colors: [.white.opacity(0.35), .clear],
-                    center: UnitPoint(x: 0.34, y: 0.28), startRadius: 0, endRadius: size * 0.55))
-            }
-            .frame(width: size, height: size)
-            .scaleEffect(shown ? 1 : 0.72)
-            .opacity(shown ? 1 : 0)
-            .animation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(response: 0.5, dampingFraction: 0.9), value: shown)
-            .onAppear { grown = true }
-    }
-}
-
-/// Drifting, blurred drops, one per color.
-struct OrbDrops: View {
+/// Soft drops of color drifting inside the drop, drawn exactly like the
+/// generate orb's liquid: each drop half the orb wide at 70% opacity, orbiting
+/// slowly, blurred together and a little more saturated. A drop arriving scales in.
+struct OrbLiquidDrops: View {
     var colors: [Color]
+    var diameter: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let start = Date()
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-            let time = timeline.date.timeIntervalSince(start)
-            GeometryReader { geo in
-                let side = geo.size.width
-                ZStack {
-                    ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
-                        let phase = Double(index) * 1.7
-                        Circle()
-                            .fill(color)
-                            .frame(width: side * 0.62, height: side * 0.62)
-                            .offset(x: CGFloat(sin(time * 0.5 + phase)) * side * 0.16,
-                                    y: CGFloat(cos(time * 0.42 + phase * 1.3)) * side * 0.16)
-                            .transition(.scale(scale: 0.4).combined(with: .opacity))
-                    }
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            let t = reduceMotion ? 0 : timeline.date.timeIntervalSince(start)
+            ZStack {
+                ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
+                    Circle()
+                        .fill(color.opacity(0.7))
+                        .frame(width: diameter * 0.52, height: diameter * 0.52)
+                        .offset(drift(index: index, time: t, orbit: diameter * 0.19))
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
                 }
-                .frame(width: side, height: side)
-                .blur(radius: side * 0.1)
-                .animation(.spring(response: 0.6, dampingFraction: 0.8), value: colors.count)
             }
+            .frame(width: diameter, height: diameter)
+            .blur(radius: diameter * 0.07)
+            .saturation(1.2)
+            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: colors.count)
         }
     }
-}
 
-/// Clear glass for iOS 17-25: a 1 pt rim, a specular arc at the top-left and a
-/// faint inner shadow at the bottom edge. No frosting.
-
-#Preview("Glass orb") {
-    ZStack {
-        LiquidGradientView(intensity: 0.4).ignoresSafeArea()
-        VStack(spacing: 30) {
-            OnboardingOrbView(diameter: 260)
-            OnboardingOrbView(diameter: 260, content: .photo(OnboardingSampleImage.shared))
-        }
+    /// Slow orbital drift, unique per drop (the generate orb's).
+    private func drift(index: Int, time t: Double, orbit: CGFloat) -> CGSize {
+        let i = Double(index)
+        let speed = 0.55 + 0.06 * i.truncatingRemainder(dividingBy: 3)
+        return CGSize(width: orbit * sin(t * speed + i * 2.4),
+                      height: orbit * cos(t * (speed * 0.8) + i * 1.7))
     }
 }

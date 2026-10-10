@@ -19,13 +19,14 @@ final class OnboardingInterimFlow: ObservableObject {
     }
 
     let model: OnboardingModel
-    @Published private(set) var samplePoint = OnboardingSampling.center
     @Published private(set) var sampleCount = 0
     @Published private(set) var genState = GenState.generating
     @Published private(set) var genColors: [Color] = []
     @Published var isSaving = false
 
     private var sampler: ImageColorExtractor.PixelSampler?
+    /// A color chosen in the full-screen picker, applied when the adjust step begins.
+    private var pendingPick: (r: Double, g: Double, b: Double)?
     private var genTask: Task<Void, Never>?
 
     init(model: OnboardingModel) { self.model = model }
@@ -44,35 +45,42 @@ final class OnboardingInterimFlow: ObservableObject {
 
     // MARK: Adjust
 
+    /// The color the full-screen picker opens on: the middle of the frame.
+    func suggestedRGB() -> (r: Double, g: Double, b: Double)? {
+        guard let image = model.capturedImage else { return nil }
+        if sampler == nil { sampler = ImageColorExtractor.PixelSampler(image: image) }
+        return rgb(at: OnboardingSampling.center, in: image)
+    }
+
+    /// Records the full-screen picker's choice for `beginAdjust`.
+    func usePicked(rgb: (r: Double, g: Double, b: Double)) {
+        pendingPick = rgb
+    }
+
+    /// A color picked again from the adjust step: replaces the base, resets the sliders.
+    func applyPicked(rgb: (r: Double, g: Double, b: Double)) {
+        model.brightness = 0.5
+        model.saturation = 0.5
+        model.scannedRGB = rgb
+        sampleCount += 1
+        UIAccessibility.post(notification: .announcement, argument: "Selected \(adjustedName)")
+    }
+
     func beginAdjust() {
         guard let image = model.capturedImage else { return }
         sampler = ImageColorExtractor.PixelSampler(image: image)
         model.brightness = 0.5
         model.saturation = 0.5
-        samplePoint = OnboardingSampling.center
-        model.scannedRGB = rgb(at: samplePoint, in: image)
+        if let pick = pendingPick {
+            pendingPick = nil
+            model.scannedRGB = pick
+        } else {
+            model.scannedRGB = rgb(at: OnboardingSampling.center, in: image)
+        }
     }
 
     private func rgb(at point: CGPoint, in image: UIImage) -> (r: Double, g: Double, b: Double) {
         sampler?.color(at: point, radius: 2) ?? ImageColorExtractor.sampleColor(from: image, at: point, radius: 2)
-    }
-
-    /// `point` is in the orb window's coordinates.
-    func resample(tap point: CGPoint, windowDiameter: CGFloat) {
-        guard let image = model.capturedImage,
-              let normalized = OnboardingSampling.normalizedPoint(
-                forTap: point, imageSize: image.size, diameter: windowDiameter) else { return }
-        resample(to: normalized)
-    }
-
-    func resample(to normalized: CGPoint) {
-        guard model.step == .adjust, let image = model.capturedImage else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            samplePoint = normalized
-            model.scannedRGB = rgb(at: normalized, in: image)
-        }
-        sampleCount += 1
-        UIAccessibility.post(notification: .announcement, argument: "Selected \(adjustedName)")
     }
 
     // MARK: Generate
@@ -107,13 +115,14 @@ final class OnboardingInterimFlow: ObservableObject {
 // MARK: - Content
 
 extension OnboardingInterimFlow {
-    func adjustContent(onGenerate: @escaping () -> Void) -> OnboardingStepContent {
+    func adjustContent(onGenerate: @escaping () -> Void, onRepick: @escaping () -> Void) -> OnboardingStepContent {
         OnboardingStepContent(
             key: "adjust",
             title: nil,
             subtitle: nil,
             body: AnyView(AdjustInterimBody(flow: self, model: model)),
-            primary: .init(title: "Generate palette", systemImage: "sparkles", action: onGenerate)
+            primary: .init(title: "Generate palette", systemImage: "sparkles", action: onGenerate),
+            secondary: .button("Repick Color", onRepick)
         )
     }
 

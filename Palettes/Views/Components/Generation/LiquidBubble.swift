@@ -161,10 +161,24 @@ struct BubbleShape: Shape {
 /// belongs to the view, not the orb, so it stays put while the drop moves.
 struct BubbleStageGlow: View {
     var diameter: CGFloat
+    /// Light mode: a soft grey halo, the counterpart of the dark glow, so the
+    /// clear drop reads against a white stage.
+    var lightHalo = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if colorScheme == .dark {
+        if colorScheme == .light, lightHalo {
+            Circle()
+                .fill(RadialGradient(
+                    stops: [.init(color: .black.opacity(0.07), location: 0),
+                            .init(color: .black.opacity(0.05), location: 0.45),
+                            .init(color: .black.opacity(0.015), location: 0.75),
+                            .init(color: .clear, location: 1)],
+                    center: .center, startRadius: 0, endRadius: diameter * 1.25))
+                .frame(width: diameter * 2.5, height: diameter * 2.5)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        } else if colorScheme == .dark {
             Circle()
                 .fill(RadialGradient(
                     stops: [.init(color: .white.opacity(0.09), location: 0),

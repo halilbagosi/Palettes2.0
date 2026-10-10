@@ -28,6 +28,8 @@ struct OnboardingView: View {
     @State private var ambient: Double = 0
     /// The orb has landed: the text, buttons and Skip are shown.
     @State private var landed = false
+    /// The frozen photo is open full screen to pick a color.
+    @State private var showsPhotoPicker = false
 
     private var skipVisible: Bool { landed || model.step == .pull }
 
@@ -49,6 +51,8 @@ struct OnboardingView: View {
         let topInset: CGFloat
         let island: IslandGeometry
         let compact: Bool
+        /// The step needs more room below the orb (the sliders): the orb rises.
+        var roomy = false
 
         var orbDiameter: CGFloat {
             compact ? min(240, full.width * 0.62) : min(310, full.width * 0.76)
@@ -57,8 +61,10 @@ struct OnboardingView: View {
         var skipBottom: CGFloat { topInset + 6 + 30 }
         var restCenter: CGPoint {
             // 38% of the height; short screens keep the orb higher to leave room for the text.
-            let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), skipBottom + 12 + orbDiameter / 2)
-            return CGPoint(x: full.width / 2, y: y)
+            let highest = skipBottom + 12 + orbDiameter / 2
+            let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
+            // Roomy: up to 64 pt higher, stopping short of Skip.
+            return CGPoint(x: full.width / 2, y: roomy ? max(highest, y - 64) : y)
         }
         /// Safe-area-space top of the text region, under the orb.
         var contentTop: CGFloat { restCenter.y + orbDiameter / 2 + 28 - topInset }
@@ -89,7 +95,8 @@ struct OnboardingView: View {
                 full: full,
                 topInset: insets.top,
                 island: .make(topInset: insets.top, screenSize: full),
-                compact: dynamicTypeSize.isAccessibilitySize || full.height < 700
+                compact: dynamicTypeSize.isAccessibilitySize || full.height < 700,
+                roomy: model.step == .adjust
             )
             // Reduce Motion, landscape and island-less phones fade the orb in at rest.
             let travels = layout.island.hasMorph && !reduceMotion
@@ -99,7 +106,7 @@ struct OnboardingView: View {
                 PullDrivenBackground(pull: morph.pull, ambient: ambient)
 
                 // Fixed light on the surface under where the orb rests.
-                BubbleStageGlow(diameter: layout.orbDiameter)
+                BubbleStageGlow(diameter: layout.orbDiameter, lightHalo: true)
                     .position(layout.restCenter)
                     .ignoresSafeArea()
                     .opacity(landed ? 1 : 0)
@@ -131,6 +138,26 @@ struct OnboardingView: View {
                     .opacity(skipVisible ? 1 : 0)
                     .allowsHitTesting(skipVisible)
                     .animation(.easeOut(duration: 0.3), value: skipVisible)
+
+                if showsPhotoPicker, let image = model.capturedImage {
+                    PhotoColorPickerView(
+                        image: image,
+                        initialRGB: model.step == .adjust ? model.scannedRGB : interim.suggestedRGB(),
+                        adaptiveStage: true,
+                        onClose: { withAnimation(.easeInOut(duration: 0.35)) { showsPhotoPicker = false } },
+                        onUse: { _ in },
+                        onUseSample: { rgb, _ in
+                            if model.step == .camera {
+                                interim.usePicked(rgb: rgb)
+                                withAnimation(.easeInOut(duration: 0.4)) { model.advance() }
+                            } else {
+                                withAnimation(.easeInOut(duration: 0.4)) { interim.applyPicked(rgb: rgb) }
+                            }
+                        }
+                    )
+                    .transition(BlurFade(radius: 10, rise: 0).combined(with: ScaleTransition(0.94)))
+                    .zIndex(10)
+                }
             }
             .animation(.easeOut(duration: 0.3), value: model.step == .pull)
             .onChange(of: travels, initial: true) { _, travels in
@@ -197,13 +224,11 @@ struct OnboardingView: View {
     // MARK: Orb
 
     private func orb(diameter: CGFloat, layout: Layout) -> some View {
-        let windowDiameter = OnboardingOrbView.windowDiameter(for: diameter)
-        return ZStack {
-            OnboardingOrbView(
+        OnboardingOrbView(
                 diameter: diameter,
                 content: orbContent,
                 label: orbLabel,
-                onWindowTap: windowTap(windowDiameter: windowDiameter),
+                onWindowTap: windowTap,
                 flash: flow.flash,
                 windowScale: flow.windowScale,
                 // Livelier while the camera is live or a palette is generating.
@@ -211,18 +236,6 @@ struct OnboardingView: View {
                 kick: flow.scanCount,
                 showsGlow: landed
             )
-            if model.step == .adjust, let image = model.capturedImage {
-                let local = OnboardingSampling.orbPoint(
-                    forNormalized: interim.samplePoint, imageSize: image.size, diameter: windowDiameter)
-                if OnboardingSampling.isInsideOrb(local, diameter: windowDiameter) {
-                    SampleMarker()
-                        .offset(x: local.x - windowDiameter / 2, y: local.y - windowDiameter / 2)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                        .transition(.opacity)
-                }
-            }
-        }
     }
 
     /// How lively the bubble's idle wobble is: calm while held or tucked in the
@@ -240,7 +253,7 @@ struct OnboardingView: View {
         switch model.step {
         case .pull, .orb: .empty
         case .camera: flow.windowContent
-        case .adjust: model.capturedImage.map(OrbWindowContent.photo) ?? .empty
+        case .adjust: .color(interim.adjustedColor)
         case .generate: .drops(interim.genColors)
         }
     }
@@ -250,18 +263,16 @@ struct OnboardingView: View {
         case .pull: "Orb at the top of the screen"
         case .orb: "Color orb"
         case .camera: model.isPhotoFrozen ? "Photo. Tap to choose a color." : "Camera preview orb"
-        case .adjust: "Scanned color orb"
+        case .adjust: "Picked color orb. Tap to pick again."
         case .generate: "Palette orb"
         }
     }
 
-    /// Only the picked photo and the adjust step have a tap target on the orb.
-    private func windowTap(windowDiameter: CGFloat) -> ((CGPoint) -> Void)? {
+    /// The picked photo and the picked color open the color picker.
+    private var windowTap: ((CGPoint) -> Void)? {
         switch model.step {
-        case .camera where model.isPhotoFrozen:
+        case .camera where model.isPhotoFrozen, .adjust:
             return { _ in chooseColor() }
-        case .adjust:
-            return { interim.resample(tap: $0, windowDiameter: windowDiameter) }
         default:
             return nil
         }
@@ -269,9 +280,9 @@ struct OnboardingView: View {
 
     // MARK: Steps
 
+    /// Opens the frozen photo full screen with the color picker.
     private func chooseColor() {
-        // Phase 2 opens the expanded picker here; until then straight to adjust.
-        withAnimation(.easeInOut(duration: 0.4)) { model.advance() }
+        withAnimation(.easeInOut(duration: 0.35)) { showsPhotoPicker = true }
     }
 
     private func generate() {
@@ -300,7 +311,7 @@ struct OnboardingView: View {
         case .camera:
             return flow.stepContent(reduceMotion: reduceMotion, chooseColor: chooseColor)
         case .adjust:
-            return interim.adjustContent(onGenerate: generate)
+            return interim.adjustContent(onGenerate: generate, onRepick: chooseColor)
         case .generate:
             return interim.generateContent(
                 appData: appData,
@@ -423,16 +434,6 @@ private struct PullPrompt: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Begins onboarding")
-    }
-}
-
-private struct SampleMarker: View {
-    var body: some View {
-        ZStack {
-            Circle().stroke(.white, lineWidth: 2).frame(width: 22, height: 22)
-            Circle().stroke(.black.opacity(0.4), lineWidth: 1).frame(width: 24, height: 24)
-        }
-        .shadow(color: .black.opacity(0.25), radius: 2)
     }
 }
 
