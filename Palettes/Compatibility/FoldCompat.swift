@@ -212,17 +212,19 @@ private struct ScreenCentering: ViewModifier {
     /// Measured in the same pass as the layout, not stored after it: a
     /// stored inset starts at zero, so the view would first appear off
     /// centre and then slide over once the measurement landed.
+    @ViewBuilder
     func body(content: Content) -> some View {
-        GeometryReader { proxy in
-            let insets = proxy.safeAreaInsets
-            let side = max(insets.leading, insets.trailing)
+        if enabled {
+            GeometryReader { proxy in
+                let side = max(proxy.safeAreaInsets.leading, proxy.safeAreaInsets.trailing)
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, side)
+            }
+            // Only the side insets: the keyboard and bars still push it as before.
+            .ignoresSafeArea(.container, edges: .horizontal)
+        } else {
             content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Disabled, this just restores the safe area it ignores.
-                .padding(.leading, enabled ? side : insets.leading)
-                .padding(.trailing, enabled ? side : insets.trailing)
         }
-        // Only the side insets: the keyboard and bars still push it as before.
-        .ignoresSafeArea(.container, edges: .horizontal)
     }
 }

@@ -277,6 +277,10 @@ struct SearchView: View {
         .animation(.spring(response: 0.24, dampingFraction: 1), value: browseResultIDs)
     }
 
+    /// The content margin the chip rows scroll into, fading out across it
+    /// instead of running under the screen's edge.
+    private static var chipMargin: CGFloat { 16 }
+
     private var hueChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -303,10 +307,10 @@ struct SearchView: View {
                 }
             }
             .padding(.vertical, 2)
-            .padding(.trailing, 18)
+            .padding(.horizontal, Self.chipMargin)
             .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedHues)
         }
-        .scrollClipDisabled()
+        .chipRowFade(margin: Self.chipMargin)
     }
 
     private var tagChips: some View {
@@ -335,10 +339,28 @@ struct SearchView: View {
                 }
             }
             .padding(.vertical, 2)
-            .padding(.trailing, 18)
+            .padding(.horizontal, Self.chipMargin)
             .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedTags)
         }
-        .scrollClipDisabled()
+        .chipRowFade(margin: Self.chipMargin)
+    }
+}
+
+private extension View {
+    /// Widens a chip row into the surrounding `margin` and fades it out across
+    /// that margin, so chips dissolve into the background before the safe
+    /// area (on iPhone Duo's outer display, before the screen's edge).
+    func chipRowFade(margin: CGFloat) -> some View {
+        mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: margin)
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: margin)
+            }
+        }
+        .padding(.horizontal, -margin)
     }
 }
 
