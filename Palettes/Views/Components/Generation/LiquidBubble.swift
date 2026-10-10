@@ -30,6 +30,18 @@ struct BubbleWobble: Equatable {
     static let still = BubbleWobble()
 }
 
+private struct BubbleWobbleKey: EnvironmentKey {
+    static let defaultValue = BubbleWobble.still
+}
+
+extension EnvironmentValues {
+    /// The enclosing `LiquidBubble`'s shape this frame.
+    var bubbleWobble: BubbleWobble {
+        get { self[BubbleWobbleKey.self] }
+        set { self[BubbleWobbleKey.self] = newValue }
+    }
+}
+
 // MARK: - Physics
 
 /// A soft-body model of the drop. Each deformation mode is a damped spring
@@ -273,6 +285,8 @@ struct LiquidBubble<Content: View>: View {
             if !Self.hasLiquidGlass && colorScheme != .dark { lightBody(shape) }
 
             content()
+                // Content can move with the water (e.g. a feathered window).
+                .environment(\.bubbleWobble, w)
                 .frame(width: diameter, height: diameter)
                 .distortionEffect(
                     ShaderLibrary.bubbleLens(
