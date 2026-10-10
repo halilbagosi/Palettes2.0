@@ -62,7 +62,8 @@ Derive it from the window's top safe-area inset and the screen size. The island 
 | ≥ 59 | Dynamic Island | Width 125, height 37, top = 14 if inset ≥ 62 else 11, fully rounded capsule. |
 | 44–58 | Notch | Width 160, height 31, top 0, bottom corners radius 20. Draw the top 10 pt above the screen edge so it fuses with the bezel. |
 | No centered cutout | Bezel | A band along the top edge, drawn just above the screen, 40 pt deep and 40 pt past each side. The drop starts tucked behind it, under the finger, and follows the finger sideways, staying 90 pt clear of the sides. The neck is 0.9× the drop's width, so the edge dips as a U. A shallow ellipse at the edge flares the shoulders and recoils as the neck thins. It pinches off like the island's neck, and the edge springs back flat. |
-| Window not at the top of the screen (Stage Manager, Slide Over) | None | No morph: the orb blurs and scales in from 0.9 at its resting position. |
+
+On iPad the bezel applies to every window, including resizable and floating ones, where the drop comes from the window's top edge. Only Reduce Motion skips the pull: the orb blurs and scales in from 0.9 at its resting position.
 
 Draw the island shape **1 pt smaller** than the hardware on every side, so any mismatch hides behind it.
 

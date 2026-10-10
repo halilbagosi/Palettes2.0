@@ -58,14 +58,12 @@ final class IslandGeometryTests: XCTestCase {
         XCTAssertEqual(IslandGeometry.make(topInset: 0, screenSize: CGSize(width: 874, height: 402)).kind, .bezel)
     }
 
-    func testFloatingWindowHasNoMorph() {
-        let floating = IslandGeometry.make(topInset: 24, screenSize: CGSize(width: 700, height: 600),
-                                           reachesTopEdge: false)
-        XCTAssertEqual(floating.kind, .none)
+    func testIPadWindowPullsFromItsTopEdge() {
+        // iPadOS runs apps in resizable windows, even when one fills the screen.
+        let window = IslandGeometry.make(topInset: 24, screenSize: CGSize(width: 700, height: 600))
+        XCTAssertEqual(window.kind, .bezel)
+        XCTAssertTrue(window.hasMorph)
         XCTAssertFalse(IslandGeometry.none.hasMorph)
-        // A centered cutout is the screen's own, so it does not depend on the window.
-        XCTAssertEqual(IslandGeometry.make(topInset: 62, screenSize: portrait, reachesTopEdge: false).kind,
-                       .dynamicIsland)
     }
 
     func testBezelSitsJustAboveTheScreenEdgeAndSpansIt() {

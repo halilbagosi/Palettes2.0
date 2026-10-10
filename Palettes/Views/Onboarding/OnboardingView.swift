@@ -94,14 +94,13 @@ struct OnboardingView: View {
             let layout = Layout(
                 full: full,
                 topInset: insets.top,
-                island: .make(topInset: insets.top, screenSize: full,
-                              reachesTopEdge: Self.windowReachesScreenTop()),
+                island: .make(topInset: insets.top, screenSize: full),
                 compact: dynamicTypeSize.isAccessibilitySize || full.height < 700,
                 // The generate step's name and swatches need the room too; the
                 // orb stays where adjust left it.
                 roomy: model.step == .adjust || model.step == .generate
             )
-            // Reduce Motion and floating windows fade the orb in at rest.
+            // Reduce Motion fades the orb in at rest.
             let travels = layout.island.hasMorph && !reduceMotion
             let _ = morph.placement = layout.placement
 
@@ -163,7 +162,7 @@ struct OnboardingView: View {
             }
             .animation(.easeOut(duration: 0.3), value: model.step == .pull)
             .onChange(of: travels, initial: true) { _, travels in
-                if !travels { morph.useFadeMode() }
+                if travels { morph.useMorphMode() } else { morph.useFadeMode() }
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: flow.scanCount)
@@ -224,18 +223,6 @@ struct OnboardingView: View {
                     }
                     .onEnded { morph.dragEnded(time: $0.time.timeIntervalSinceReferenceDate) }
             )
-    }
-
-    /// Whether the window's top is the screen's top edge, so the orb can be
-    /// pulled out of the bezel. A floating window (Stage Manager, Slide Over)
-    /// has no bezel above it.
-    private static func windowReachesScreenTop() -> Bool {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first,
-              let window = scene.keyWindow ?? scene.windows.first else { return true }
-        let screen = scene.screen
-        let frame = window.convert(window.bounds, to: screen.coordinateSpace)
-        return frame.minY <= 1 && abs(frame.height - screen.bounds.height) <= 1
     }
 
     // MARK: Orb

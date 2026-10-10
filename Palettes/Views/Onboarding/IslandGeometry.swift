@@ -51,9 +51,8 @@ nonisolated struct IslandGeometry: Equatable {
     ]
 
     /// Portrait iPhones with a centered cutout pull from it. Everything else
-    /// pulls from the bezel, as long as the window reaches the top edge of the
-    /// screen; a floating window (Stage Manager, Slide Over) has no morph.
-    static func make(topInset: CGFloat, screenSize: CGSize, reachesTopEdge: Bool = true) -> IslandGeometry {
+    /// pulls from the top edge: the bezel, or a window's top on iPad.
+    static func make(topInset: CGFloat, screenSize: CGSize) -> IslandGeometry {
         if screenSize.height > screenSize.width,
            centeredCutoutSizes.contains(Size(screenSize.width, screenSize.height)) {
             if topInset >= 59 {
@@ -63,7 +62,7 @@ nonisolated struct IslandGeometry: Equatable {
                 return IslandGeometry(kind: .notch, width: 160, height: 31, top: 0)
             }
         }
-        return reachesTopEdge ? .bezel : .none
+        return .bezel
     }
 
     /// A screen size rounded to whole points, so it can be looked up.

@@ -313,6 +313,10 @@ final class IslandMorphController: ObservableObject {
 
     func useFadeMode() { if phase == .idle { mode = .fade } }
 
+    /// Back to the pull, if it has not started: Reduce Motion was turned off
+    /// before the orb appeared.
+    func useMorphMode() { if phase == .idle { mode = .morph } }
+
     // MARK: Events
 
     /// Fires the rigid haptic on the frame the neck actually snaps (and rearms
