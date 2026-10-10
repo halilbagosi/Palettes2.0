@@ -206,7 +206,8 @@ struct GenerationResultView: View {
     }
 
     /// Black or white, whichever contrasts more with `color`.
-    private static func ink(on color: Color) -> Color {
+    /// Black or white, whichever reads on `color`.
+    static func ink(on color: Color) -> Color {
         let rgb = color.rgbComponents
         let linear = [rgb.r, rgb.g, rgb.b].map { value -> Double in
             let c = value / 255

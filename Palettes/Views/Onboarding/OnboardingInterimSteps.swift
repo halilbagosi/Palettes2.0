@@ -136,8 +136,9 @@ extension OnboardingInterimFlow {
         case .generating:
             return OnboardingStepContent(
                 key: "gen-wait",
+                eyebrow: .init(title: "Generating", systemImage: "sparkles"),
                 title: "Mixing your palette",
-                subtitle: "Pulling colors out of yours.",
+                subtitle: "Finding colors that go beautifully with yours.",
                 body: AnyView(GenerationSwatchRow(colors: genColors, expected: OnboardingPaletteMaker.paletteSize)
                     .frame(maxWidth: 360)),
                 primary: nil
@@ -145,6 +146,7 @@ extension OnboardingInterimFlow {
         case .ready(let made):
             return OnboardingStepContent(
                 key: "gen-ready",
+                eyebrow: .init(title: "Your first palette", systemImage: "checkmark.seal.fill"),
                 title: nil,
                 subtitle: nil,
                 body: AnyView(ReadyInterimBody(made: made)),
@@ -153,8 +155,8 @@ extension OnboardingInterimFlow {
         case .failed:
             return OnboardingStepContent(
                 key: "gen-failed",
-                title: "Couldn't make a palette",
-                subtitle: "Something went wrong. Give it another try.",
+                title: "That didn\u{2019}t quite work",
+                subtitle: "Something went wrong mixing your palette. Let\u{2019}s give it another go.",
                 primary: .init(title: "Try again", systemImage: "arrow.clockwise", action: retry),
                 secondary: .button("Skip for now", skip)
             )
@@ -175,7 +177,7 @@ private struct AdjustInterimBody: View {
         VStack(spacing: 14) {
             VStack(spacing: 4) {
                 Text(flow.adjustedName)
-                    .font(.title2.weight(.bold))
+                    .font(.system(.title2, design: .rounded).weight(.bold))
                 Text(model.selectedHex ?? "")
                     .font(.system(.subheadline, design: .monospaced))
                     .foregroundStyle(.secondary)

@@ -208,7 +208,10 @@ struct LiquidBubble<Content: View>: View {
     var externalPull: CGSize = .zero
     /// How strongly content bends toward the rim, 0...1 (drawn-glass fallback only).
     var lensStrength: Double = 0.9
-    var showsGlow: Bool = true
+    /// How much of the shadow under the drop is shown, 0...1. Driven
+    /// continuously while a drop settles, so its shadow gathers under it
+    /// rather than appearing when it lands.
+    var glow: Double = 1
     @ViewBuilder var content: () -> Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -263,7 +266,7 @@ struct LiquidBubble<Content: View>: View {
         let lensAngle = w.ovalAngle
 
         return ZStack {
-            if showsGlow {
+            if glow > 0.001 {
                 dropletShadow(shape)
             }
             // Before iOS 26 there's no real glass, so light mode draws a body.
@@ -288,7 +291,7 @@ struct LiquidBubble<Content: View>: View {
             // The shadow continues under the drop: the glass frosts what's
             // beneath it, so the part inside the outline is drawn over the glass,
             // faintly, as if seen through clear water.
-            if showsGlow && colorScheme != .dark {
+            if glow > 0.001 && colorScheme != .dark {
                 dropletShadow(shape)
                     .mask(shape.frame(width: diameter, height: diameter))
                     .opacity(0.8)
@@ -307,17 +310,24 @@ struct LiquidBubble<Content: View>: View {
         // A thin soft ring on the surface under the drop, sitting a little low and
         // following its shape. Same geometry in both modes; darker on the dark stage.
         let dark = colorScheme == .dark
+        // While settling (glow < 1) the drop is still "above" the surface: its
+        // shadow is wider, softer and closer under it, and gathers into the
+        // resting ring as it lands.
+        let g = Easing.clamp01(glow)
+        let lift = 1 - g
         return ZStack {
             shape
                 .stroke(.black.opacity(dark ? 0.4 : 0.06), lineWidth: diameter * 0.06)
-                .blur(radius: diameter * 0.045)
+                .blur(radius: diameter * (0.045 + 0.06 * lift))
             // Faint spread so the ring sits on the surface rather than floating.
             shape
                 .stroke(.black.opacity(dark ? 0.18 : 0.025), lineWidth: diameter * 0.16)
-                .blur(radius: diameter * 0.1)
+                .blur(radius: diameter * (0.1 + 0.08 * lift))
         }
         .frame(width: diameter, height: diameter)
-        .offset(y: diameter * 0.2)
+        .scaleEffect(1 + 0.12 * lift)
+        .opacity(g)
+        .offset(y: diameter * (0.2 - 0.12 * lift))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

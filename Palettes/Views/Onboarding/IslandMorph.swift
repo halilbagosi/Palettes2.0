@@ -156,6 +156,36 @@ final class IslandMorphController: ObservableObject {
         return Easing.clamp01(Double((rod - Self.neckBreakWidth) / (Self.neckWidth - Self.neckBreakWidth)))
     }
 
+    /// How settled the orb is on the stage, 0...1. Its shadow and the stage
+    /// light follow this, so they gather in over the travel rather than
+    /// switching on when it lands. Zero while the drop is joined to the island.
+    var settle: Double {
+        switch phase {
+        case .idle, .dragging:
+            return 0
+        case .landed:
+            return 1
+        case .detaching:
+            let t = Easing.clamp01(detach.value)
+            if mode == .fade || placement.island.kind == .none {
+                return Easing.smoothstep(0.1, 0.95, t)
+            }
+            guard let start = separatedAt else { return 0 }
+            return Easing.smoothstep(start, 0.98, t)
+        }
+    }
+
+    /// Dark stage only: how far the island-black drop has turned into clear
+    /// glass. It stays black while joined (the glass rim would read as a
+    /// circle against the black neck) and from the moment it separates eases
+    /// into glass over most of the remaining travel, so the change is one
+    /// long, even dissolve rather than a swap.
+    var darkGlassReveal: Double {
+        guard mode == .morph, placement.island.kind != .none, phase != .landed else { return 1 }
+        guard phase == .detaching, neckConnected <= 0.001, let start = separatedAt else { return 0 }
+        return Easing.smoothstep(start, max(start + 0.2, min(start + 0.7, 0.98)), Easing.clamp01(detach.value))
+    }
+
     /// Whether the island goo is on screen. It exists only while pulling and detaching.
     var showsGoo: Bool {
         mode == .morph && placement.island.hasMorph && phase != .landed
@@ -200,7 +230,8 @@ final class IslandMorphController: ObservableObject {
         separatedAt = isSnapped ? 0 : nil
         onCommit?()
         detach.jump(to: 0)
-        detach.animate(to: 1, response: 0.6, dampingFraction: 0.86, initialVelocity: normalised)
+        // A soft settle: enough give to feel like water, no visible bounce.
+        detach.animate(to: 1, response: 0.68, dampingFraction: 0.9, initialVelocity: normalised)
     }
 
     /// Fades the orb in at its resting place: no island, Reduce Motion, VoiceOver.
@@ -210,7 +241,7 @@ final class IslandMorphController: ObservableObject {
         phase = .detaching
         onCommit?()
         detach.jump(to: 0)
-        detach.animate(to: 1, response: 0.5, dampingFraction: 1)
+        detach.animate(to: 1, response: 0.6, dampingFraction: 1)
     }
 
     /// Debug jump: already landed.
@@ -260,10 +291,10 @@ struct IslandMorphStage<Orb: View>: View {
     @ObservedObject var controller: IslandMorphController
     @ObservedObject var pull: SpringValue
     @ObservedObject var detach: SpringValue
-    /// Receives the orb's current diameter.
-    @ViewBuilder var orb: (CGFloat) -> Orb
+    /// Receives the orb's current diameter and how settled it is (0...1).
+    @ViewBuilder var orb: (CGFloat, Double) -> Orb
 
-    init(controller: IslandMorphController, @ViewBuilder orb: @escaping (CGFloat) -> Orb) {
+    init(controller: IslandMorphController, @ViewBuilder orb: @escaping (CGFloat, Double) -> Orb) {
         self.controller = controller
         self.pull = controller.pull
         self.detach = controller.detach
@@ -276,22 +307,21 @@ struct IslandMorphStage<Orb: View>: View {
         let t = detach.value
         let fadeScale = fade && !reduceMotion ? Easing.lerp(0.9, 1, Easing.clamp01(t)) : 1
         let fadeBlur = fade && !reduceMotion ? (1 - Easing.smoothstep(0, 0.7, t)) * 8 : 0
-        // Dark stage: the glass would show its rim as a circle against the black
-        // neck, so while the drop is joined the goo forms it in black and the
-        // glass fades in only as the neck snaps. Light mode blends on its own.
-        let glassReveal: Double = {
-            guard colorScheme == .dark, !fade, controller.phase != .landed else { return 1 }
-            // Stays black while joined to the island. From the moment it separates
-            // it eases into glass over the travel, so the change is one smooth fade.
-            guard controller.phase == .detaching, controller.neckConnected <= 0.001,
-                  let start = controller.separatedAt else { return 0 }
-            return Easing.smoothstep(start, min(start + 0.55, 0.95), Easing.clamp01(t))
-        }()
+        // Dark stage: the black drop dissolves into glass after it separates.
+        // Light mode blends on its own.
+        let dark = colorScheme == .dark && !fade
+        let glassReveal = dark ? controller.darkGlassReveal : 1
+        // The glass comes into focus as it appears, so the handoff reads as
+        // the drop clearing rather than one circle swapped for another.
+        let revealBlur = dark && !reduceMotion ? (1 - glassReveal) * 5 : 0
+        // The black fades a beat behind the glass: the two never both sit at
+        // half strength, which would read as a grey disc mid-fade.
+        let gooOpacity = dark ? 1 - Easing.smoothstep(0.15, 1, glassReveal) : 1
         ZStack {
-            orb(frame.diameter)
+            orb(frame.diameter, controller.settle)
                 .scaleEffect(fadeScale)
-                .blur(radius: fadeBlur)
-                .opacity(controller.orbOpacity * glassReveal)
+                .blur(radius: fadeBlur + revealBlur)
+                .opacity(controller.orbOpacity * (dark ? Easing.smoothstep(0, 0.85, glassReveal) : 1))
                 .position(frame.center)
             // The goo sits above the glass: the island's black covers the part of
             // the orb still tucked behind it (so clear glass is never drawn over the
@@ -299,9 +329,9 @@ struct IslandMorphStage<Orb: View>: View {
             // orb's top as black melting into glass.
             if controller.showsGoo {
                 IslandGooCanvas(controller: controller, frame: frame)
-                    // Dark: the black drop and neck fade out as the glass fades in,
-                    // one cross-fade with no seam between them.
-                    .opacity(colorScheme == .dark && !fade ? 1 - glassReveal : 1)
+                    // Dark: the black drop and neck fade out just behind the glass
+                    // coming in, one dissolve with no seam between them.
+                    .opacity(gooOpacity)
                     .allowsHitTesting(false)
             }
         }

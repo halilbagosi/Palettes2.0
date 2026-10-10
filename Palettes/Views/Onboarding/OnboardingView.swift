@@ -105,12 +105,11 @@ struct OnboardingView: View {
             ZStack {
                 PullDrivenBackground(pull: morph.pull, ambient: ambient)
 
-                // Fixed light on the surface under where the orb rests.
-                BubbleStageGlow(diameter: layout.orbDiameter, lightHalo: true)
+                // Fixed light on the surface under where the orb rests. It
+                // gathers in as the orb settles, together with its shadow.
+                SettleDrivenStageGlow(controller: morph, diameter: layout.orbDiameter)
                     .position(layout.restCenter)
                     .ignoresSafeArea()
-                    .opacity(landed ? 1 : 0)
-                    .animation(.easeOut(duration: 0.6), value: landed)
 
                 if model.step == .pull && travels {
                     pullGestureLayer
@@ -126,8 +125,8 @@ struct OnboardingView: View {
 
                 // Above the text and buttons: pulled over them, the glass bends
                 // them. It only takes touches on the drop itself.
-                IslandMorphStage(controller: morph) { diameter in
-                    orb(diameter: diameter, layout: layout)
+                IslandMorphStage(controller: morph) { diameter, settle in
+                    orb(diameter: diameter, settle: settle, layout: layout)
                 }
 
                 OnboardingSkipButton { model.skip() }
@@ -223,7 +222,7 @@ struct OnboardingView: View {
 
     // MARK: Orb
 
-    private func orb(diameter: CGFloat, layout: Layout) -> some View {
+    private func orb(diameter: CGFloat, settle: Double, layout: Layout) -> some View {
         OnboardingOrbView(
                 diameter: diameter,
                 content: orbContent,
@@ -234,7 +233,7 @@ struct OnboardingView: View {
                 // Livelier while the camera is live or a palette is generating.
                 energy: orbEnergy,
                 kick: flow.scanCount,
-                showsGlow: landed
+                glow: settle
             )
     }
 
@@ -297,16 +296,18 @@ struct OnboardingView: View {
             // Only reached when the orb does not travel from the island.
             return OnboardingStepContent(
                 key: "welcome",
+                eyebrow: .init(title: "Welcome", systemImage: "hand.wave.fill"),
                 title: "Welcome to Palettes",
-                subtitle: "Find colors anywhere and turn them into palettes.",
-                primary: .init(title: "Begin") { morph.beginFade() }
+                subtitle: "Catch the colors you love and turn them into palettes.",
+                primary: .init(title: "Get started") { morph.beginFade() }
             )
         case .orb:
             return OnboardingStepContent(
                 key: "orb",
-                title: "Explore the colors around you",
-                subtitle: "Turn anything you see into a palette.",
-                primary: .init(title: "Continue") { withAnimation(.easeInOut(duration: 0.4)) { model.advance() } }
+                eyebrow: .init(title: "Hello there", systemImage: "sparkles"),
+                title: "Colors are everywhere",
+                subtitle: "Find one that catches your eye, and we\u{2019}ll build a whole palette around it.",
+                primary: .init(title: "Let\u{2019}s go") { withAnimation(.easeInOut(duration: 0.4)) { model.advance() } }
             )
         case .camera:
             return flow.stepContent(reduceMotion: reduceMotion, chooseColor: chooseColor)
@@ -362,8 +363,13 @@ struct OnboardingView: View {
     private func textBlock(_ content: OnboardingStepContent) -> some View {
         ZStack(alignment: .top) {
             VStack(spacing: 20) {
-                if let title = content.title {
-                    OnboardingStepText(title: title, subtitle: content.subtitle)
+                VStack(spacing: 14) {
+                    if let eyebrow = content.eyebrow {
+                        OnboardingEyebrow(title: eyebrow.title, systemImage: eyebrow.systemImage)
+                    }
+                    if let title = content.title {
+                        OnboardingStepText(title: title, subtitle: content.subtitle)
+                    }
                 }
                 if let body = content.body { body }
             }
@@ -412,6 +418,29 @@ private struct PullDrivenBackground: View {
 
     var body: some View {
         OnboardingBackground(ambient: max(ambient, 0.7 * Easing.smoothstep(10, 100, pull.value)))
+    }
+}
+
+/// The stage light under the orb's resting place, following the orb's settle
+/// so light and shadow arrive as one. Observes the spring itself so only this
+/// layer re-renders per frame.
+private struct SettleDrivenStageGlow: View {
+    @ObservedObject var controller: IslandMorphController
+    @ObservedObject var detach: SpringValue
+    var diameter: CGFloat
+
+    init(controller: IslandMorphController, diameter: CGFloat) {
+        self.controller = controller
+        self.detach = controller.detach
+        self.diameter = diameter
+    }
+
+    var body: some View {
+        let settle = controller.settle
+        BubbleStageGlow(diameter: diameter, lightHalo: true)
+            // Starts a little wide and contracts to rest, like light pooling.
+            .scaleEffect(1 + 0.15 * (1 - settle))
+            .opacity(settle)
     }
 }
 

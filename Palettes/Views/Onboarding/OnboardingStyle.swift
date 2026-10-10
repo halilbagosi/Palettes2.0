@@ -67,29 +67,53 @@ extension Transition where Self == BlurFade {
 
 // MARK: - Text
 
+/// Step copy in the app's own voice: a bold rounded title, the same face as
+/// generated palette names, over a softer, roomier subtitle.
 struct OnboardingStepText: View {
     var title: String
     var subtitle: String?
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Text(title)
-                .font(.title.weight(.bold))
-                .tracking(-0.4)
+                .font(.system(.title, design: .rounded).weight(.bold))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             if let subtitle {
                 Text(subtitle)
-                    .font(.body)
+                    .font(.system(.body, design: .rounded))
                     .foregroundStyle(.secondary)
+                    .lineSpacing(2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 300)
+                    .frame(maxWidth: 310)
             }
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A small glass chip above a step's title naming the moment ("Welcome",
+/// "Look around"), so each step opens with a friendly cue in the same glass
+/// as the app's controls.
+struct OnboardingEyebrow: View {
+    var title: String
+    var systemImage: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .foregroundStyle(Color.accentColor)
+            Text(title)
+                .foregroundStyle(.secondary)
+        }
+        .font(.system(.footnote, design: .rounded).weight(.semibold))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .liquidGlass(.regular, in: Capsule())
+        .accessibilityHidden(true)
     }
 }
 
@@ -113,8 +137,14 @@ struct OnboardingStepContent {
         }
     }
 
+    struct Eyebrow {
+        var title: String
+        var systemImage: String
+    }
+
     /// Changes when the step's text should cross-fade.
     var key: String
+    var eyebrow: Eyebrow? = nil
     var title: String? = nil
     var subtitle: String? = nil
     var body: AnyView? = nil

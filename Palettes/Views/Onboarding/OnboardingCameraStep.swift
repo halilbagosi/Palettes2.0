@@ -15,8 +15,9 @@ extension OnboardingCameraFlow {
         if model.isPhotoFrozen {
             return OnboardingStepContent(
                 key: "picked",
+                eyebrow: .init(title: "Got it", systemImage: "camera.aperture"),
                 title: "Pick your color",
-                subtitle: "Open the photo and drag to the color you love.",
+                subtitle: "Open the photo and drag to the exact shade you love.",
                 primary: .init(title: "Pick Color", systemImage: "eyedropper", action: chooseColor),
                 secondary: .button("Retake") { [self] in retake() }
             )
@@ -24,7 +25,8 @@ extension OnboardingCameraFlow {
         if showsStill {
             return OnboardingStepContent(
                 key: "still",
-                title: "Find a color",
+                eyebrow: .init(title: "Look around", systemImage: "photo"),
+                title: "Find a color you love",
                 subtitle: pickedImage == nil ? fallbackMessage : "Use this photo to pick a color.",
                 body: model.cameraAccess == .denied ? AnyView(OpenSettingsLink()) : nil,
                 primary: .init(title: "Use this photo", isEnabled: !isScanning) { [self] in scan(reduceMotion: reduceMotion) },
@@ -34,8 +36,9 @@ extension OnboardingCameraFlow {
         if model.cameraUIState == .needsPermission {
             return OnboardingStepContent(
                 key: "permission",
+                eyebrow: .init(title: "Your camera", systemImage: "camera.fill"),
                 title: "See the world in color",
-                subtitle: "Palettes uses your camera to find colors. Nothing is saved or uploaded.",
+                subtitle: "Your camera becomes a color finder. Nothing is saved or uploaded.",
                 // Not worded like the system alert's buttons (App Review 5.1.1(iv)).
                 primary: .init(title: "Continue") { [self] in requestAccess() },
                 secondary: photoPicker
@@ -43,10 +46,11 @@ extension OnboardingCameraFlow {
         }
         return OnboardingStepContent(
             key: "live",
-            title: "Find a color",
+            eyebrow: .init(title: "Look around", systemImage: "viewfinder"),
+            title: "Find a color you love",
             subtitle: camera.isInterrupted
                 ? "Camera paused while another app is using it."
-                : "Point your camera at something you love.",
+                : "Point at anything that catches your eye, then tap Scan.",
             primary: .init(title: "Scan", systemImage: "camera.aperture",
                            isEnabled: !isScanning && !camera.isInterrupted) { [self] in scan(reduceMotion: reduceMotion) },
             secondary: photoPicker

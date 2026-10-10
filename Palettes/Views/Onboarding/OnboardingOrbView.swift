@@ -47,8 +47,9 @@ struct OnboardingOrbView: View {
     var energy: Double = 0.4
     /// Change to make the bubble jiggle.
     var kick: Int = 0
-    /// The glow and shadow around the drop (off while it's still joined to the island).
-    var showsGlow: Bool = true
+    /// The shadow under the drop, 0...1: 0 while it's still joined to the
+    /// island, gathering in as it settles.
+    var glow: Double = 1
 
     @State private var isPressed = false
     /// Local pokes: a tap on the window jiggles the bubble.
@@ -68,7 +69,7 @@ struct OnboardingOrbView: View {
     private var isTappable: Bool { onWindowTap != nil }
 
     var body: some View {
-        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes, pullable: true, showsGlow: showsGlow) {
+        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes, pullable: true, glow: glow) {
             ZStack {
                 window
                 // Colors float in the whole drop, as in the generate orb.
