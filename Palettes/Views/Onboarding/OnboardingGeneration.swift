@@ -136,9 +136,11 @@ struct OnboardingPaletteName: View {
             TimelineView(.animation) { timeline in
                 label.foregroundStyle(GeneratedGradient.style(phase: GeneratedGradient.phase(at: timeline.date)))
             }
-            // The pastel gradient washes out on a light stage; a soft shadow lifts it.
-            .shadow(color: .black.opacity(colorScheme == .light ? 0.45 : 0), radius: 0.6, y: 1)
-            .shadow(color: .black.opacity(colorScheme == .light ? 0.2 : 0), radius: 4, y: 2)
+            // The pastel gradient washes out on a light stage: deepen and enrich it
+            // there, keeping its hues, and let a faint shadow seat the letters.
+            .saturation(colorScheme == .light ? 1.9 : 1)
+            .brightness(colorScheme == .light ? -0.38 : 0)
+            .shadow(color: .black.opacity(colorScheme == .light ? 0.12 : 0), radius: 1, y: 1)
         } else {
             label
         }
