@@ -31,6 +31,8 @@ struct GenerateView: View {
     /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
     /// the crease and the controls the side after it.
     @State private var fold: Fold?
+    /// The split form's color grid has rows below the visible two.
+    @State private var gridHasMore = true
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -164,7 +166,8 @@ struct GenerateView: View {
                         pendingRefinement = change
                         startGeneration()
                     },
-                    onSave: saveResult
+                    onSave: saveResult,
+                    centersOnScreen: !isPortrait
                 )
                 .environmentObject(appData)
                 .transition(.blurReplace)
@@ -202,6 +205,8 @@ struct GenerateView: View {
                     .frame(maxWidth: sideBySide ? 360 : nil)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            // In landscape the bars sit on one side; centre on the screen.
+            .centeredOnScreen(!isPortrait)
         }
     }
 
@@ -266,6 +271,8 @@ struct GenerateView: View {
         FoldSplit(fold: fold) {
             VStack(spacing: 16) {
                 formOrb(diameter: foldedOrbDiameter(fold))
+                    // Above the copy: stretched over it, the glass bends it.
+                    .zIndex(1)
                 Text(GenerateHeaderView.description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -279,14 +286,12 @@ struct GenerateView: View {
                 if !appData.colors.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         colorsHeader(short: false)
-                        ScrollView {
-                            colorGrid
-                        }
-                        .scrollDismissesKeyboard(.interactively)
+                        splitColorGrid
                     }
-                } else {
-                    Spacer(minLength: 0)
                 }
+                // Keeps the grid's bottom off the pinned controls, so it
+                // doesn't scroll under them.
+                Spacer(minLength: 0)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -299,6 +304,30 @@ struct GenerateView: View {
             }
         }
     }
+
+    /// Two rows of the color grid, cut off under a blurred band that says
+    /// there's more to scroll to. The band goes once the end is reached.
+    private var splitColorGrid: some View {
+        ScrollView {
+            colorGrid
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.y < geo.contentSize.height - geo.containerSize.height - 4
+        } action: { _, more in
+            gridHasMore = more
+        }
+        .frame(maxHeight: Self.twoRowGridHeight)
+        .overlay(alignment: .bottom) {
+            ScrollMoreBand()
+                .opacity(gridHasMore ? 1 : 0)
+                .animation(.easeInOut(duration: 0.2), value: gridHasMore)
+        }
+    }
+
+    /// Two rows of 64 pt swatches with their labels (86 pt each, 18 apart),
+    /// the grid's 6 pt inset, and the band under them.
+    private static var twoRowGridHeight: CGFloat { 6 + 86 + 18 + 86 + ScrollMoreBand.height }
 
     /// The orb's side of the fold, less room for the line of copy under it.
     private func foldedOrbDiameter(_ fold: Fold) -> CGFloat {
@@ -989,5 +1018,26 @@ private struct GenerateHeaderView: View {
     if #available(iOS 26.0, *) {
         GenerateView()
             .environmentObject(AppData())
+    }
+}
+
+/// The soft, blurred edge at the bottom of a cut-off scrolling list: the
+/// background fading in over a light blur.
+private struct ScrollMoreBand: View {
+    static let height: CGFloat = 34
+
+    var body: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                LinearGradient(colors: [Color(.systemBackground).opacity(0), Color(.systemBackground).opacity(0.85)],
+                               startPoint: .top, endPoint: .bottom)
+            }
+            .mask {
+                LinearGradient(colors: [.clear, .black, .black], startPoint: .top, endPoint: .bottom)
+            }
+            .frame(height: Self.height)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }

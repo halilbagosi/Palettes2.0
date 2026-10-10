@@ -93,11 +93,99 @@ struct FoldSplit<Visual: View, Controls: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .frame(width: vertical ? span.lowerBound : nil,
                        height: vertical ? nil : span.lowerBound)
+                // Above the controls: a glass orb stretched over them bends them.
+                .zIndex(1)
             Color.clear
                 .frame(width: vertical ? span.upperBound - span.lowerBound : nil,
                        height: vertical ? nil : span.upperBound - span.lowerBound)
             controls
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+/// A `LazyVGrid` whose columns split evenly either side of iPhone Duo's fold
+/// while it's half open in landscape, like `MorphingCardGrid`; otherwise an
+/// adaptive grid of `minimum`…`maximum` wide columns.
+struct FoldAwareGrid<Content: View>: View {
+    var minimum: CGFloat
+    var maximum: CGFloat
+    var spacing: CGFloat
+    var rowSpacing: CGFloat
+    @ViewBuilder var content: Content
+
+    @State private var width: CGFloat = 0
+    @State private var foldSpan: ClosedRange<CGFloat>?
+
+    var body: some View {
+        grid
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            .onGeometryChange(for: ClosedRange<CGFloat>?.self) { proxy in
+                proxy.verticalFoldSpan
+            } action: { newValue in
+                withAnimation(.smooth(duration: 0.35)) { foldSpan = newValue }
+            }
+    }
+
+    @ViewBuilder
+    private var grid: some View {
+        if let split = split {
+            LazyVGrid(columns: split.columns, spacing: rowSpacing) { content }
+                // Equal sides, so the gap after the middle column lands on the crease.
+                .padding(.leading, split.leadingPad)
+                .padding(.trailing, split.trailingPad)
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum, maximum: maximum), spacing: spacing)],
+                      spacing: rowSpacing) { content }
+        }
+    }
+
+    private struct Split {
+        var columns: [GridItem]
+        var leadingPad: CGFloat
+        var trailingPad: CGFloat
+    }
+
+    private var split: Split? {
+        guard let fold = foldSpan, width > 0 else { return nil }
+        let leading = fold.lowerBound
+        let trailing = width - fold.upperBound
+        guard leading > 0, trailing > 0 else { return nil }
+        let side = min(leading, trailing)
+        let perSide = max(1, Int((side + spacing) / (minimum + spacing)))
+        var columns = Array(repeating: GridItem(.flexible(maximum: maximum), spacing: spacing),
+                            count: perSide * 2)
+        columns[perSide - 1].spacing = fold.upperBound - fold.lowerBound
+        return Split(columns: columns, leadingPad: leading - side, trailingPad: trailing - side)
+    }
+}
+
+extension View {
+    /// Centres the view on the screen rather than on the safe area, for when
+    /// bars sit along one side (iPhone Duo in landscape): the side with less
+    /// inset is padded to match the other.
+    func centeredOnScreen(_ enabled: Bool = true) -> some View {
+        modifier(ScreenCentering(enabled: enabled))
+    }
+}
+
+private struct ScreenCentering: ViewModifier {
+    let enabled: Bool
+    /// Trailing inset minus leading inset.
+    @State private var imbalance: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.leading, enabled ? max(0, imbalance) : 0)
+            .padding(.trailing, enabled ? max(0, -imbalance) : 0)
+            .background {
+                Color.clear
+                    .ignoresSafeArea()
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading
+                    } action: { newValue in
+                        imbalance = newValue
+                    }
+            }
     }
 }

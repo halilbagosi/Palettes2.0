@@ -146,9 +146,7 @@ struct SearchView: View {
             if showColorResults {
                 SearchSectionHeader(title: "Colors", count: filteredColors.count)
 
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 160, maximum: 280), spacing: 12)
-                ], spacing: 12) {
+                FoldAwareGrid(minimum: 160, maximum: 280, spacing: 12, rowSpacing: 12) {
                     ForEach(filteredColors) { color in
                         NavigationLink(value: color) {
                             ColorCellSearch(
@@ -169,9 +167,7 @@ struct SearchView: View {
             if showPaletteResults {
                 SearchSectionHeader(title: "Palettes", count: filteredPalettes.count)
 
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 320, maximum: 560), spacing: 12)
-                ], spacing: 10) {
+                FoldAwareGrid(minimum: 320, maximum: 560, spacing: 12, rowSpacing: 10) {
                     ForEach(filteredPalettes) { palette in
                         NavigationLink(value: palette) {
                             PaletteCellSearch(
@@ -222,9 +218,7 @@ struct SearchView: View {
             if !browseColors.isEmpty {
                 SearchSectionHeader(title: "Colors", count: browseColors.count)
 
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 160, maximum: 280), spacing: 12)
-                ], spacing: 12) {
+                FoldAwareGrid(minimum: 160, maximum: 280, spacing: 12, rowSpacing: 12) {
                     ForEach(browseColors) { color in
                         NavigationLink(value: color) {
                             ColorCellSearch(
@@ -248,9 +242,7 @@ struct SearchView: View {
             if !browsePalettes.isEmpty {
                 SearchSectionHeader(title: "Palettes", count: browsePalettes.count)
 
-                LazyVGrid(columns: [
-                    GridItem(.adaptive(minimum: 320, maximum: 560), spacing: 12)
-                ], spacing: 10) {
+                FoldAwareGrid(minimum: 320, maximum: 560, spacing: 12, rowSpacing: 10) {
                     ForEach(browsePalettes) { palette in
                         NavigationLink(value: palette) {
                             PaletteCellSearch(

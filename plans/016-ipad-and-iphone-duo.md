@@ -75,6 +75,13 @@
 - **Palette detail**: half open in landscape, the strip keeps its normal 120 pt height, fixed at the top of the left side. The strip and the cards morph between layouts (`matchedGeometryEffect`) as the device folds. The library grids animate their column changes too.
 - **Onboarding, wide landscape** (inner display fully open, iPad): the orb shrinks and rises just enough that the copy and swatches clear the pinned button.
 
+### Round 4 refinements
+
+- **Generate split form**: the color grid shows two rows, then is cut off under a blurred band that fades to the background (it goes once the end is reached). Nothing scrolls under the pinned vibe field anymore. The orb draws above the copy and the controls (`FoldSplit` gives the visual side a higher z-index), so its glass bends them when it's stretched over them.
+- **Search**: `FoldAwareGrid` splits the color and palette grids' columns evenly either side of the crease when half open in landscape. Half open in portrait, the grids are unchanged.
+- **Centring**: `centeredOnScreen()` pads the side with the smaller inset, so the generating stage and the result centre on the screen in landscape rather than on the safe area.
+- **Generate result**: only a landscape fold splits it. Half open in portrait, it keeps the portrait layout.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.

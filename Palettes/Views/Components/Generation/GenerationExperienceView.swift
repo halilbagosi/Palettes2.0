@@ -15,6 +15,9 @@ struct GenerationResultView: View {
     var onRegenerate: () -> Void
     var onDescribeChange: (String) -> Void
     var onSave: () -> Void
+    /// Centre on the screen rather than the safe area (landscape, where the
+    /// bars sit on one side).
+    var centersOnScreen = false
 
     @EnvironmentObject var appData: AppData
 
@@ -34,10 +37,12 @@ struct GenerationResultView: View {
 
     var body: some View {
         ZStack {
-            if let fold {
+            // Half open in portrait it keeps the portrait layout.
+            if let fold, fold.isVertical {
                 foldedBody(fold)
             } else {
                 stackedBody
+                    .centeredOnScreen(centersOnScreen)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -99,8 +104,8 @@ struct GenerationResultView: View {
         }
     }
 
-    /// Half open: the palette scrolls on the top (or left) side of the crease;
-    /// the change field and buttons sit centred on the other.
+    /// Half open in landscape: the palette scrolls on the left side of the
+    /// crease; the change field and buttons sit centred on the right.
     private func foldedBody(_ fold: Fold) -> some View {
         FoldSplit(fold: fold) {
             ScrollView {
