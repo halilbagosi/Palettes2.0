@@ -31,13 +31,6 @@ struct GenerateView: View {
     /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
     /// the crease and the controls the side after it.
     @State private var fold: Fold?
-    /// The side insets for the generating orb and the result. Measured here,
-    /// where they've settled long before either appears, and held while
-    /// they're up: the bars change under them (the tab bar hides, the
-    /// result's toolbar arrives in the side bar), and following that would
-    /// make them jump.
-    @State private var sideInsets = SideInsets()
-    @State private var liveSideInsets = SideInsets()
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -72,10 +65,11 @@ struct GenerateView: View {
         #endif
     }
 
-    /// The held side insets; balanced in landscape, where the bars sit along
-    /// one side, so the view centres on the screen.
-    private var heldSideInsets: SideInsets {
-        isPortrait ? sideInsets : sideInsets.balanced
+    /// In landscape the bars run down one side; the generating orb and the
+    /// result centre on the screen there, this far from both edges (enough
+    /// to clear a side bar).
+    private var screenMargin: CGFloat? {
+        isPortrait ? nil : 88
     }
 
     /// The stage is taller than it is wide (or hasn't been measured yet).
@@ -142,19 +136,6 @@ struct GenerateView: View {
     private var stage: some View {
         stageContent
             .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
-            .onSideInsetsChange { insets in
-                liveSideInsets = insets
-                if phase == .form { sideInsets = insets }
-            }
-            // Turning the device is a new layout anyway: take the new inset,
-            // once the bars have settled into their new places.
-            .onChange(of: isPortrait) { _, _ in
-                sideInsets = liveSideInsets
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(400))
-                    sideInsets = liveSideInsets
-                }
-            }
             .onFoldChange { newFold in
                 withAnimation(.smooth(duration: 0.35)) { fold = newFold }
             }
@@ -192,7 +173,7 @@ struct GenerateView: View {
                         startGeneration()
                     },
                     onSave: saveResult,
-                    sideInsets: heldSideInsets
+                    screenMargin: screenMargin
                 )
                 .environmentObject(appData)
                 .transition(.blurReplace)
@@ -230,9 +211,8 @@ struct GenerateView: View {
                     .frame(maxWidth: sideBySide ? 360 : nil)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-            // Held insets, so the bars changing doesn't move it; centred on the
-            // screen in landscape.
-            .fixedSideInsets(heldSideInsets)
+            // In landscape the bars sit on one side; centre on the screen.
+            .centeredOnScreen(margin: screenMargin)
         }
     }
 

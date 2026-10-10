@@ -205,49 +205,22 @@ struct FoldAwareGrid<Content: View>: View {
     }
 }
 
-/// A view's leading and trailing safe-area insets.
-nonisolated struct SideInsets: Equatable {
-    var leading: CGFloat = 0
-    var trailing: CGFloat = 0
-
-    /// Both sides at the larger inset, which centres a view on the screen
-    /// rather than on the safe area when bars sit along one side.
-    var balanced: SideInsets {
-        let side = max(leading, trailing)
-        return SideInsets(leading: side, trailing: side)
-    }
-}
-
 extension View {
-    /// Insets the view by `insets` at the sides in place of its own side safe
-    /// area, which it ignores. nil leaves the view in its safe area.
+    /// Centres the view on the screen, inset `margin` from both edges, in
+    /// place of its side safe area, which it ignores. nil leaves the view in
+    /// its safe area.
     ///
-    /// For a view whose bars change under it: on iPhone Duo the bars run down
-    /// the side, and the generated result's toolbar lands there at the end of
-    /// its transition, widening the inset; following the live safe area, the
-    /// view would jump sideways. Measure `insets` with `onSideInsetsChange` on
-    /// a view that's already on screen and hold them. The safe area is
-    /// ignored inside the insets too, or a scroll view in the view would
-    /// still inset its content by whatever the bar adds.
-    func fixedSideInsets(_ insets: SideInsets?) -> some View {
-        let edges: Edge.Set = insets == nil ? [] : .horizontal
+    /// For landscape, where the bars run down one side (iPhone Duo, iPhone):
+    /// centring on the safe area puts the view off centre, and the safe area
+    /// changes as bars come and go (the generated result's toolbar lands in
+    /// the side bar at the end of its transition), so following it makes the
+    /// view jump. `margin` is a constant wide enough to clear those bars.
+    /// The safe area is ignored inside the margin too, or a scroll view in
+    /// the view would still inset its content by any overlap with a bar.
+    func centeredOnScreen(margin: CGFloat?) -> some View {
+        let edges: Edge.Set = margin == nil ? [] : .horizontal
         return ignoresSafeArea(.container, edges: edges)
-            .padding(.leading, insets?.leading ?? 0)
-            .padding(.trailing, insets?.trailing ?? 0)
+            .padding(.horizontal, margin ?? 0)
             .ignoresSafeArea(.container, edges: edges)
-    }
-
-    /// Reports the view's leading and trailing safe-area insets.
-    func onSideInsetsChange(_ action: @escaping (SideInsets) -> Void) -> some View {
-        background {
-            Color.clear
-                .ignoresSafeArea()
-                .onGeometryChange(for: SideInsets.self) { proxy in
-                    SideInsets(leading: proxy.safeAreaInsets.leading,
-                               trailing: proxy.safeAreaInsets.trailing)
-                } action: { newValue in
-                    action(newValue)
-                }
-        }
     }
 }

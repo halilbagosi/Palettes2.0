@@ -15,10 +15,9 @@ struct GenerationResultView: View {
     var onRegenerate: () -> Void
     var onDescribeChange: (String) -> Void
     var onSave: () -> Void
-    /// Side insets to hold in place of the live safe area (see
-    /// `fixedSideInsets`), balanced in landscape to centre on the screen. The
-    /// presenter measures them, so they're right from the first frame.
-    var sideInsets: SideInsets?
+    /// Centre on the screen this far from both edges, ignoring the side safe
+    /// area (landscape, where the bars sit on one side; see `centeredOnScreen`).
+    var screenMargin: CGFloat?
 
     @EnvironmentObject var appData: AppData
 
@@ -43,7 +42,7 @@ struct GenerationResultView: View {
                 foldedBody(fold)
             } else {
                 stackedBody
-                    .fixedSideInsets(sideInsets)
+                    .centeredOnScreen(margin: screenMargin)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
