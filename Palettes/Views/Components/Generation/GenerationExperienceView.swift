@@ -31,7 +31,7 @@ struct GenerationResultView: View {
     @State private var revealed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// iPhone Duo half open (see `FoldCompat`): the palette takes the side
-    /// before the crease and the change field and buttons the side after it.
+    /// before the crease and the change field the side after it.
     @State private var fold: Fold?
     /// Ties the palette across the folded and unfolded layouts.
     @Namespace private var foldNamespace
@@ -63,6 +63,20 @@ struct GenerationResultView: View {
                         .fontWeight(.semibold)
                 }
             }
+            // Icons in the bar rather than buttons under the palette: on
+            // iPhone Duo in landscape they join the vertical bar at the side.
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { onRegenerate() } label: {
+                    Label("Regenerate", systemImage: "arrow.clockwise")
+                }
+                .keyboardShortcut("r", modifiers: .command)
+
+                Button { onSave() } label: {
+                    Label("Save", systemImage: "checkmark")
+                }
+                .glassButton(prominent: true)
+                .keyboardShortcut("s", modifiers: .command)
+            }
         }
         .sheet(item: $editTarget) { target in
             if target.id < paletteColors.count {
@@ -80,7 +94,7 @@ struct GenerationResultView: View {
 
     // MARK: - Layout
 
-    /// The palette in a scrolling column, the change field and buttons pinned
+    /// The palette in a scrolling column, the change field pinned
     /// under it.
     private var stackedBody: some View {
         ScrollView {
@@ -93,7 +107,7 @@ struct GenerationResultView: View {
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
             // Hidden entirely while renaming the palette, so the keyboard
-            // area stays clear of buttons and fields.
+            // area stays clear of the field.
             if !nameFocused {
                 changeControls
                     .frame(maxWidth: 640)
@@ -106,7 +120,7 @@ struct GenerationResultView: View {
     }
 
     /// Half open in landscape: the palette scrolls on the left side of the
-    /// crease; the change field and buttons sit centred on the right.
+    /// crease; the change field sits centred on the right.
     private func foldedBody(_ fold: Fold) -> some View {
         FoldSplit(fold: fold) {
             ScrollView {
@@ -141,17 +155,9 @@ struct GenerationResultView: View {
         .matchedGeometryEffect(id: "palette", in: foldNamespace)
     }
 
-    /// Describe a change, then Regenerate and Save.
+    /// Describe a change. Regenerate and Save are in the toolbar.
     private var changeControls: some View {
-        VStack(spacing: 12) {
-            describeChangeField
-            // While typing, the field's send arrow takes over — hide the bar.
-            if !changeFocused {
-                actionBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.spring(response: 0.3), value: changeFocused)
+        describeChangeField
     }
 
     // MARK: - Name
@@ -329,34 +335,6 @@ struct GenerationResultView: View {
         changeFocused = false
         onDescribeChange(text)
         changeText = ""
-    }
-
-    // MARK: - Actions
-
-    private var actionBar: some View {
-        GlassContainer(spacing: 16) {
-            HStack(spacing: 16) {
-                Button {
-                    onRegenerate()
-                } label: {
-                    Label("Regenerate", systemImage: "sparkles")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .glassButton()
-
-                Button {
-                    onSave()
-                } label: {
-                    Label("Save", systemImage: "checkmark")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .glassButton(prominent: true)
-            }
-        }
     }
 }
 
