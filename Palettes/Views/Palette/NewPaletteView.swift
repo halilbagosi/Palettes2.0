@@ -102,10 +102,9 @@ struct NewPaletteView: View {
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark")
+                        Label("Cancel", systemImage: "xmark")
                             .foregroundStyle(.primary)
                     }
-                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { createPalette() }

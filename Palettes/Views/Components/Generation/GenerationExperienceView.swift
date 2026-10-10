@@ -253,7 +253,7 @@ struct GenerationResultView: View {
                         .foregroundStyle(hasText ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                 }
                 .disabled(!hasText)
-                .transition(.scale.combined(with: .opacity))
+                .transition(.pop)
             }
         }
         .padding(.horizontal, 16)

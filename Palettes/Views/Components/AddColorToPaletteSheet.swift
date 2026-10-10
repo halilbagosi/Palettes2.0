@@ -38,10 +38,9 @@ struct AddColorToPaletteSheet: View {
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark")
+                        Label("Close", systemImage: "xmark")
                             .foregroundStyle(.primary)
                     }
-                    .accessibilityLabel("Close")
                 }
             }
         }

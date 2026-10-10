@@ -115,48 +115,43 @@ struct ColorDetailView: View {
                 Button {
                     shareColor()
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Label("Share", systemImage: "square.and.arrow.up")
                 }
             }
+        }
+        .overflowMenu {
+            Button {
+                isEditingColor = true
+            } label: {
+                Label("Edit Color", systemImage: "pencil")
+            }
 
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        isEditingColor = true
-                    } label: {
-                        Label("Edit Color", systemImage: "pencil")
-                    }
+            Button {
+                copyToClipboard(liveColor.HEX, label: "Copied HEX")
+            } label: {
+                Label("Copy as HEX", systemImage: "number")
+            }
 
-                    Button {
-                        copyToClipboard(liveColor.HEX, label: "Copied HEX")
-                    } label: {
-                        Label("Copy as HEX", systemImage: "number")
-                    }
+            Button {
+                copyToClipboard(liveColor.color.rgbString, label: "Copied RGB")
+            } label: {
+                Label("Copy as RGB", systemImage: "paintpalette")
+            }
 
-                    Button {
-                        copyToClipboard(liveColor.color.rgbString, label: "Copied RGB")
-                    } label: {
-                        Label("Copy as RGB", systemImage: "paintpalette")
-                    }
+            Button {
+                let cssName = liveColor.name.lowercased().replacingOccurrences(of: " ", with: "-")
+                let cssStr = "--\(cssName): \(liveColor.HEX);"
+                copyToClipboard(cssStr, label: "Copied CSS")
+            } label: {
+                Label("Export for CSS", systemImage: "curlybraces.square")
+            }
 
-                    Button {
-                        let cssName = liveColor.name.lowercased().replacingOccurrences(of: " ", with: "-")
-                        let cssStr = "--\(cssName): \(liveColor.HEX);"
-                        copyToClipboard(cssStr, label: "Copied CSS")
-                    } label: {
-                        Label("Export for CSS", systemImage: "curlybraces.square")
-                    }
+            Divider()
 
-                    Divider()
-
-                    Button(role: .destructive) {
-                        showDeleteAlert = true
-                    } label: {
-                        Label("Delete Color", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
+            Button(role: .destructive) {
+                showDeleteAlert = true
+            } label: {
+                Label("Delete Color", systemImage: "trash")
             }
         }
         .sheet(isPresented: $isEditingColor) {
@@ -263,17 +258,7 @@ struct ColorDetailView: View {
 
     private func shareColor() {
         let textToShare = "Check out this color: \(liveColor.name) (\(liveColor.HEX))"
-        let activityVC = UIActivityViewController(activityItems: [textToShare], applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            var topVC = rootVC
-            while let presented = topVC.presentedViewController {
-                topVC = presented
-            }
-            activityVC.popoverPresentationController?.sourceView = topVC.view
-            activityVC.popoverPresentationController?.sourceRect = CGRect(x: topVC.view.bounds.maxX - 50, y: 0, width: 1, height: 1)
-            topVC.present(activityVC, animated: true)
-        }
+        ShareSheetPresenter.present(items: [textToShare])
     }
 
     private func deleteColor() {

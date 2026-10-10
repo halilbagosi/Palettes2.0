@@ -56,7 +56,10 @@ Tagged colors export under their **role name**, so a color tagged Primary become
 - Palettes and colors are indexed in Spotlight.
 
 ### 💻 Built for iPhone *and* iPad
-- Adaptive sidebar navigation on iPadOS, plus hardware keyboard shortcuts (⌘1–⌘4).
+- Adaptive sidebar navigation on iPadOS, with independent, restorable windows.
+- Menu-bar commands and keyboard shortcuts: New Palette ⌘N, New Color ⇧⌘N, New Window ⌥⌘N, Settings ⌘, and tabs ⌘1–⌘4.
+- Drag palettes and colors into other apps and windows.
+- Ready for iPhone Duo: titled toolbar items that move into vertical bars and the system overflow menu, and layouts that adapt to the wide outer display.
 
 ---
 

@@ -49,7 +49,7 @@ struct HueChip: View {
                 if isSelected, tint != nil {
                     Image(systemName: "checkmark")
                         .font(.caption2.weight(.bold))
-                        .transition(.scale.combined(with: .opacity))
+                        .transition(.pop)
                 }
             }
             .padding(.horizontal, 14)

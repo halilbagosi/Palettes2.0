@@ -108,6 +108,7 @@ struct PaletteDetailView: View {
                             }
                         }
                         .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
+                        .draggable(colorVM.HEX)
                         .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
                             ColorMorphCard(
                                 colorName: colorVM.name,
@@ -138,85 +139,79 @@ struct PaletteDetailView: View {
                 Button {
                     savePaletteAsPNG()
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Label("Export as PNG", systemImage: "square.and.arrow.up")
                 }
-                .accessibilityLabel("Export palette as PNG")
             }
-            
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        isEditingPalette = true
-                    } label: {
-                        Label("Edit Palette", systemImage: "pencil")
-                    }
+        }
+        .overflowMenu {
+            Button {
+                isEditingPalette = true
+            } label: {
+                Label("Edit Palette", systemImage: "pencil")
+            }
 
-                    Button {
-                        toggleFavorite()
-                    } label: {
-                        Label(livePalette.isFavorite ? "Remove Favorite" : "Favorite",
-                              systemImage: livePalette.isFavorite ? "star.slash" : "star")
-                    }
+            Button {
+                toggleFavorite()
+            } label: {
+                Label(livePalette.isFavorite ? "Remove Favorite" : "Favorite",
+                      systemImage: livePalette.isFavorite ? "star.slash" : "star")
+            }
 
-                    Button {
-                        let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
-                        presentShare(items: [textToShare])
-                    } label: {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
+            Button {
+                let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
+                ShareSheetPresenter.present(items: [textToShare])
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
 
-                    Button {
-                        isExporting = true
-                    } label: {
-                        Label("Export…", systemImage: "square.and.arrow.up.on.square")
-                    }
+            Button {
+                isExporting = true
+            } label: {
+                Label("Export…", systemImage: "square.and.arrow.up.on.square")
+            }
 
-                    Button {
-                        savePaletteAsPNG()
-                    } label: {
-                        Label("Export as PNG", systemImage: "photo")
-                    }
+            Button {
+                savePaletteAsPNG()
+            } label: {
+                Label("Export as PNG", systemImage: "photo")
+            }
 
-                    Button {
-                        let hexes = livePalette.hexCodes.joined(separator: ", ")
-                        copyToClipboard(hexes, label: "Copied HEX")
-                    } label: {
-                        Label("Copy as HEX", systemImage: "number")
-                    }
-                    
-                    Button {
-                        let rgbs = livePalette.colors.map { $0.rgbString }.joined(separator: " | ")
-                        copyToClipboard(rgbs, label: "Copied RGB")
-                    } label: {
-                        Label("Copy as RGB", systemImage: "paintpalette")
-                    }
-                    
-                    Button {
-                        let safePaletteName = livePalette.name.lowercased().replacingOccurrences(of: " ", with: "-")
-                        var cssLines = ["/* \(livePalette.name) */", ":root {"]
-                        for (index, colorName) in livePalette.colorNames.enumerated() {
-                            if index < livePalette.hexCodes.count {
-                                let safeColorName = colorName.lowercased().replacingOccurrences(of: " ", with: "-")
-                                let finalName = safeColorName.isEmpty ? "color-\(index + 1)" : safeColorName
-                                cssLines.append("  --\(safePaletteName)-\(finalName): \(livePalette.hexCodes[index]);")
-                            }
-                        }
-                        cssLines.append("}")
-                        copyToClipboard(cssLines.joined(separator: "\n"), label: "Copied CSS")
-                    } label: {
-                        Label("Export as CSS", systemImage: "curlybraces.square")
-                    }
+            Button {
+                let hexes = livePalette.hexCodes.joined(separator: ", ")
+                copyToClipboard(hexes, label: "Copied HEX")
+            } label: {
+                Label("Copy as HEX", systemImage: "number")
+            }
 
-                    Divider()
-                    
-                    Button(role: .destructive) {
-                        showDeleteAlert = true
-                    } label: {
-                        Label("Delete Palette", systemImage: "trash")
+            Button {
+                let rgbs = livePalette.colors.map { $0.rgbString }.joined(separator: " | ")
+                copyToClipboard(rgbs, label: "Copied RGB")
+            } label: {
+                Label("Copy as RGB", systemImage: "paintpalette")
+            }
+
+            Button {
+                let safePaletteName = livePalette.name.lowercased().replacingOccurrences(of: " ", with: "-")
+                var cssLines = ["/* \(livePalette.name) */", ":root {"]
+                for (index, colorName) in livePalette.colorNames.enumerated() {
+                    if index < livePalette.hexCodes.count {
+                        let safeColorName = colorName.lowercased().replacingOccurrences(of: " ", with: "-")
+                        let finalName = safeColorName.isEmpty ? "color-\(index + 1)" : safeColorName
+                        cssLines.append("  --\(safePaletteName)-\(finalName): \(livePalette.hexCodes[index]);")
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
                 }
+                cssLines.append("}")
+                copyToClipboard(cssLines.joined(separator: "\n"), label: "Copied CSS")
+            } label: {
+                Label("Export as CSS", systemImage: "curlybraces.square")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                showDeleteAlert = true
+            } label: {
+                Label("Delete Palette", systemImage: "trash")
             }
         }
         .sheet(isPresented: $isEditingPalette) {
@@ -324,7 +319,7 @@ struct PaletteDetailView: View {
         }
 
         Button {
-            presentShare(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+            ShareSheetPresenter.present(items: ["Check out this color: \(color.name) (\(color.HEX))"])
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -376,19 +371,6 @@ struct PaletteDetailView: View {
         }
     }
 
-    private func presentShare(items: [Any]) {
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            var topVC = rootVC
-            while let presented = topVC.presentedViewController {
-                topVC = presented
-            }
-            activityVC.popoverPresentationController?.sourceView = topVC.view
-            activityVC.popoverPresentationController?.sourceRect = CGRect(x: topVC.view.bounds.maxX - 50, y: 0, width: 1, height: 1)
-            topVC.present(activityVC, animated: true)
-        }
-    }
 
     // MARK: - Save as PNG
 
@@ -398,7 +380,7 @@ struct PaletteDetailView: View {
         if let image = PaletteImageRenderer.renderImage(for: livePalette, colors: colorVMs) {
             // Passing the UIImage keeps the existing share flow and exposes iOS's
             // built-in "Save Image" action in the activity sheet.
-            presentShare(items: [image])
+            ShareSheetPresenter.present(items: [image])
         } else {
             ToastManager.shared.show("Unable to create PNG", icon: "exclamationmark.triangle")
         }

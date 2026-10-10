@@ -103,9 +103,8 @@ struct PhotoColorPickerView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { close() } label: {
-                        Image(systemName: "xmark").foregroundStyle(adaptiveStage ? Color.primary : .white)
+                        Label("Cancel", systemImage: "xmark").foregroundStyle(adaptiveStage ? Color.primary : .white)
                     }
-                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use") {

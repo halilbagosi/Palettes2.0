@@ -26,8 +26,8 @@ struct GenerateView: View {
     @State private var showCamera = false
     @State private var showPhotoPicker = false
     @FocusState private var vibeFocused: Bool
-    /// The stage is taller than it is wide.
-    @State private var isPortrait = true
+    /// The stage's size, for its orientation and the generating orb's size.
+    @State private var stageSize: CGSize = .zero
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -60,6 +60,11 @@ struct GenerateView: View {
         if case .available = SystemLanguageModel.default.availability { return true }
         return false
         #endif
+    }
+
+    /// The stage is taller than it is wide (or hasn't been measured yet).
+    private var isPortrait: Bool {
+        stageSize == .zero || stageSize.height > stageSize.width
     }
 
     /// iPad and iPhone Duo in portrait at full size: every color is shown in
@@ -110,7 +115,7 @@ struct GenerateView: View {
 
     private var stage: some View {
         stageContent
-            .onGeometryChange(for: Bool.self) { $0.size.height > $0.size.width } action: { isPortrait = $0 }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
             .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
                 Button("Save Anyway") { performSave() }
                 Button("Cancel", role: .cancel) {}
@@ -158,15 +163,22 @@ struct GenerateView: View {
     }
 
     /// The orb, then the same copy and filling swatch row as onboarding.
+    /// Stacked when the stage is tall; side by side when it's wide (iPhone in
+    /// landscape, iPhone Duo's outer display, a wide iPad window), where a
+    /// stack would run off the bottom.
     private var generatingOrb: some View {
-        VStack(spacing: 28) {
+        let layout = isPortrait
+            ? AnyLayout(VStackLayout(spacing: 28))
+            : AnyLayout(HStackLayout(spacing: 40))
+        let diameter = generatingOrbDiameter
+        return layout {
             GenerationOrbView(
                 colors: arrivedColors,
                 photo: selectedImage,
                 showsProgress: true
             )
             .matchedGeometryEffect(id: "orb", in: orbNamespace)
-            .frame(width: 300, height: 300)
+            .frame(width: diameter, height: diameter)
             // Above the text: stretched over it, the glass bends it.
             .zIndex(1)
 
@@ -175,10 +187,21 @@ struct GenerateView: View {
                 GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
                     .frame(maxWidth: 360)
             }
+            .frame(maxWidth: isPortrait ? nil : 360)
             .padding(.horizontal, 24)
             .transition(.blurFade)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    /// 300 pt where there's room, shrinking with the stage so the orb and its
+    /// copy always fit together.
+    private var generatingOrbDiameter: CGFloat {
+        guard stageSize != .zero else { return 300 }
+        let fit = isPortrait
+            ? min(stageSize.width * 0.7, stageSize.height * 0.45)
+            : min(stageSize.height * 0.7, stageSize.width * 0.4)
+        return min(300, max(160, fit))
     }
 
     // MARK: - Form
@@ -479,7 +502,7 @@ struct GenerateView: View {
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, Color.accentColor)
                             .offset(x: 3, y: 3)
-                            .transition(.scale.combined(with: .opacity))
+                            .transition(.pop)
                     }
                 }
 
@@ -519,7 +542,7 @@ struct GenerateView: View {
                             .foregroundStyle(hasInput ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                     }
                     .disabled(!hasInput)
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(.pop)
                 }
             }
             .padding(.horizontal, 16)
@@ -529,7 +552,7 @@ struct GenerateView: View {
 
             if !vibeFocused {
                 imageMenuButton
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(.pop)
             }
         }
     }
@@ -616,7 +639,7 @@ struct GenerateView: View {
         }
         .padding(8)
         .liquidGlass(.regular, in: .rect(cornerRadius: 14))
-        .transition(.scale.combined(with: .opacity))
+        .transition(.pop)
     }
 
     @ViewBuilder

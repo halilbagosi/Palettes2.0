@@ -11,6 +11,10 @@ struct PaletteTabView: View {
 
     @ObservedObject private var appData = AppData.shared
     @StateObject private var replay = OnboardingReplayCoordinator()
+    @StateObject private var router = SceneRouter()
+    /// Per window, and restored with it. `appData.activeTab` only carries
+    /// requests to switch, which every window follows.
+    @SceneStorage("selectedTab") private var selectedTab: TabValue = .palettes
     @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
     /// DEBUG `-onboardingStart` presents onboarding regardless of the flag, once.
     @State private var debugOnboardingFinished = false
@@ -49,7 +53,23 @@ struct PaletteTabView: View {
         }
         .environmentObject(appData)
         .environmentObject(replay)
-        .background { tabShortcuts }
+        .environmentObject(router)
+        .environment(\.selectedTab, selectedTab)
+        .focusedSceneValue(\.sceneCommands, sceneCommands)
+        .onReceive(appData.$activeTab.dropFirst()) { selectedTab = $0 }
+        .onAppear {
+            // A window restored onto Generate after Apple Intelligence went away.
+            if selectedTab == .generate, !AppleIntelligence.isDeviceSupported {
+                selectedTab = .palettes
+            }
+        }
+        .sheet(isPresented: $router.isShowingSettings, onDismiss: {
+            if replay.consume() { OnboardingKeys.resetForReplay() }
+        }) {
+            SettingsView()
+                .environmentObject(appData)
+                .environmentObject(replay)
+        }
         // Attached after the environment objects so onboarding (and the views
         // it reuses) can read AppData. The only way out is `onFinish`.
         .fullScreenCover(isPresented: Binding(
@@ -64,7 +84,7 @@ struct PaletteTabView: View {
                 if case .completed(let id) = reason {
                     // PaletteView pushes the detail under the cover, so it is
                     // already in place when the cover finishes dismissing.
-                    appData.activeTab = .palettes
+                    selectedTab = .palettes
                     appData.coachMarkPaletteID = id
                     appData.pendingOpenPaletteID = id
                 }
@@ -104,7 +124,7 @@ struct PaletteTabView: View {
 
     @available(iOS 18.0, *)
     private var modernTabView: some View {
-        TabView(selection: $appData.activeTab) {
+        TabView(selection: $selectedTab) {
             Tab("Palettes", systemImage: "swatchpalette.fill", value: TabValue.palettes) {
                 PaletteView()
             }
@@ -131,7 +151,7 @@ struct PaletteTabView: View {
     // MARK: - iOS 17 (classic tab bar; no Generate tab)
 
     private var legacyTabView: some View {
-        TabView(selection: $appData.activeTab) {
+        TabView(selection: $selectedTab) {
             PaletteView()
                 .tabItem { Label("Palettes", systemImage: "swatchpalette.fill") }
                 .tag(TabValue.palettes)
@@ -146,26 +166,25 @@ struct PaletteTabView: View {
         }
     }
 
-    /// Hidden buttons providing ⌘1–⌘4 tab switching for iPad keyboards.
-    private var tabShortcuts: some View {
-        Group {
-            Button("") { appData.activeTab = .palettes }
-                .keyboardShortcut("1", modifiers: .command)
-            Button("") { appData.activeTab = .colors }
-                .keyboardShortcut("2", modifiers: .command)
-            if AppleIntelligence.isDeviceSupported {
-                Button("") { appData.activeTab = .generate }
-                    .keyboardShortcut("3", modifiers: .command)
-            }
-            Button("") { appData.activeTab = .search }
-                .keyboardShortcut("4", modifiers: .command)
-        }
-        .opacity(0)
-        .accessibilityHidden(true)
+    /// What the menu bar's commands do in this window (see `PalettesCommands`).
+    private var sceneCommands: SceneCommands {
+        SceneCommands(
+            canGenerate: AppleIntelligence.isDeviceSupported,
+            selectTab: { tab in selectedTab = tab },
+            newPalette: {
+                selectedTab = .palettes
+                router.isCreatingPalette = true
+            },
+            newColor: {
+                selectedTab = .colors
+                router.isCreatingColor = true
+            },
+            showSettings: { router.isShowingSettings = true }
+        )
     }
 }
 
-enum TabValue {
+enum TabValue: String {
     case palettes, colors, search, generate
 }
 

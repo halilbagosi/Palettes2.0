@@ -9,7 +9,6 @@ import SwiftUI
 
 struct ColorsView: View {
 
-    @State private var isCreatingColor = false
     @State private var path = NavigationPath()
     @State private var colorForNewPalette: ColorViewModel?
     @State private var colorToDelete: ColorViewModel?
@@ -26,6 +25,7 @@ struct ColorsView: View {
     @AppStorage("colorsOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
     @EnvironmentObject var appData: AppData
+    @EnvironmentObject private var router: SceneRouter
 
     struct ColorBindingWrapper: Identifiable {
         let id = UUID()
@@ -109,7 +109,7 @@ struct ColorsView: View {
                 .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
                 .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
-                .sheet(isPresented: $isCreatingColor) {
+                .sheet(isPresented: $router.isCreatingColor) {
                     NewColorView()
                         .environmentObject(appData)
                         .presentationDetents([.large])
@@ -169,15 +169,15 @@ struct ColorsView: View {
                 title: "No colors yet",
                 message: "Pick one, scan it from the world around you, or pull it from a photo.",
                 actionTitle: "Add Color",
-                action: { isCreatingColor = true }
+                action: { router.isCreatingColor = true }
             )
             .transition(.opacity)
         } else {
             libraryContent
                 .overlay(alignment: .bottomTrailing) {
                     if !isSelecting {
-                        FloatingAddButton { isCreatingColor = true }
-                            .keyboardShortcut("n", modifiers: [.command, .shift])
+                        // ⇧⌘N lives in the menu bar (PalettesCommands).
+                        FloatingAddButton(title: "New Color") { router.isCreatingColor = true }
                             .padding(20)
                     }
                 }
@@ -254,6 +254,8 @@ struct ColorsView: View {
         .onTapGesture {
             if !isSelecting { path.append(color) }
         }
+        // Drag the hex into another app or window.
+        .draggable(color.HEX)
         .contextMenu { colorContextMenu(color) } preview: {
             ColorMorphCard(
                 colorName: color.name,
@@ -311,7 +313,7 @@ struct ColorsView: View {
         }
 
         Button {
-            presentShare(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+            ShareSheetPresenter.present(items: ["Check out this color: \(color.name) (\(color.HEX))"])
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -331,15 +333,13 @@ struct ColorsView: View {
         if !appData.colors.isEmpty {
             if isSelecting {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(allVisibleSelected ? "Deselect All" : "Select All") {
-                        toggleSelectAll()
-                    }
+                    SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         exitSelection()
                     } label: {
-                        Image(systemName: "xmark")
+                        Label("Done Selecting", systemImage: "xmark")
                     }
                     optionsMenu
                 }
@@ -355,9 +355,7 @@ struct ColorsView: View {
                 )
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Select") {
-                        withAnimation { isSelecting = true }
-                    }
+                    SelectButton { withAnimation { isSelecting = true } }
                 }
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -378,7 +376,7 @@ struct ColorsView: View {
                 originFilter: originFilterBinding.animation(.spring(response: 0.3))
             )
         } label: {
-            Image(systemName: "ellipsis")
+            LibraryOptionsLabel()
         }
     }
 
@@ -476,14 +474,7 @@ struct ColorsView: View {
         let selected = appData.colors.filter { selectedIDs.contains($0.id) }
         guard !selected.isEmpty else { return }
         let text = selected.map { "\($0.name) (\($0.HEX))" }.joined(separator: "\n")
-        presentShare(items: [text])
+        ShareSheetPresenter.present(items: [text])
     }
 
-    private func presentShare(items: [Any]) {
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityVC, animated: true)
-        }
-    }
 }

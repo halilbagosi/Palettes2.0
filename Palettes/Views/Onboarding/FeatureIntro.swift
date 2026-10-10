@@ -113,7 +113,7 @@ private struct FeatureIntroModifier: ViewModifier {
 
     @AppStorage private var didShow: Bool
     @AppStorage(OnboardingKeys.didComplete) private var onboardingDone = false
-    @EnvironmentObject private var appData: AppData
+    @Environment(\.selectedTab) private var selectedTab
     @State private var showSheet = false
     @State private var task: Task<Void, Never>?
 
@@ -134,19 +134,19 @@ private struct FeatureIntroModifier: ViewModifier {
             .onChange(of: onboardingDone) { _, _ in arm() }
             // Tabs stay alive off screen (and some load before they're opened):
             // each intro waits for its own tab to be the one showing.
-            .onChange(of: appData.activeTab) { _, _ in arm() }
+            .onChange(of: selectedTab) { _, _ in arm() }
             .onDisappear { task?.cancel() }
     }
 
     private var isEligible: Bool {
-        onboardingDone && !didShow && appData.activeTab == intro.tab
+        onboardingDone && !didShow && selectedTab == intro.tab
     }
 
     private func arm() {
         task?.cancel()
         // A request that never got on screen (another sheet was up) must not
         // stay pending and block a later try.
-        if showSheet, !didShow, appData.activeTab != intro.tab { showSheet = false }
+        if showSheet, !didShow, selectedTab != intro.tab { showSheet = false }
         // Not over the main onboarding, only on its own tab, and only once.
         guard isEligible, !showSheet else { return }
         task = Task {

@@ -9,9 +9,10 @@ struct MyApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: PalettesScene.libraryID) {
            PaletteTabView()
                 .toastOverlay()
         }
+        .commands { PalettesCommands() }
     }
 }

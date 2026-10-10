@@ -3,7 +3,7 @@
 //  Palettes
 //
 //  The last onboarding moment: after "Start creating" on the extras sheet the
-//  Palettes tab returns to its library and this card drops in under the •••
+//  Palettes tab returns to its library and this card drops in under the view-options
 //  button, showing the display and filter options it holds as live controls.
 //  Changing one here changes the library behind it, exactly like the menu.
 //
@@ -67,7 +67,7 @@ struct LibraryOptionsTourCard: View {
                     .font(.system(.headline, design: .rounded))
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityFocused($titleFocused)
-                Text("Choose how palettes look and which ones show. They\u{2019}re always in the \(Image(systemName: "ellipsis.circle")) menu.")
+                Text("Choose how palettes look and which ones show. They\u{2019}re always in the \(Image(systemName: LibraryOptionsLabel.systemImage)) menu.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
