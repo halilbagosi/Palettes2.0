@@ -553,7 +553,7 @@ struct GenerateView: View {
             .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
 
             // The photo source sits with the other inputs, matching their height.
-            imageMenuButton
+            imageMenuButton(axis: axis)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -833,8 +833,10 @@ struct GenerateView: View {
         .fixedSize()
     }
 
+    /// Square: as tall as the menus beside it, or as one of them when they're
+    /// stacked (`axis` is the menus' axis).
     @ViewBuilder
-    private var imageMenuButton: some View {
+    private func imageMenuButton(axis: Axis) -> some View {
         Menu {
             Button {
                 showCamera = true
@@ -866,8 +868,15 @@ struct GenerateView: View {
                 }
             }
             .frame(width: 52)
-            .frame(minHeight: 50, maxHeight: .infinity)
+            .frame(minHeight: 52, maxHeight: axis == .horizontal ? .infinity : 52)
             .clipShape(.rect(cornerRadius: 14))
+            .overlay {
+                if selectedImage != nil {
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(.tint, lineWidth: 2.5)
+                        .transition(.opacity)
+                }
+            }
             .contentShape(.rect(cornerRadius: 14))
             .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
         }
