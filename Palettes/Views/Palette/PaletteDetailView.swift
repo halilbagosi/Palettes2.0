@@ -6,6 +6,7 @@
 //
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 
 
@@ -27,6 +28,10 @@ struct PaletteDetailView: View {
     /// Ties the strip and each card across the folded and unfolded layouts,
     /// so they move and resize into place when the device folds.
     @Namespace private var foldNamespace
+    /// The color being dragged to a new place in the palette.
+    @State private var draggedColorID: UUID?
+    /// Bumped on each reorder step, for a selection tick.
+    @State private var reorderTick = 0
     @Environment(\.dismiss) var dismiss
 
     private struct ColorBindingWrapper: Identifiable {
@@ -64,6 +69,8 @@ struct PaletteDetailView: View {
     var body: some View {
         detailContent
             .navigationTitle(livePalette.name)
+            .sensoryFeedback(.selection, trigger: reorderTick)
+            .onDisappear { draggedColorID = nil }
             .onboardingCoachMark(for: palette.id)
             .onboardingExtras(for: livePalette, isBusy: isBusyWithOtherUI)
             .toolbar {
@@ -223,7 +230,7 @@ struct PaletteDetailView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 24) {
-                        heroStrip(fillsHeight: false)
+                        heroStrip(fillsHeight: false, stacksBands: false)
                             .padding(.horizontal)
                             .padding(.top, 8)
                         colorGrid
@@ -241,14 +248,13 @@ struct PaletteDetailView: View {
         .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
     }
 
-    /// Half open in portrait the strip fills the top half; in landscape it
-    /// keeps its usual size at the top of the left side and stays put while
-    /// the colors scroll on the right.
+    /// Half open, the strip fills its side and stays put while the colors
+    /// scroll on the other: side by side across the top half in portrait,
+    /// stacked bands down the left side in landscape.
     private func foldedContent(_ fold: Fold) -> some View {
         FoldSplit(fold: fold) {
-            heroStrip(fillsHeight: !fold.isVertical)
+            heroStrip(fillsHeight: true, stacksBands: fold.isVertical)
                 .padding()
-                .frame(maxHeight: .infinity, alignment: .top)
         } controls: {
             ScrollView {
                 colorGrid
@@ -257,14 +263,19 @@ struct PaletteDetailView: View {
         }
     }
 
-    /// Every color of the palette side by side, with the count under it.
-    /// `fillsHeight` stretches the strip to the space it's given.
-    private func heroStrip(fillsHeight: Bool) -> some View {
+    /// Every color of the palette, with the count under it. `fillsHeight`
+    /// stretches the strip to the space it's given; `stacksBands` runs the
+    /// colors as horizontal bands top to bottom (a tall, narrow side) rather
+    /// than side by side.
+    private func heroStrip(fillsHeight: Bool, stacksBands: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 0) {
-                ForEach(livePalette.colors.indices, id: \.self) { index in
+            let layout = stacksBands
+                ? AnyLayout(VStackLayout(spacing: 0))
+                : AnyLayout(HStackLayout(spacing: 0))
+            layout {
+                ForEach(livePalette.paletteColors) { paletteColor in
                     Rectangle()
-                        .fill(livePalette.colors[index])
+                        .fill(paletteColor.color)
                 }
             }
             .frame(height: fillsHeight ? nil : 120)
@@ -286,7 +297,7 @@ struct PaletteDetailView: View {
 
     private var colorGrid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)], spacing: 20) {
-            ForEach(Array(livePalette.colors.enumerated()), id: \.offset) { index, _ in
+            ForEach(Array(livePalette.paletteColors.enumerated()), id: \.element.id) { index, paletteColor in
                 let colorVM = colorViewModel(at: index, from: livePalette)
                 let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
                 ColorCellBig(
@@ -309,8 +320,18 @@ struct PaletteDetailView: View {
                     }
                 }
                 .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
-                .matchedGeometryEffect(id: index, in: foldNamespace)
-                .draggable(colorVM.HEX)
+                .matchedGeometryEffect(id: paletteColor.id, in: foldNamespace)
+                // Drag to reorder within the palette; dragged out of the
+                // app, it carries the hex.
+                .onDrag {
+                    draggedColorID = paletteColor.id
+                    return NSItemProvider(object: colorVM.HEX as NSString)
+                }
+                .onDrop(of: [.text], delegate: ColorReorderDropDelegate(
+                    targetID: paletteColor.id,
+                    draggedID: $draggedColorID,
+                    move: moveColor
+                ))
                 .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
                     ColorMorphCard(
                         colorName: colorVM.name,
@@ -329,6 +350,25 @@ struct PaletteDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Reordering
+
+    /// Moves the dragged color into `targetID`'s place, the others shifting
+    /// over as it passes them.
+    private func moveColor(_ id: UUID, to targetID: UUID) {
+        guard let paletteIdx = paletteIndex else { return }
+        let colors = appData.palettes[paletteIdx].paletteColors
+        guard let from = colors.firstIndex(where: { $0.id == id }),
+              let to = colors.firstIndex(where: { $0.id == targetID }),
+              from != to else { return }
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            appData.palettes[paletteIdx].paletteColors.move(
+                fromOffsets: IndexSet(integer: from),
+                toOffset: to > from ? to + 1 : to
+            )
+        }
+        reorderTick += 1
     }
 
     // MARK: - Color context menu
@@ -451,5 +491,32 @@ struct PaletteDetailView: View {
                 colorNames: ["Purple", "Pink", "Orange", "Yellow", "Cyan", "Blue", "Indigo", "Black"]
             )
         )
+    }
+}
+
+/// Reorders a palette's colors as one is dragged over the others. Only a
+/// drag that started on one of them counts; anything else dropped here is
+/// ignored.
+private struct ColorReorderDropDelegate: DropDelegate {
+    let targetID: UUID
+    @Binding var draggedID: UUID?
+    let move: (UUID, UUID) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedID != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedID, draggedID != targetID else { return }
+        move(draggedID, targetID)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedID = nil
+        return true
     }
 }

@@ -87,6 +87,12 @@
 - **Generate**: the vibe field and Generate sit on a background-colored area that fades out upward, so content scrolling under them softens away. The split form's color grid fills the space down to them again, with a fade at its top edge (`fadingEdges`). The two-row cut-off and its band are gone.
 - **Generate, half open in landscape**: the colors are a vertical column, scrollable with faded ends, beside the orb. The orb shifts left to make room, and the controls side keeps size, mode, vibe and Generate.
 
+### Round 6 refinements
+
+- **Color detail**: half open, the color fills the top or left side, and the values and palettes scroll on the other. It morphs between layouts and the title goes inline.
+- **Palette detail**: half open in landscape, the strip fills the whole height of the left side as horizontal bands stacked top to bottom. In portrait it stays side by side across the top half.
+- **Reordering**: drag a color card onto another in the palette detail to move it there. The others shift over with a spring and a selection tick, and the order saves through `AppData`. Dragged out of the app, a card still carries its hex.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.

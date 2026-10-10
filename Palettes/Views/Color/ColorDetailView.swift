@@ -14,6 +14,10 @@ struct ColorDetailView: View {
     @State private var isEditingColor = false
     @State private var isCreatingPalette = false
     @State private var showDeleteAlert = false
+    /// iPhone Duo's fold while half open (see `FoldCompat`).
+    @State private var fold: Fold?
+    /// Ties the color and the sections across the folded and unfolded layouts.
+    @Namespace private var foldNamespace
 
     private var colorIndex: Int? {
         appData.colors.firstIndex(where: { $0.id == colorItem.id })
@@ -43,148 +47,93 @@ struct ColorDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // MARK: Color Window
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(liveColor.color.gradient)
-                    .frame(height: 180)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                    )
-                    .shadow(color: liveColor.color.opacity(0.3), radius: 10, x: 0, y: 5)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-
-                // MARK: Values
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Values")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-
-                    VStack(spacing: 12) {
-                        valueRow(label: "HEX", value: liveColor.HEX, copyLabel: "Copied HEX")
-                        valueRow(label: "RGB", value: liveColor.color.rgbString, copyLabel: "Copied RGB")
-                    }
-                    .padding(.horizontal)
-                }
-
-                // MARK: Palettes
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Palettes")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-
-                    if containingPalettes.isEmpty {
-                        emptyPalettesSection
-                    } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 560), spacing: 14)], spacing: 14) {
-                            ForEach(containingPalettes) { palette in
-                                NavigationLink(value: palette) {
-                                    PaletteCellSearch(
-                                        paletteName: palette.name,
-                                        colors: palette.colors,
-                                        isGenerated: palette.isGenerated
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .hoverEffect(.lift)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-            }
-            .padding(.bottom, 24)
-        }
-        .background(
-            LinearGradient(
-                colors: [liveColor.color.opacity(0.8), gradientEnd],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
-        .navigationTitle(liveColor.name)
-        .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    shareColor()
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-        }
-        .overflowMenu {
-            Button {
-                isEditingColor = true
-            } label: {
-                Label("Edit Color", systemImage: "pencil")
-            }
-
-            Button {
-                copyToClipboard(liveColor.HEX, label: "Copied HEX")
-            } label: {
-                Label("Copy as HEX", systemImage: "number")
-            }
-
-            Button {
-                copyToClipboard(liveColor.color.rgbString, label: "Copied RGB")
-            } label: {
-                Label("Copy as RGB", systemImage: "paintpalette")
-            }
-
-            Button {
-                let cssName = liveColor.name.lowercased().replacingOccurrences(of: " ", with: "-")
-                let cssStr = "--\(cssName): \(liveColor.HEX);"
-                copyToClipboard(cssStr, label: "Copied CSS")
-            } label: {
-                Label("Export for CSS", systemImage: "curlybraces.square")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                showDeleteAlert = true
-            } label: {
-                Label("Delete Color", systemImage: "trash")
-            }
-        }
-        .sheet(isPresented: $isEditingColor) {
-            if let idx = colorIndex {
-                ColorEditView(
-                    colorName: $appData.colors[idx].name,
-                    hexCode: $appData.colors[idx].HEX,
-                    colorValue: $appData.colors[idx].color
+        detailContent
+            .background(
+                LinearGradient(
+                    colors: [liveColor.color.opacity(0.8), gradientEnd],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
-                .environmentObject(appData)
-                .presentationDetents([.large])
-                .formPresentationSizing()
+                .ignoresSafeArea()
+            )
+            .navigationTitle(liveColor.name)
+            // Folded, the color needs the height a large title would take.
+            .navigationBarTitleDisplayMode(fold == nil ? .large : .inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        shareColor()
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                }
             }
-        }
-        .sheet(isPresented: $isCreatingPalette) {
-            NewPaletteView(preselectedColor: liveColor)
-                .environmentObject(appData)
-                .presentationDetents([.large])
-                .formPresentationSizing()
-        }
-        .alert("Delete Color", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                deleteColor()
+            .overflowMenu {
+                Button {
+                    isEditingColor = true
+                } label: {
+                    Label("Edit Color", systemImage: "pencil")
+                }
+
+                Button {
+                    copyToClipboard(liveColor.HEX, label: "Copied HEX")
+                } label: {
+                    Label("Copy as HEX", systemImage: "number")
+                }
+
+                Button {
+                    copyToClipboard(liveColor.color.rgbString, label: "Copied RGB")
+                } label: {
+                    Label("Copy as RGB", systemImage: "paintpalette")
+                }
+
+                Button {
+                    let cssName = liveColor.name.lowercased().replacingOccurrences(of: " ", with: "-")
+                    let cssStr = "--\(cssName): \(liveColor.HEX);"
+                    copyToClipboard(cssStr, label: "Copied CSS")
+                } label: {
+                    Label("Export for CSS", systemImage: "curlybraces.square")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    showDeleteAlert = true
+                } label: {
+                    Label("Delete Color", systemImage: "trash")
+                }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            let affected = containingPalettes
-            if affected.isEmpty {
-                Text("Are you sure you want to delete \"\(liveColor.name)\"?")
-            } else {
-                Text("Deleting \"\(liveColor.name)\" will also remove it from \(affected.count) palette\(affected.count == 1 ? "" : "s"): \(affected.map(\.name).joined(separator: ", ")).")
+            .sheet(isPresented: $isEditingColor) {
+                if let idx = colorIndex {
+                    ColorEditView(
+                        colorName: $appData.colors[idx].name,
+                        hexCode: $appData.colors[idx].HEX,
+                        colorValue: $appData.colors[idx].color
+                    )
+                    .environmentObject(appData)
+                    .presentationDetents([.large])
+                    .formPresentationSizing()
+                }
             }
-        }
+            .sheet(isPresented: $isCreatingPalette) {
+                NewPaletteView(preselectedColor: liveColor)
+                    .environmentObject(appData)
+                    .presentationDetents([.large])
+                    .formPresentationSizing()
+            }
+            .alert("Delete Color", isPresented: $showDeleteAlert) {
+                Button("Delete", role: .destructive) {
+                    deleteColor()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                let affected = containingPalettes
+                if affected.isEmpty {
+                    Text("Are you sure you want to delete \"\(liveColor.name)\"?")
+                } else {
+                    Text("Deleting \"\(liveColor.name)\" will also remove it from \(affected.count) palette\(affected.count == 1 ? "" : "s"): \(affected.map(\.name).joined(separator: ", ")).")
+                }
+            }
     }
 
     // MARK: - Subviews
@@ -252,6 +201,103 @@ struct ColorDetailView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
         .padding(.horizontal)
+    }
+
+    // MARK: - Layout
+
+    /// The color, then its values and palettes. On iPhone Duo half open, the
+    /// color fills the side before the crease (the top, or the left in
+    /// landscape) and the values and palettes scroll on the other.
+    private var detailContent: some View {
+        ZStack {
+            if let fold {
+                FoldSplit(fold: fold) {
+                    colorWindow(fillsHeight: true)
+                        .padding()
+                } controls: {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            valuesSection
+                            palettesSection
+                        }
+                        .padding(.vertical)
+                    }
+                }
+            } else {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        colorWindow(fillsHeight: false)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                        valuesSection
+                        palettesSection
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onFoldChange { newFold in
+            withAnimation(.smooth(duration: 0.35)) { fold = newFold }
+        }
+    }
+
+    private func colorWindow(fillsHeight: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(liveColor.color.gradient)
+            .frame(height: fillsHeight ? nil : 180)
+            .frame(maxHeight: fillsHeight ? .infinity : nil)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: liveColor.color.opacity(0.3), radius: 10, x: 0, y: 5)
+            .matchedGeometryEffect(id: "color", in: foldNamespace)
+    }
+
+    private var valuesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Values")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                valueRow(label: "HEX", value: liveColor.HEX, copyLabel: "Copied HEX")
+                valueRow(label: "RGB", value: liveColor.color.rgbString, copyLabel: "Copied RGB")
+            }
+            .padding(.horizontal)
+        }
+        .matchedGeometryEffect(id: "values", in: foldNamespace)
+    }
+
+    private var palettesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Palettes")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+
+            if containingPalettes.isEmpty {
+                emptyPalettesSection
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 560), spacing: 14)], spacing: 14) {
+                    ForEach(containingPalettes) { palette in
+                        NavigationLink(value: palette) {
+                            PaletteCellSearch(
+                                paletteName: palette.name,
+                                colors: palette.colors,
+                                isGenerated: palette.isGenerated
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .hoverEffect(.lift)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        .matchedGeometryEffect(id: "palettes", in: foldNamespace)
     }
 
     // MARK: - Actions
