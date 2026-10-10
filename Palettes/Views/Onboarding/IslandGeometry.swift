@@ -79,6 +79,7 @@ nonisolated struct IslandGeometry: Equatable {
                 let height = min(max(topInset - 14, 28), 36)
                 return IslandGeometry(kind: .notch, width: 160, height: height, top: 0)
             }
+        }
         return .bezel
     }
 
