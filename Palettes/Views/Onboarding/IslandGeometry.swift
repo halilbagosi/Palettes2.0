@@ -62,10 +62,15 @@ nonisolated struct IslandGeometry: Equatable {
             // shape with the real cutout.
             if topInset >= 59 {
                 // 37 pt tall, its bottom 11 pt above the safe area (top 14 at a
-                // 62 pt inset, 11 at 59). iPhone 18 Pro's is as tall and sits as
-                // high, only narrower: 95 pt rather than 125.
+                // 62 pt inset, 11 at 59). iPhone 18 Pro's and Pro Max's are as
+                // tall and sit as high, only narrower. The drawn capsule must
+                // stay inside the hardware, so it's the widest that fits: 95 pt
+                // on the Pro (a capsule itself), 99 pt on the Pro Max (whose
+                // island is ~118 pt wide, but with rounder ends than a capsule,
+                // which a wider drawn one pokes out past).
                 let height: CGFloat = 37
-                return IslandGeometry(kind: .dynamicIsland, width: hasCompactIsland ? 95 : 125,
+                let width: CGFloat = hasCompactIsland ? (screenSize.width >= 440 ? 99 : 95) : 125
+                return IslandGeometry(kind: .dynamicIsland, width: width,
                                       height: height, top: topInset - 11 - height)
             }
             if topInset >= 44 {
