@@ -208,21 +208,21 @@ extension View {
 
 private struct ScreenCentering: ViewModifier {
     let enabled: Bool
-    /// Trailing inset minus leading inset.
-    @State private var imbalance: CGFloat = 0
 
+    /// Measured in the same pass as the layout, not stored after it: a
+    /// stored inset starts at zero, so the view would first appear off
+    /// centre and then slide over once the measurement landed.
     func body(content: Content) -> some View {
-        content
-            .padding(.leading, enabled ? max(0, imbalance) : 0)
-            .padding(.trailing, enabled ? max(0, -imbalance) : 0)
-            .background {
-                Color.clear
-                    .ignoresSafeArea()
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading
-                    } action: { newValue in
-                        imbalance = newValue
-                    }
-            }
+        GeometryReader { proxy in
+            let insets = proxy.safeAreaInsets
+            let side = max(insets.leading, insets.trailing)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Disabled, this just restores the safe area it ignores.
+                .padding(.leading, enabled ? side : insets.leading)
+                .padding(.trailing, enabled ? side : insets.trailing)
+        }
+        // Only the side insets: the keyboard and bars still push it as before.
+        .ignoresSafeArea(.container, edges: .horizontal)
     }
 }
