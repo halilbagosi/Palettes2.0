@@ -23,6 +23,9 @@ final class OnboardingInterimFlow: ObservableObject {
     @Published private(set) var genState = GenState.generating
     @Published private(set) var genColors: [Color] = []
     @Published var isSaving = false
+    /// The palette is being taken from the photo (no Apple Intelligence)
+    /// rather than generated around a picked color.
+    @Published private(set) var isFromPhoto = false
 
     private var sampler: ImageColorExtractor.PixelSampler?
     /// A color chosen in the full-screen picker, applied when the adjust step begins.
@@ -85,18 +88,50 @@ final class OnboardingInterimFlow: ObservableObject {
 
     // MARK: Generate
 
+    /// Starts again the same way the last attempt started (Try again).
+    func restart(appData: AppData, reduceMotion: Bool) {
+        if isFromPhoto {
+            startFromPhoto(appData: appData, reduceMotion: reduceMotion)
+        } else {
+            startGeneration(appData: appData, reduceMotion: reduceMotion)
+        }
+    }
+
     func startGeneration(appData: AppData, reduceMotion: Bool) {
         guard let hex = model.selectedHex else { return }
-        genTask?.cancel()
+        isFromPhoto = false
         genColors = [adjustedColor]
+        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors in
+            try await OnboardingPaletteMaker.make(
+                anchorHex: hex, existingNames: names, revealDelay: delay, onColors: onColors)
+        }
+    }
+
+    /// Without Apple Intelligence: the palette comes straight from the
+    /// photo's colors, with no color picking or adjusting first.
+    func startFromPhoto(appData: AppData, reduceMotion: Bool) {
+        guard let image = model.capturedImage else { return }
+        isFromPhoto = true
+        genColors = []
+        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors in
+            try await OnboardingPaletteMaker.fromPhoto(
+                image, existingNames: names, revealDelay: delay, onColors: onColors)
+        }
+    }
+
+    private func run(
+        appData: AppData,
+        reduceMotion: Bool,
+        make: @escaping (_ names: [String], _ delay: Duration,
+                         _ onColors: @escaping @MainActor ([Color]) -> Void) async throws -> OnboardingPaletteMaker.Made
+    ) {
+        genTask?.cancel()
         withAnimation(.easeInOut(duration: 0.3)) { genState = .generating }
         let names = appData.palettes.map(\.name)
         let delay: Duration = reduceMotion ? .zero : .milliseconds(650)
         genTask = Task {
             do {
-                let made = try await OnboardingPaletteMaker.make(
-                    anchorHex: hex, existingNames: names, revealDelay: delay
-                ) { colors in self.genColors = colors }
+                let made = try await make(names, delay) { colors in self.genColors = colors }
                 guard !Task.isCancelled else { return }
                 genColors = made.palette.colors
                 withAnimation(.easeInOut(duration: 0.4)) { genState = .ready(made) }
@@ -219,8 +254,10 @@ private struct GenerateInterimBody: View {
                         .transition(.blurFade)
                 } else {
                     OnboardingStepText(
-                        title: "Mixing your palette",
-                        subtitle: "Finding colors that go beautifully with yours."
+                        title: flow.isFromPhoto ? "Pulling out your colors" : "Mixing your palette",
+                        subtitle: flow.isFromPhoto
+                            ? "Finding the colors that stand out in your photo."
+                            : "Finding colors that go beautifully with yours."
                     )
                     .transition(.blurFade)
                 }

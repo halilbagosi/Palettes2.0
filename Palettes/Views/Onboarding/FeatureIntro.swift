@@ -27,6 +27,15 @@ enum FeatureIntro: String, CaseIterable {
         }
     }
 
+    /// The tab this intro belongs to; it only ever shows while that tab is on screen.
+    var tab: TabValue {
+        switch self {
+        case .colors: .colors
+        case .search: .search
+        case .generate: .generate
+        }
+    }
+
     var symbol: String {
         switch self {
         case .colors: "circle.grid.cross.fill"
@@ -104,6 +113,7 @@ private struct FeatureIntroModifier: ViewModifier {
 
     @AppStorage private var didShow: Bool
     @AppStorage(OnboardingKeys.didComplete) private var onboardingDone = false
+    @EnvironmentObject private var appData: AppData
     @State private var showSheet = false
     @State private var task: Task<Void, Never>?
 
@@ -122,17 +132,27 @@ private struct FeatureIntroModifier: ViewModifier {
             }
             .onAppear { arm() }
             .onChange(of: onboardingDone) { _, _ in arm() }
+            // Tabs stay alive off screen (and some load before they're opened):
+            // each intro waits for its own tab to be the one showing.
+            .onChange(of: appData.activeTab) { _, _ in arm() }
             .onDisappear { task?.cancel() }
     }
 
+    private var isEligible: Bool {
+        onboardingDone && !didShow && appData.activeTab == intro.tab
+    }
+
     private func arm() {
-        // Not over the main onboarding, and only once.
-        guard onboardingDone, !didShow, !showSheet else { return }
         task?.cancel()
+        // A request that never got on screen (another sheet was up) must not
+        // stay pending and block a later try.
+        if showSheet, !didShow, appData.activeTab != intro.tab { showSheet = false }
+        // Not over the main onboarding, only on its own tab, and only once.
+        guard isEligible, !showSheet else { return }
         task = Task {
             // Let the tab settle in first.
             try? await Task.sleep(for: .milliseconds(450))
-            guard !Task.isCancelled, onboardingDone, !didShow else { return }
+            guard !Task.isCancelled, isEligible else { return }
             showSheet = true
         }
     }

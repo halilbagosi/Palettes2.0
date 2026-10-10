@@ -11,7 +11,20 @@ import SwiftUI
 import PhotosUI
 
 extension OnboardingCameraFlow {
-    func stepContent(reduceMotion: Bool, chooseColor: @escaping () -> Void) -> OnboardingStepContent {
+    /// `makePalette` is set without Apple Intelligence: the frozen photo then
+    /// becomes the palette as is, with no color to pick.
+    func stepContent(reduceMotion: Bool, chooseColor: @escaping () -> Void,
+                     makePalette: (() -> Void)? = nil) -> OnboardingStepContent {
+        if model.isPhotoFrozen, let makePalette {
+            return OnboardingStepContent(
+                key: "picked-photo",
+                eyebrow: .init(title: "Got it", systemImage: "camera.aperture"),
+                title: "Turn it into a palette",
+                subtitle: "We\u{2019}ll pull the colors that stand out right out of this photo.",
+                primary: .init(title: "Make my palette", systemImage: "swatchpalette", action: makePalette),
+                secondary: .button("Retake") { [self] in retake() }
+            )
+        }
         if model.isPhotoFrozen {
             return OnboardingStepContent(
                 key: "picked",
@@ -27,7 +40,9 @@ extension OnboardingCameraFlow {
                 key: "still",
                 eyebrow: .init(title: "Look around", systemImage: "photo"),
                 title: "Find a color you love",
-                subtitle: pickedImage == nil ? fallbackMessage : "Use this photo to pick a color.",
+                subtitle: pickedImage == nil
+                    ? fallbackMessage
+                    : (makePalette == nil ? "Use this photo to pick a color." : "Use this photo to make a palette."),
                 body: model.cameraAccess == .denied ? AnyView(OpenSettingsLink()) : nil,
                 primary: .init(title: "Use this photo", isEnabled: !isScanning) { [self] in scan(reduceMotion: reduceMotion) },
                 secondary: photoPicker

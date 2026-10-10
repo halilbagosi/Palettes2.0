@@ -148,6 +148,40 @@ final class OnboardingAdjustTests: XCTestCase {
         appData.addPaletteColorsToLibrary(palette.paletteColors, isGenerated: true)
         XCTAssertEqual(appData.colors.count, before + palette.hexCodes.count - 1)
     }
+
+    func testGeneratedSaveTagsPaletteAndAllButThePickedColor() throws {
+        let appData = AppData(inMemory: true)
+        let anchor = "#3A6EA5"
+        let palette = try OnboardingPaletteMaker.deterministicPalette(anchorHex: anchor, seed: 3)
+
+        OnboardingPaletteSaver.save(palette, anchorHex: anchor, appData: appData, model: OnboardingModel())
+
+        XCTAssertEqual(appData.palettes.first?.isGenerated, true)
+        XCTAssertEqual(appData.colors.count, palette.hexCodes.count)
+        for color in appData.colors {
+            let isAnchor = color.HEX.caseInsensitiveCompare(anchor) == .orderedSame
+            XCTAssertEqual(color.isGenerated, !isAnchor, color.HEX)
+        }
+    }
+
+    func testPhotoPaletteIsAlignedAndUntagged() throws {
+        let palette = try OnboardingPaletteMaker.photoPalette(hexes: ["#c86432", "3A6EA5", "#F2E8D5"])
+        XCTAssertEqual(palette.hexCodes, ["#C86432", "#3A6EA5", "#F2E8D5"])
+        XCTAssertEqual(palette.colors.count, 3)
+        XCTAssertEqual(palette.colorNames.count, 3)
+        XCTAssertFalse(palette.isGenerated)
+        XCTAssertThrowsError(try OnboardingPaletteMaker.photoPalette(hexes: ["#C86432"]))
+    }
+
+    func testSkipToGenerateOnlyFromCamera() {
+        let model = OnboardingModel(startingAt: .camera)
+        model.skipToGenerate()
+        XCTAssertEqual(model.step, .generate)
+
+        let early = OnboardingModel(startingAt: .orb)
+        early.skipToGenerate()
+        XCTAssertEqual(early.step, .orb)
+    }
 }
 
 final class OnboardingCoachMarkLogicTests: XCTestCase {

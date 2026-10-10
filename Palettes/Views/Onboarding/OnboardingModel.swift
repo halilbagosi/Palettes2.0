@@ -160,6 +160,14 @@ final class OnboardingModel: ObservableObject {
         step = next
     }
 
+    /// Without Apple Intelligence the photo becomes the palette directly:
+    /// from the camera step straight to the last step, past picking and
+    /// adjusting a color.
+    func skipToGenerate() {
+        guard !isFinished, step == .camera else { return }
+        step = .generate
+    }
+
     func skip() {
         finish(.skipped)
     }

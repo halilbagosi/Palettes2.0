@@ -263,7 +263,9 @@ struct OnboardingView: View {
         switch model.step {
         case .pull: "Orb at the top of the screen"
         case .orb: "Color orb"
-        case .camera: model.isPhotoFrozen ? "Photo. Tap to choose a color." : "Camera preview orb"
+        case .camera: model.isPhotoFrozen
+            ? (Self.picksColor ? "Photo. Tap to choose a color." : "Photo")
+            : "Camera preview orb"
         case .adjust: "Picked color orb. Tap to pick again."
         case .generate: "Palette orb"
         }
@@ -272,7 +274,10 @@ struct OnboardingView: View {
     /// The picked photo and the picked color open the color picker.
     private var windowTap: ((CGPoint) -> Void)? {
         switch model.step {
-        case .camera where model.isPhotoFrozen, .adjust:
+        case .camera where model.isPhotoFrozen:
+            guard Self.picksColor else { return nil }
+            return { _ in chooseColor() }
+        case .adjust:
             return { _ in chooseColor() }
         default:
             return nil
@@ -284,6 +289,15 @@ struct OnboardingView: View {
     /// Opens the frozen photo full screen with the color picker.
     private func chooseColor() {
         withAnimation(.easeInOut(duration: 0.35)) { showsPhotoPicker = true }
+    }
+
+    /// With Apple Intelligence the user picks a color and a palette is
+    /// generated around it. Without it, the photo's colors are the palette.
+    private static var picksColor: Bool { OnboardingPaletteMaker.usesAI }
+
+    private func makeFromPhoto() {
+        withAnimation(.easeInOut(duration: 0.4)) { model.skipToGenerate() }
+        interim.startFromPhoto(appData: appData, reduceMotion: reduceMotion)
     }
 
     private func generate() {
@@ -312,17 +326,20 @@ struct OnboardingView: View {
                 primary: .init(title: "Let\u{2019}s go") { withAnimation(.easeInOut(duration: 0.4)) { model.advance() } }
             )
         case .camera:
-            return flow.stepContent(reduceMotion: reduceMotion, chooseColor: chooseColor)
+            let makePalette: (() -> Void)? = Self.picksColor ? nil : { makeFromPhoto() }
+            return flow.stepContent(reduceMotion: reduceMotion, chooseColor: chooseColor,
+                                    makePalette: makePalette)
         case .adjust:
             return interim.adjustContent(onGenerate: generate, onRepick: chooseColor)
         case .generate:
             return interim.generateContent(
                 appData: appData,
-                retry: { interim.startGeneration(appData: appData, reduceMotion: reduceMotion) },
+                retry: { interim.restart(appData: appData, reduceMotion: reduceMotion) },
                 open: { made in
                     guard !interim.isSaving else { return }
                     interim.isSaving = true
-                    OnboardingPaletteSaver.save(made.palette, appData: appData, model: model)
+                    OnboardingPaletteSaver.save(made.palette, anchorHex: made.anchorHex,
+                                                appData: appData, model: model)
                 },
                 skip: { model.skip() }
             )

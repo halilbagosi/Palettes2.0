@@ -2,10 +2,11 @@
 //  OnboardingGeneration.swift
 //  Palettes
 //
-//  Builds and saves the onboarding palette. The AI path (iOS 26 with Apple
-//  Intelligence available on a real device) reuses `PaletteGenerator`; every
-//  other configuration, including the Simulator, builds deterministically
-//  with `PaletteBuilder` and never touches FoundationModels.
+//  Builds and saves the onboarding palette. With Apple Intelligence (iOS 26
+//  on a real, eligible device) onboarding generates around the picked color
+//  with `PaletteGenerator`. Without it there is no generation step at all:
+//  `fromPhoto` takes the palette straight from the photo's own colors.
+//  `deterministicPalette` remains for the debug start at the adjust step.
 //
 
 import SwiftUI
@@ -20,6 +21,9 @@ enum OnboardingPaletteMaker {
         /// True only when Apple Intelligence named the palette; drives the
         /// gradient-filled name and the `isGenerated` badge.
         let usedAI: Bool
+        /// The color the user picked, which the rest was generated around;
+        /// nil when the palette was taken from a photo (nothing generated).
+        var anchorHex: String? = nil
     }
 
     @available(iOS 26.0, *)
@@ -57,7 +61,7 @@ enum OnboardingPaletteMaker {
             )
             var generated = palette
             generated.isGenerated = true
-            return Made(palette: generated, usedAI: true)
+            return Made(palette: generated, usedAI: true, anchorHex: anchorHex)
         }
 
         let palette = try deterministicPalette(anchorHex: anchorHex, size: size, existingNames: existingNames)
@@ -70,7 +74,47 @@ enum OnboardingPaletteMaker {
         } else {
             onColors(colors)
         }
-        return Made(palette: palette, usedAI: false)
+        return Made(palette: palette, usedAI: false, anchorHex: anchorHex)
+    }
+
+    /// Without Apple Intelligence: the photo's most salient colors become the
+    /// palette, revealed one by one like a generation. Nothing is generated,
+    /// so the palette and its colors stay untagged.
+    static func fromPhoto(
+        _ image: UIImage,
+        size: Int = paletteSize,
+        existingNames: [String],
+        revealDelay: Duration = .zero,
+        onColors: @escaping @MainActor ([Color]) -> Void
+    ) async throws -> Made {
+        // The photo is already downscaled and the extractor samples 160 px,
+        // so this is quick enough on the main actor (as in ColorInputView).
+        let extracted = try ImageColorExtractor.extractColors(from: image, count: size)
+        try Task.checkCancellation()
+        let palette = try photoPalette(hexes: extracted.map(\.hex), existingNames: existingNames)
+        let colors = palette.colors
+        if revealDelay > .zero {
+            for count in 1...colors.count {
+                try await Task.sleep(for: revealDelay)
+                onColors(Array(colors.prefix(count)))
+            }
+        } else {
+            onColors(colors)
+        }
+        return Made(palette: palette, usedAI: false, anchorHex: nil)
+    }
+
+    /// Colors, hexes and names built together so they stay index-aligned.
+    static func photoPalette(hexes raw: [String], existingNames: [String] = []) throws -> PaletteViewModel {
+        let hexes = raw.map { $0.hasPrefix("#") ? $0.uppercased() : "#" + $0.uppercased() }
+        let colors = hexes.compactMap { Color(hex: String($0.dropFirst())) }
+        guard colors.count == hexes.count, colors.count >= 2 else { throw AppError.colorExtractionFailed }
+        return PaletteViewModel(
+            name: PaletteNamer.resolvedName(aiName: nil, hexes: hexes, existingNames: existingNames),
+            colors: colors,
+            hexCodes: hexes,
+            colorNames: ColorNamer.uniqueNames(forHexes: hexes)
+        )
     }
 
     /// The anchor ships verbatim as the first color; colors, hexes, names and
@@ -106,17 +150,27 @@ enum OnboardingPaletteSaver {
     /// Creates the palette through `AppData` and reports completion with the
     /// saved palette's id. Returns that id, or nil when onboarding already
     /// finished (a double tap), so a palette is never saved twice.
+    ///
+    /// With `anchorHex` (the palette was generated around a picked color) the
+    /// palette is tagged Generated, and so is every color except the picked
+    /// one, which the user chose themselves.
     @MainActor
     @discardableResult
-    static func save(_ palette: PaletteViewModel, appData: AppData, model: OnboardingModel) -> UUID? {
+    static func save(_ palette: PaletteViewModel, anchorHex: String? = nil,
+                     appData: AppData, model: OnboardingModel) -> UUID? {
         guard !model.isFinished else { return nil }
+        let generated = anchorHex != nil || palette.isGenerated
         let trimmed = palette.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let saved = appData.addPalette(
             name: trimmed.isEmpty ? "My First Palette" : trimmed,
             paletteColors: palette.paletteColors,
-            isGenerated: palette.isGenerated
+            isGenerated: generated
         )
-        appData.addPaletteColorsToLibrary(palette.paletteColors, isGenerated: palette.isGenerated)
+        let isAnchor: (PaletteColor) -> Bool = { color in
+            anchorHex.map { color.hex.caseInsensitiveCompare($0) == .orderedSame } ?? false
+        }
+        appData.addPaletteColorsToLibrary(palette.paletteColors.filter(isAnchor), isGenerated: false)
+        appData.addPaletteColorsToLibrary(palette.paletteColors.filter { !isAnchor($0) }, isGenerated: generated)
         model.finish(.completed(paletteID: saved.id))
         return saved.id
     }
