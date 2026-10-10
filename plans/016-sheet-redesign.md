@@ -61,8 +61,11 @@ Revision 1 restyled the sheets but kept their structure.
   - **Sample a Photo** / **Take Photo**, which open the photo sampler seeded
     with the photo's main color. Tap the exact spot, then Use.
 - **Form below it:**
-  - **Adjust:** hue, saturation and brightness gradient sliders, plus a
-    "Spectrum & Eyedropper" row using the system `ColorPicker`.
+  - **Color:** a "Spectrum & Eyedropper" row using the system `ColorPicker`.
+  - **Adjustments:** the original Temperature / Saturation / Brightness
+    sliders (`AdjustmentSlider`, 0.5 is neutral). They tune the color after
+    it's picked, for example from a photo, and recenter whenever the color
+    changes some other way.
   - **Values:** HEX and RGB.
 - **Background:** the color-wash backdrop from the color detail page.
 - **Naming:** for a new color, the name follows the color until the user
@@ -100,15 +103,22 @@ Revision 1 restyled the sheets but kept their structure.
 
 ### Removed
 - `ColorInputView`, `InteractiveColorPicker`, `EditableValuesView`,
-  `PaletteBandCard`, `HSBSlidersCard`, `SwatchHero`, `ColorNameField`,
-  `SheetSectionHeader`.
-- Edit Color's Temperature slider. The sliders, the system spectrum and photo
-  sampling cover the same ground.
+  `PaletteBandCard`, `HSBSlidersCard`, `GradientSlider`, `SwatchHero`,
+  `ColorNameField`, `SheetSectionHeader`.
+
+### Build fix
+- `SubscriptionStatus.swift` now imports `Combine`. The target has
+  `SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES`, so `@Published`
+  and `ObservableObject` need it.
+- Without the import, Xcode reported the error under every file in the same
+  compile batch.
+- New files must import every module whose members they use.
 
 ## Verification (pending an Xcode machine)
 - [ ] Build: zero new warnings.
 - [ ] New Color:
-  - The sliders, HEX, RGB and the Spectrum row stay in sync.
+  - The Spectrum row, the Adjustments sliders, HEX and RGB stay in sync.
+  - The sliders recenter after a new pick.
   - The header shrinks while editing values, and Done dismisses the number
     pad.
   - Pasting `#ff5d00` into HEX works.

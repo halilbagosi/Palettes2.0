@@ -71,6 +71,10 @@ struct LibraryColorPicker: View {
         }
     }
 
+    private var addTitle: String {
+        selection.isEmpty ? "Add" : "Add \(selection.count)"
+    }
+
     var body: some View {
         List {
             if let onNewColor, search.isEmpty {
@@ -107,7 +111,7 @@ struct LibraryColorPicker: View {
         .sensoryFeedback(.selection, trigger: selection)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button(selection.isEmpty ? "Add" : "Add \(selection.count)") { add() }
+                Button(addTitle) { add() }
                     .fontWeight(.semibold)
                     .disabled(selection.isEmpty)
             }

@@ -9,9 +9,10 @@ import PhotosUI
 /// The one color editor, shared by New Color, Edit Color and adding a color to
 /// a palette. The color and its name stay pinned at the top while you work, so
 /// every change is visible as you make it. Below, in a standard grouped list,
-/// are the ways to change it: hue, saturation and brightness sliders, the
-/// system spectrum and eyedropper, and HEX and RGB values. Sample a Photo and
-/// Take Photo open the photo sampler to pick an exact spot.
+/// are the ways to change it: the system color picker (spectrum, grid and
+/// eyedropper), the Temperature / Saturation / Brightness sliders for tuning a
+/// picked color, and HEX and RGB values. Sample a Photo and Take Photo open
+/// the photo sampler to pick an exact spot, then the sliders fine-tune it.
 ///
 /// Hosts own `color` and `name` and supply the navigation title and toolbar.
 struct ColorComposer: View {
@@ -30,9 +31,14 @@ struct ColorComposer: View {
     }
     @FocusState private var focusedField: Field?
 
-    @State private var hue: Double = 0
-    @State private var saturation: Double = 0
-    @State private var brightness: Double = 0
+    // Tuning sliders: offsets from `base*` (0…1, 0.5 neutral). Any other
+    // change makes the new color the base and centers them again.
+    @State private var temperatureValue: Double = 0.5
+    @State private var saturationValue: Double = 0.5
+    @State private var brightnessValue: Double = 0.5
+    @State private var baseR: Double = 128
+    @State private var baseG: Double = 128
+    @State private var baseB: Double = 128
     @State private var hexText = ""
     @State private var redText = ""
     @State private var greenText = ""
@@ -58,15 +64,11 @@ struct ColorComposer: View {
     }
 
     private enum Origin {
-        case sliders, hex, rgb, outside
+        case adjustments, hex, rgb, outside
     }
 
     // isSourceTypeAvailable(.camera) probes capture hardware and is slow.
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
-
-    private static let spectrum: [Color] = stride(from: 0.0, through: 1.0, by: 1.0 / 12).map {
-        Color(hue: $0, saturation: 0.9, brightness: 1)
-    }
 
     /// While a value field has the keyboard, the header shrinks and its photo
     /// buttons step aside so the fields stay in view.
@@ -80,6 +82,7 @@ struct ColorComposer: View {
             header
 
             Form {
+                pickerSection
                 adjustSection
                 valuesSection
             }
@@ -220,38 +223,8 @@ struct ColorComposer: View {
 
     // MARK: - Sections
 
-    private var adjustSection: some View {
+    private var pickerSection: some View {
         Section {
-            GradientSlider(
-                title: "Hue",
-                valueLabel: "\(Int(round(hue * 360)))°",
-                gradient: Self.spectrum,
-                thumbColor: color,
-                value: sliderBinding($hue)
-            )
-            .padding(.vertical, 4)
-
-            GradientSlider(
-                title: "Saturation",
-                valueLabel: "\(Int(round(saturation * 100)))%",
-                gradient: [
-                    Color(hue: hue, saturation: 0, brightness: max(brightness, 0.3)),
-                    Color(hue: hue, saturation: 1, brightness: max(brightness, 0.3))
-                ],
-                thumbColor: color,
-                value: sliderBinding($saturation)
-            )
-            .padding(.vertical, 4)
-
-            GradientSlider(
-                title: "Brightness",
-                valueLabel: "\(Int(round(brightness * 100)))%",
-                gradient: [.black, Color(hue: hue, saturation: saturation, brightness: 1)],
-                thumbColor: color,
-                value: sliderBinding($brightness)
-            )
-            .padding(.vertical, 4)
-
             ColorPicker(
                 selection: Binding(get: { color }, set: { apply($0, from: .outside) }),
                 supportsOpacity: false
@@ -259,7 +232,42 @@ struct ColorComposer: View {
                 Label("Spectrum & Eyedropper", systemImage: "eyedropper")
             }
         } header: {
-            Text("Adjust")
+            Text("Color")
+        }
+    }
+
+    private var adjustSection: some View {
+        Section {
+            AdjustmentSlider(
+                title: "Temperature",
+                valueLabel: ColorAdjustment.offsetLabel(temperatureValue, positive: "warm", negative: "cool"),
+                leftLabel: "Cool",
+                rightLabel: "Warm",
+                value: adjustmentBinding($temperatureValue)
+            )
+            .padding(.vertical, 4)
+
+            AdjustmentSlider(
+                title: "Saturation",
+                valueLabel: ColorAdjustment.offsetLabel(saturationValue),
+                leftLabel: "Muted",
+                rightLabel: "Vivid",
+                value: adjustmentBinding($saturationValue)
+            )
+            .padding(.vertical, 4)
+
+            AdjustmentSlider(
+                title: "Brightness",
+                valueLabel: ColorAdjustment.offsetLabel(brightnessValue),
+                leftLabel: "Dark",
+                rightLabel: "Light",
+                value: adjustmentBinding($brightnessValue)
+            )
+            .padding(.vertical, 4)
+        } header: {
+            Text("Adjustments")
+        } footer: {
+            Text("Tune the color after picking it, for example from a photo.")
         }
     }
 
@@ -325,12 +333,19 @@ struct ColorComposer: View {
         )
     }
 
-    private func sliderBinding(_ component: Binding<Double>) -> Binding<Double> {
+    /// Moves a tuning slider and applies all three offsets to the base color.
+    private func adjustmentBinding(_ value: Binding<Double>) -> Binding<Double> {
         Binding(
-            get: { component.wrappedValue },
+            get: { value.wrappedValue },
             set: { newValue in
-                component.wrappedValue = newValue
-                apply(Color(hue: hue, saturation: saturation, brightness: brightness), from: .sliders)
+                value.wrappedValue = newValue
+                let c = ColorAdjustment.apply(
+                    baseR: baseR, baseG: baseG, baseB: baseB,
+                    temperature: temperatureValue,
+                    saturation: saturationValue,
+                    brightness: brightnessValue
+                )
+                apply(ColorAdjustment.color(r: c.r, g: c.g, b: c.b), from: .adjustments)
             }
         )
     }
@@ -377,7 +392,7 @@ struct ColorComposer: View {
             greenText = "\(rgb.g)"
             blueText = "\(rgb.b)"
         }
-        if origin != .sliders { syncSliders(from: newColor) }
+        if origin != .adjustments { resetAdjustments(to: rgb) }
 
         color = newColor
 
@@ -386,15 +401,14 @@ struct ColorComposer: View {
         }
     }
 
-    private func syncSliders(from color: Color) {
-        let hsb = color.hsbComponents
-        // Hue is undefined for grays and saturation for black: keep the old
-        // values there so the thumbs don't jump to zero.
-        if hsb.b > 0.001 {
-            if hsb.s > 0.001 { hue = hsb.h }
-            saturation = hsb.s
-        }
-        brightness = hsb.b
+    /// Makes the color the sliders tune from, with every slider centered.
+    private func resetAdjustments(to rgb: (r: Int, g: Int, b: Int)) {
+        baseR = Double(rgb.r)
+        baseG = Double(rgb.g)
+        baseB = Double(rgb.b)
+        temperatureValue = 0.5
+        saturationValue = 0.5
+        brightnessValue = 0.5
     }
 
     /// Leaving a half-typed value puts back the color's real one.

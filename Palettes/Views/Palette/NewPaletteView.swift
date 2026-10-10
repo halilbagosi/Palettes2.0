@@ -54,6 +54,10 @@ struct NewPaletteView: View {
         Set(draft.map { $0.hex.uppercased() })
     }
 
+    private var colorsHeader: String {
+        draft.count == 1 ? "1 Color" : "\(draft.count) Colors"
+    }
+
     private var nameHint: String {
         suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
     }
@@ -201,7 +205,7 @@ struct NewPaletteView: View {
                 draft.move(fromOffsets: offsets, toOffset: destination)
             }
         } header: {
-            Text(draft.count == 1 ? "1 Color" : "\(draft.count) Colors")
+            Text(colorsHeader)
         } footer: {
             Text("Tap a color to edit it. Touch and hold to reorder, or swipe left to remove.")
         }
@@ -257,9 +261,9 @@ struct NewPaletteView: View {
                 append([entry])
             }
         case .library:
-            LibraryColorPicker(excludedHexes: draftHexes) { picked in
+            LibraryColorPicker(excludedHexes: draftHexes, onAdd: { picked in
                 append(picked.map { PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name) })
-            }
+            })
         case .edit(let id):
             // Edits apply live; Back is all it takes.
             ColorComposer(color: colorBinding(for: id), name: nameBinding(for: id))
