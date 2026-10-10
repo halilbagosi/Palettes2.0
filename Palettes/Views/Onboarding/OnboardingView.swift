@@ -96,7 +96,9 @@ struct OnboardingView: View {
                 topInset: insets.top,
                 island: .make(topInset: insets.top, screenSize: full),
                 compact: dynamicTypeSize.isAccessibilitySize || full.height < 700,
-                roomy: model.step == .adjust
+                // The generate step's name and swatches need the room too; the
+                // orb stays where adjust left it.
+                roomy: model.step == .adjust || model.step == .generate
             )
             // Reduce Motion, landscape and island-less phones fade the orb in at rest.
             let travels = layout.island.hasMorph && !reduceMotion
@@ -374,7 +376,8 @@ struct OnboardingView: View {
                 if let body = content.body { body }
             }
             .frame(maxWidth: .infinity, minHeight: 124, alignment: .top)
-            .padding(.bottom, 16)
+            // Clear air above the pinned buttons, even when the content scrolls.
+            .padding(.bottom, 28)
             .id(content.key)
             .transition(.blurFade)
         }
@@ -388,9 +391,11 @@ struct OnboardingView: View {
                 if let primary = content.primary {
                     OnboardingPrimaryButton(title: primary.title, systemImage: primary.systemImage,
                                             isEnabled: primary.isEnabled, action: primary.action)
+                        .transition(BlurFade(radius: 8, rise: 10))
                 }
             }
             .frame(height: 54)
+            .animation(.easeInOut(duration: 0.45), value: content.primary == nil)
             ZStack {
                 if let secondary = content.secondary {
                     secondary.view

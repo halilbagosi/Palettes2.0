@@ -134,22 +134,17 @@ extension OnboardingInterimFlow {
     ) -> OnboardingStepContent {
         switch genState {
         case .generating:
+            // Waiting and ready share one key and one body, so the swatch row
+            // stays put and only the words change when the palette lands.
             return OnboardingStepContent(
-                key: "gen-wait",
-                eyebrow: .init(title: "Generating", systemImage: "sparkles"),
-                title: "Mixing your palette",
-                subtitle: "Finding colors that go beautifully with yours.",
-                body: AnyView(GenerationSwatchRow(colors: genColors, expected: OnboardingPaletteMaker.paletteSize)
-                    .frame(maxWidth: 360)),
+                key: "gen",
+                body: AnyView(GenerateInterimBody(flow: self)),
                 primary: nil
             )
         case .ready(let made):
             return OnboardingStepContent(
-                key: "gen-ready",
-                eyebrow: .init(title: "Your first palette", systemImage: "checkmark.seal.fill"),
-                title: nil,
-                subtitle: nil,
-                body: AnyView(ReadyInterimBody(made: made)),
+                key: "gen",
+                body: AnyView(GenerateInterimBody(flow: self)),
                 primary: .init(title: "See my palette", systemImage: "arrow.right", isEnabled: !isSaving) { open(made) }
             )
         case .failed:
@@ -199,17 +194,53 @@ private struct AdjustInterimBody: View {
     }
 }
 
-private struct ReadyInterimBody: View {
-    let made: OnboardingPaletteMaker.Made
+/// The generate step, waiting and ready. The eyebrow and the words above the
+/// swatches cross-fade ("Mixing your palette" becomes the palette's name)
+/// in a slot of fixed height, while the row below keeps filling in place.
+private struct GenerateInterimBody: View {
+    @ObservedObject var flow: OnboardingInterimFlow
+
+    private var made: OnboardingPaletteMaker.Made? {
+        if case .ready(let made) = flow.genState { return made }
+        return nil
+    }
 
     var body: some View {
-        VStack(spacing: 20) {
-            OnboardingPaletteName(name: made.palette.name, usesGradient: made.usedAI)
-            GenerationSwatchRow(colors: made.palette.colors, expected: made.palette.colors.count)
+        let made = self.made
+        VStack(spacing: 24) {
+            VStack(spacing: 14) {
+                ZStack {
+                    if made != nil {
+                        OnboardingEyebrow(title: "Your first palette", systemImage: "checkmark.seal.fill")
+                            .transition(.blurBridge)
+                    } else {
+                        OnboardingEyebrow(title: "Generating", systemImage: "sparkles")
+                            .transition(.blurBridge)
+                    }
+                }
+                ZStack {
+                    if let made {
+                        OnboardingPaletteName(name: made.palette.name, usesGradient: made.usedAI)
+                            .transition(.blurFade)
+                    } else {
+                        OnboardingStepText(
+                            title: "Mixing your palette",
+                            subtitle: "Finding colors that go beautifully with yours."
+                        )
+                        .transition(.blurFade)
+                    }
+                }
+                // As tall as the waiting copy, so the row doesn't jump when
+                // a shorter name replaces it.
+                .frame(minHeight: 92)
+            }
+            GenerationSwatchRow(colors: made?.palette.colors ?? flow.genColors,
+                                expected: made?.palette.colors.count ?? OnboardingPaletteMaker.paletteSize)
                 .frame(maxWidth: 360)
                 .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Palette colors")
-            .accessibilityValue(made.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; "))
+                .accessibilityLabel("Palette colors")
+                .accessibilityValue(made.map { $0.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; ") } ?? "")
         }
+        .animation(.easeInOut(duration: 0.5), value: made != nil)
     }
 }
