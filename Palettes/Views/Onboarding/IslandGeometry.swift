@@ -56,16 +56,29 @@ nonisolated struct IslandGeometry: Equatable {
     static func make(topInset: CGFloat, screenSize: CGSize) -> IslandGeometry {
         if screenSize.height > screenSize.width,
            centeredCutoutSizes.contains(Size(screenSize.width, screenSize.height)) {
+            // The cutout's bottom edge sits a fixed distance above the safe
+            // area on each kind of hardware, so it's placed from the inset:
+            // the neck must leave from exactly that edge to read as one black
+            // shape with the real cutout.
             if topInset >= 59 {
                 if hasCompactIsland {
-                    return IslandGeometry(kind: .dynamicIsland, width: 84, height: 34, top: 13)
+                    // iPhone 18 Pro: 84 x 34, its bottom 15 pt above the safe area.
+                    let height: CGFloat = 34
+                    return IslandGeometry(kind: .dynamicIsland, width: 84, height: height,
+                                          top: topInset - 15 - height)
                 }
-                return IslandGeometry(kind: .dynamicIsland, width: 125, height: 37, top: topInset >= 62 ? 14 : 11)
+                // 125 x 37, its bottom 11 pt above the safe area (top 14 at a
+                // 62 pt inset, 11 at 59).
+                let height: CGFloat = 37
+                return IslandGeometry(kind: .dynamicIsland, width: 125, height: height,
+                                      top: topInset - 11 - height)
             }
             if topInset >= 44 {
-                return IslandGeometry(kind: .notch, width: 160, height: 31, top: 0)
+                // The notch runs from the top edge to 14 pt above the safe area
+                // (30 pt deep at a 44 pt inset, 33 at 47).
+                let height = min(max(topInset - 14, 28), 36)
+                return IslandGeometry(kind: .notch, width: 160, height: height, top: 0)
             }
-        }
         return .bezel
     }
 
