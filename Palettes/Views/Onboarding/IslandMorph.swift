@@ -414,42 +414,47 @@ struct IslandGooCanvas: View {
     /// Room above the screen so the blur and the notch overhang are not cut off.
     private static let topMargin: CGFloat = 60
 
-    /// The neck's fillet radius where it meets the island at full width. It
-    /// shrinks with the neck as it thins, and on a small island it's capped so
-    /// the flare stays under the island's flat bottom (give or take a point of
-    /// its curve, which the junction's tuck hides).
+    /// The neck's fillet radius where it meets the island at full width; it
+    /// shrinks with the neck as it thins.
     static let maxFilletRadius: CGFloat = 14
 
-    static func filletRadius(island: IslandGeometry, rodWidth: CGFloat) -> CGFloat {
-        let scaled = maxFilletRadius * min(1, rodWidth / IslandMorphController.neckWidth)
-        guard island.kind == .dynamicIsland else { return scaled }
-        let drawnWidth = island.width - 2 * IslandGeometry.drawInset
-        let room = (drawnWidth - rodWidth) / 2 - 6
-        return max(0, min(scaled, room))
+    static func filletRadius(rodWidth: CGFloat) -> CGFloat {
+        maxFilletRadius * min(1, rodWidth / IslandMorphController.neckWidth)
     }
 
-    /// A rod `width` wide from `junction` down to `bottom`, its top corners
-    /// flared out by quarter circles of `radius` so it meets the island's
-    /// bottom edge tangentially, plus a block up to `tuckTop` that fuses it
-    /// into the island.
-    static func filletedNeck(centerX: CGFloat, junction: CGFloat, tuckTop: CGFloat,
-                             bottom: CGFloat, width: CGFloat, radius: CGFloat) -> Path {
-        let left = centerX - width / 2
-        let right = centerX + width / 2
-        let flare = radius + 1
-        var path = Path()
-        path.move(to: CGPoint(x: right + flare, y: junction))
-        path.addArc(tangent1End: CGPoint(x: right, y: junction),
-                    tangent2End: CGPoint(x: right, y: bottom), radius: radius)
-        path.addLine(to: CGPoint(x: right, y: bottom))
-        path.addLine(to: CGPoint(x: left, y: bottom))
-        path.addArc(tangent1End: CGPoint(x: left, y: junction),
-                    tangent2End: CGPoint(x: left - flare, y: junction), radius: radius)
-        path.addLine(to: CGPoint(x: left - flare, y: junction))
-        path.addLine(to: CGPoint(x: left - flare, y: min(tuckTop, junction)))
-        path.addLine(to: CGPoint(x: right + flare, y: min(tuckTop, junction)))
-        path.closeSubpath()
-        return path
+    /// Fills the concave corners between the neck (a rod `rodWidth` wide,
+    /// centred on `centerX`) and the cutout's bottom edge with circles of
+    /// `radius` tangent to both: to the flat bottom, or, where the corner
+    /// reaches past it (a short island's narrow flat), to its rounded end, so
+    /// the outline stays smooth all the way round with no ledge.
+    static func fillCorners(in layer: inout GraphicsContext, bottom: IslandGeometry.BottomEdge,
+                            centerX: CGFloat, rodWidth: CGFloat, radius: CGFloat) {
+        guard radius > 0.5 else { return }
+        let rodHalf = rodWidth / 2
+        let endRadius = bottom.cornerRadius
+        // Fillet centre's distance from the centre line, and how far past the
+        // flat it lies (0 when its tangent point is on the flat bottom).
+        let offset = rodHalf + radius
+        let past = max(0, offset - bottom.flatHalfWidth)
+        let reach = endRadius + radius
+        guard past < reach else { return }
+        let filletY = bottom.cornerCenterY + (reach * reach - past * past).squareRoot()
+        // Where the fillet touches the cutout: on the flat, straight above its
+        // centre; on the rounded end, along the line between the centres.
+        let tangentOffset = past == 0 ? offset : offset - past * radius / reach
+        for side: CGFloat in [-1, 1] {
+            let filletCenter = CGPoint(x: centerX + side * offset, y: filletY)
+            let nearX = centerX + side * rodHalf
+            let farX = centerX + side * tangentOffset
+            let region = CGRect(x: min(nearX, farX), y: bottom.cornerCenterY,
+                                width: abs(farX - nearX), height: filletY - bottom.cornerCenterY)
+            let circle = CGRect(x: filletCenter.x - radius, y: filletCenter.y - radius,
+                                width: radius * 2, height: radius * 2)
+            layer.drawLayer { corner in
+                corner.clip(to: Circle().path(in: circle), options: .inverse)
+                corner.fill(Rectangle().path(in: region), with: .color(.black))
+            }
+        }
     }
 
     var body: some View {
@@ -462,7 +467,7 @@ struct IslandGooCanvas: View {
         // the join reads as one shape with the cutout; a point or two of
         // mismatch with the hardware then shows as more neck, not as grey.
         let solidDepth = island.kind == .bezel
-            ? 0 : Self.filletRadius(island: island, rodWidth: rodWidth) + 4
+            ? 0 : Self.filletRadius(rodWidth: rodWidth) + 4
         let fadeStart = island.drawnBottom + solidDepth
         // Clear by the blob's upper third while the neck holds; as it thins and snaps the
         // fade pulls up to the blob's top so no gray wedge of blob is left on the orb.
@@ -493,20 +498,17 @@ struct IslandGooCanvas: View {
                                              width: rodWidth, height: bottom - top)
                             layer.fill(Rectangle().path(in: rod), with: .color(.black))
                         } else {
-                            // Flared into the island with circular fillets, so the
-                            // neck meets the cutout in round corners on every
-                            // island and notch, rather than the tight, angular
-                            // ones the blur alone would leave.
-                            let bottom = max(frame.center.y, island.drawnBottom + 1)
-                            let path = Self.filletedNeck(
-                                centerX: frame.center.x,
-                                junction: island.drawnBottom - 1,
-                                tuckTop: top,
-                                bottom: bottom,
-                                width: rodWidth,
-                                radius: Self.filletRadius(island: island, rodWidth: rodWidth)
-                            )
-                            layer.fill(path, with: .color(.black))
+                            // A rod tucked into the cutout down to the drop's
+                            // middle, with round corners where it meets the
+                            // cutout's edge.
+                            let bottom = max(frame.center.y, top + 1)
+                            let rod = CGRect(x: frame.center.x - rodWidth / 2, y: top,
+                                             width: rodWidth, height: bottom - top)
+                            layer.fill(Rectangle().path(in: rod), with: .color(.black))
+                            if let edge = island.bottomEdge {
+                                Self.fillCorners(in: &layer, bottom: edge, centerX: frame.center.x,
+                                                 rodWidth: rodWidth, radius: Self.filletRadius(rodWidth: rodWidth))
+                            }
                         }
                     }
                     if island.kind == .bezel {

@@ -61,17 +61,12 @@ nonisolated struct IslandGeometry: Equatable {
             // the neck must leave from exactly that edge to read as one black
             // shape with the real cutout.
             if topInset >= 59 {
-                if hasCompactIsland {
-                    // iPhone 18 Pro: 84 x 34, its bottom 15 pt above the safe area.
-                    let height: CGFloat = 34
-                    return IslandGeometry(kind: .dynamicIsland, width: 84, height: height,
-                                          top: topInset - 15 - height)
-                }
-                // 125 x 37, its bottom 11 pt above the safe area (top 14 at a
-                // 62 pt inset, 11 at 59).
+                // 37 pt tall, its bottom 11 pt above the safe area (top 14 at a
+                // 62 pt inset, 11 at 59). iPhone 18 Pro's is as tall and sits as
+                // high, only narrower: 95 pt rather than 125.
                 let height: CGFloat = 37
-                return IslandGeometry(kind: .dynamicIsland, width: 125, height: height,
-                                      top: topInset - 11 - height)
+                return IslandGeometry(kind: .dynamicIsland, width: hasCompactIsland ? 95 : 125,
+                                      height: height, top: topInset - 11 - height)
             }
             if topInset >= 44 {
                 // The notch runs from the top edge to 14 pt above the safe area
@@ -84,7 +79,7 @@ nonisolated struct IslandGeometry: Equatable {
     }
 
     /// iPhone 18 Pro and Pro Max keep the 17 Pro's screen sizes and insets but
-    /// have a smaller Dynamic Island, so they're told apart by model: the
+    /// have a narrower Dynamic Island, so they're told apart by model: the
     /// iPhone 18 family's identifiers start at iPhone19,x, and later models
     /// are assumed to keep the smaller island.
     static let hasCompactIsland: Bool = {
@@ -125,6 +120,31 @@ nonisolated struct IslandGeometry: Equatable {
 
     /// Height of the visible part of the drawn shape (the notch's overhang excluded).
     var drawnHeight: CGFloat { height - 2 * Self.drawInset }
+
+    /// The drawn shape's bottom edge as a flat run between two rounded ends,
+    /// for joining the neck to it smoothly. Nil for the bezel and none.
+    nonisolated struct BottomEdge {
+        /// Half the flat run's width, from the centre line.
+        var flatHalfWidth: CGFloat
+        /// Radius of the rounded ends, and the y of their centres.
+        var cornerRadius: CGFloat
+        var cornerCenterY: CGFloat
+    }
+
+    var bottomEdge: BottomEdge? {
+        switch kind {
+        case .dynamicIsland:
+            let radius = drawnHeight / 2
+            return BottomEdge(flatHalfWidth: (width - 2 * Self.drawInset) / 2 - radius,
+                              cornerRadius: radius, cornerCenterY: drawnBottom - radius)
+        case .notch:
+            let radius = Self.notchBottomRadius - Self.drawInset
+            return BottomEdge(flatHalfWidth: (width - 2 * Self.drawInset) / 2 - radius,
+                              cornerRadius: radius, cornerCenterY: drawnBottom - radius)
+        case .bezel, .none:
+            return nil
+        }
+    }
 
     /// The drawn shape's rect in screen coordinates.
     func drawnRect(screenWidth: CGFloat) -> CGRect {
