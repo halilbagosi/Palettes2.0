@@ -24,6 +24,9 @@ struct PaletteDetailView: View {
     @State private var menuOpen = false
     /// iPhone Duo's fold while half open (see `FoldCompat`).
     @State private var fold: Fold?
+    /// Ties the strip and each card across the folded and unfolded layouts,
+    /// so they move and resize into place when the device folds.
+    @Namespace private var foldNamespace
     @Environment(\.dismiss) var dismiss
 
     private struct ColorBindingWrapper: Identifiable {
@@ -238,10 +241,14 @@ struct PaletteDetailView: View {
         .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
     }
 
+    /// Half open in portrait the strip fills the top half; in landscape it
+    /// keeps its usual size at the top of the left side and stays put while
+    /// the colors scroll on the right.
     private func foldedContent(_ fold: Fold) -> some View {
         FoldSplit(fold: fold) {
-            heroStrip(fillsHeight: true)
+            heroStrip(fillsHeight: !fold.isVertical)
                 .padding()
+                .frame(maxHeight: .infinity, alignment: .top)
         } controls: {
             ScrollView {
                 colorGrid
@@ -274,6 +281,7 @@ struct PaletteDetailView: View {
                 .foregroundColor(.secondary)
                 .padding(.leading, 4)
         }
+        .matchedGeometryEffect(id: "hero", in: foldNamespace)
     }
 
     private var colorGrid: some View {
@@ -301,6 +309,7 @@ struct PaletteDetailView: View {
                     }
                 }
                 .animation(.spring(duration: 0.35, bounce: 0.25), value: role)
+                .matchedGeometryEffect(id: index, in: foldNamespace)
                 .draggable(colorVM.HEX)
                 .contextMenu { colorContextMenu(colorVM, index: index) } preview: {
                     ColorMorphCard(

@@ -68,6 +68,13 @@
 - **Onboarding on the outer display**: the orb centres on the safe area (the same centre as the text) and is 15% smaller.
 - **Generate**: folded, the orb is as large as its side allows (up to 460 pt), with size, mode, colors, vibe and Generate stacked on the other side. The generating stage splits the same way. Unfolded, the generating stage stays stacked and centred, and goes side by side only when the stage is under 520 pt tall. On a wide, short stage (the outer display in landscape), the size and mode menus sit in a column beside a strip three swatches wide, with the vibe field and Generate below.
 
+### Round 3 refinements
+
+- **Generate form**: on every large landscape stage (folded, the inner display fully open, iPad), the orb sits on the left and the controls on the right: size and mode, a color grid that scrolls on its own, then the vibe field and Generate pinned at the bottom. Unfolded, the split is an imaginary zero-width fold down the middle. On a wide, short stage, the size and mode menus are 190 pt wide and the color strip takes the rest of the row.
+- **Generate result**: folded, the name and swatch card scroll on the top or left side, and the change field, Regenerate and Save sit centred on the other.
+- **Palette detail**: half open in landscape, the strip keeps its normal 120 pt height, fixed at the top of the left side. The strip and the cards morph between layouts (`matchedGeometryEffect`) as the device folds. The library grids animate their column changes too.
+- **Onboarding, wide landscape** (inner display fully open, iPad): the orb shrinks and rises just enough that the copy and swatches clear the pinned button.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.

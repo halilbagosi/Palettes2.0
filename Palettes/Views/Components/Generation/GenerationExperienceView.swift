@@ -26,45 +26,23 @@ struct GenerationResultView: View {
     /// Bands slide in one after another when the result appears.
     @State private var revealed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// iPhone Duo half open (see `FoldCompat`): the palette takes the side
+    /// before the crease and the change field and buttons the side after it.
+    @State private var fold: Fold?
+    /// Ties the palette across the folded and unfolded layouts.
+    @Namespace private var foldNamespace
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 6) {
-                    nameField
-                    Text("\(paletteColors.count) colors · Tap a color to edit")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top, 8)
-
-                swatchCard
+        ZStack {
+            if let fold {
+                foldedBody(fold)
+            } else {
+                stackedBody
             }
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal)
-            .padding(.bottom, 40)
         }
-        .scrollDismissesKeyboard(.interactively)
-        .safeAreaInset(edge: .bottom) {
-            // Hidden entirely while renaming the palette, so the keyboard
-            // area stays clear of buttons and fields.
-            if !nameFocused {
-                VStack(spacing: 12) {
-                    describeChangeField
-                    // While typing, the field's send arrow takes over — hide the bar.
-                    if !changeFocused {
-                        actionBar
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .animation(.spring(response: 0.3), value: changeFocused)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onFoldChange { newFold in
+            withAnimation(.smooth(duration: 0.35)) { fold = newFold }
         }
         .animation(.spring(response: 0.3), value: nameFocused)
         .onAppear {
@@ -92,6 +70,82 @@ struct GenerationResultView: View {
                 .formPresentationSizing()
             }
         }
+    }
+
+    // MARK: - Layout
+
+    /// The palette in a scrolling column, the change field and buttons pinned
+    /// under it.
+    private var stackedBody: some View {
+        ScrollView {
+            paletteColumn
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.bottom, 40)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom) {
+            // Hidden entirely while renaming the palette, so the keyboard
+            // area stays clear of buttons and fields.
+            if !nameFocused {
+                changeControls
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    /// Half open: the palette scrolls on the top (or left) side of the crease;
+    /// the change field and buttons sit centred on the other.
+    private func foldedBody(_ fold: Fold) -> some View {
+        FoldSplit(fold: fold) {
+            ScrollView {
+                paletteColumn
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        } controls: {
+            changeControls
+                .opacity(nameFocused ? 0 : 1)
+                .allowsHitTesting(!nameFocused)
+                .frame(maxWidth: 480)
+                .padding(.horizontal)
+        }
+    }
+
+    private var paletteColumn: some View {
+        VStack(spacing: 24) {
+            VStack(spacing: 6) {
+                nameField
+                Text("\(paletteColors.count) colors · Tap a color to edit")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
+
+            swatchCard
+        }
+        .matchedGeometryEffect(id: "palette", in: foldNamespace)
+    }
+
+    /// Describe a change, then Regenerate and Save.
+    private var changeControls: some View {
+        VStack(spacing: 12) {
+            describeChangeField
+            // While typing, the field's send arrow takes over — hide the bar.
+            if !changeFocused {
+                actionBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3), value: changeFocused)
     }
 
     // MARK: - Name

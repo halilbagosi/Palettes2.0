@@ -241,17 +241,28 @@ struct GenerateView: View {
 
     @ViewBuilder
     private var formContent: some View {
-        if let fold {
-            foldedForm(fold)
+        if let split = formSplit {
+            splitForm(split)
         } else {
             stackedForm
         }
     }
 
-    /// iPhone Duo half open: the orb, as large as its side allows, before the
-    /// crease (on the left in landscape, on top in portrait) and the size,
-    /// mode, colors, vibe and Generate stacked after it.
-    private func foldedForm(_ fold: Fold) -> some View {
+    /// Where the form splits into orb and controls: iPhone Duo's fold while
+    /// half open, or down the middle of any other large landscape stage (the
+    /// inner display fully open, iPad), where the side-by-side layout reads
+    /// better than one long column.
+    private var formSplit: Fold? {
+        if let fold { return fold }
+        guard !isPortrait, !isWideAndShort, stageSize != .zero else { return nil }
+        return Fold(frame: CGRect(x: stageSize.width / 2, y: 0, width: 0, height: stageSize.height))
+    }
+
+    /// The orb, as large as its side allows, before the split (on the left in
+    /// landscape, on top in portrait), and the size, mode, colors, vibe and
+    /// Generate stacked after it. The colors are a grid that scrolls on its
+    /// own, between the menus and the pinned vibe field.
+    private func splitForm(_ fold: Fold) -> some View {
         FoldSplit(fold: fold) {
             VStack(spacing: 16) {
                 formOrb(diameter: foldedOrbDiameter(fold))
@@ -263,17 +274,24 @@ struct GenerateView: View {
             }
             .padding()
         } controls: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
-                    colorsSection()
+            VStack(alignment: .leading, spacing: 20) {
+                generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
+                if !appData.colors.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        colorsHeader(short: false)
+                        ScrollView {
+                            colorGrid
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                    }
+                } else {
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity)
             .safeAreaInset(edge: .bottom) {
                 if phase == .form {
                     pinnedControls
@@ -342,9 +360,11 @@ struct GenerateView: View {
                 .zIndex(1)
 
                 if isWideAndShort {
+                    // Narrow menus, so the color row gets most of the width.
                     HStack(alignment: .top, spacing: 16) {
                         generationOptions(axis: .vertical)
-                        colorsSection(maxVisibleColors: 3)
+                            .frame(width: 190)
+                        colorsSection(shortHeader: true)
                     }
                 } else {
                     generationOptions(axis: .horizontal)
@@ -503,52 +523,50 @@ struct GenerateView: View {
 
     // MARK: - Colors
 
-    /// The user's colors to start from. `maxVisibleColors` narrows the strip
-    /// to that many swatches (beside the options on a wide, short stage).
+    /// The user's colors to start from: a grid on large portrait stages, a
+    /// strip otherwise. `shortHeader` trims the title for narrow columns.
     @ViewBuilder
-    private func colorsSection(maxVisibleColors: Int? = nil) -> some View {
+    private func colorsSection(shortHeader: Bool = false) -> some View {
         if !appData.colors.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Text(maxVisibleColors == nil ? "Start From Your Colors" : "Your Colors")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                colorsHeader(short: shortHeader)
 
-                    if !selectedColorIDs.isEmpty {
-                        Text("· \(selectedColorIDs.count) selected")
-                            .font(.subheadline)
-                            .foregroundStyle(.tint)
-
-                        Spacer(minLength: 0)
-
-                        Button("Clear") {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                selectedColorIDs.removeAll()
-                            }
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.tint)
-                    }
-
-                    Spacer(minLength: 8)
-                }
-
-                if showsColorGrid && maxVisibleColors == nil {
+                if showsColorGrid {
                     colorGrid
                 } else {
                     colorStrip
                 }
             }
-            .frame(width: maxVisibleColors.map(Self.stripWidth(visibleColors:)))
         }
     }
 
-    /// The width that shows `count` swatches of the strip (54 pt swatches,
-    /// 62 pt labels, 14 pt apart).
-    private static func stripWidth(visibleColors count: Int) -> CGFloat {
-        CGFloat(count) * 62 + CGFloat(count - 1) * 14 + 4
+    private func colorsHeader(short: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(short ? "Your Colors" : "Start From Your Colors")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if !selectedColorIDs.isEmpty {
+                Text("· \(selectedColorIDs.count) selected")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Button("Clear") {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selectedColorIDs.removeAll()
+                    }
+                }
+                .font(.subheadline.weight(.medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+            }
+
+            Spacer(minLength: 8)
+        }
     }
 
     private var colorGrid: some View {

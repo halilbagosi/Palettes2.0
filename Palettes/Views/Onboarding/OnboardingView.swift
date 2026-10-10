@@ -95,8 +95,23 @@ struct OnboardingView: View {
             return max(phone, min(460, shortSide * 0.5, full.height * 0.4))
         }
 
+        /// A large screen in landscape (iPhone Duo's inner display fully open,
+        /// iPad): short for its width, so the orb gives way to the copy.
+        private var isWideLandscape: Bool { !compact && full.width > full.height }
+
+        /// Room the step needs under the orb: the gap, the copy (title,
+        /// subtitle and the step's body, like the generate step's swatches),
+        /// the pinned buttons and the bottom inset.
+        private var heightBelowOrb: CGFloat { 28 + 240 + 114 + insets.bottom }
+
+        /// The lowest the orb's centre may sit with everything under it fitting.
+        private var lowestCenterY: CGFloat { full.height - heightBelowOrb - orbDiameter / 2 }
+
         var orbDiameter: CGFloat {
-            let base = baseOrbDiameter * (centersOnSafeArea ? 0.85 : 1)
+            var base = baseOrbDiameter * (centersOnSafeArea ? 0.85 : 1)
+            if fold == nil, isWideLandscape {
+                base = max(140, min(base, full.height - skipBottom - 12 - heightBelowOrb))
+            }
             guard let fold else { return base }
             if fold.isVertical {
                 let side = fold.frame.minX - insets.leading
@@ -121,7 +136,9 @@ struct OnboardingView: View {
             }
             // 38% of the height; short screens keep the orb higher to leave room for the text.
             let highest = skipBottom + 12 + orbDiameter / 2
-            let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
+            var y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
+            // Wide and short: high enough that the copy clears the buttons.
+            if isWideLandscape { y = max(highest, min(y, lowestCenterY)) }
             // Roomy: up to 64 pt higher, stopping short of Skip.
             return CGPoint(x: centerX, y: roomy ? max(highest, y - 64) : y)
         }
