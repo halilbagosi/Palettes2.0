@@ -94,13 +94,14 @@ struct OnboardingView: View {
             let layout = Layout(
                 full: full,
                 topInset: insets.top,
-                island: .make(topInset: insets.top, screenSize: full),
+                island: .make(topInset: insets.top, screenSize: full,
+                              reachesTopEdge: Self.windowReachesScreenTop()),
                 compact: dynamicTypeSize.isAccessibilitySize || full.height < 700,
                 // The generate step's name and swatches need the room too; the
                 // orb stays where adjust left it.
                 roomy: model.step == .adjust || model.step == .generate
             )
-            // Reduce Motion, landscape and island-less phones fade the orb in at rest.
+            // Reduce Motion and floating windows fade the orb in at rest.
             let travels = layout.island.hasMorph && !reduceMotion
             let _ = morph.placement = layout.placement
 
@@ -216,10 +217,25 @@ struct OnboardingView: View {
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { morph.dragChanged(translation: $0.translation.height, time: $0.time.timeIntervalSinceReferenceDate) }
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged {
+                        morph.dragChanged(translation: $0.translation, location: $0.location,
+                                          time: $0.time.timeIntervalSinceReferenceDate)
+                    }
                     .onEnded { morph.dragEnded(time: $0.time.timeIntervalSinceReferenceDate) }
             )
+    }
+
+    /// Whether the window's top is the screen's top edge, so the orb can be
+    /// pulled out of the bezel. A floating window (Stage Manager, Slide Over)
+    /// has no bezel above it.
+    private static func windowReachesScreenTop() -> Bool {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first,
+              let window = scene.keyWindow ?? scene.windows.first else { return true }
+        let screen = scene.screen
+        let frame = window.convert(window.bounds, to: screen.coordinateSpace)
+        return frame.minY <= 1 && abs(frame.height - screen.bounds.height) <= 1
     }
 
     // MARK: Orb

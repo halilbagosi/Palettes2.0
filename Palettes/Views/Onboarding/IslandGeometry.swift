@@ -2,16 +2,22 @@
 //  IslandGeometry.swift
 //  Palettes
 //
-//  Where the Dynamic Island (or the notch) sits, derived from the window's top
-//  safe-area inset. There is no public API for the cutout's frame, so this
-//  maps the inset to the hardware's known sizes. Portrait only.
+//  Where the orb is pulled from: the Dynamic Island or the notch on iPhones
+//  whose cutout sits centered at the top, and the top bezel everywhere else
+//  (iPad, iPhone Duo, landscape). There is no public API for the cutout's
+//  frame, so a centered cutout is recognised by the iPhone's screen size and
+//  the inset is mapped to the hardware's known sizes. Any other device,
+//  including one with an off-center cutout, pulls from the bezel.
 //
 
 import SwiftUI
 
 nonisolated struct IslandGeometry: Equatable {
     nonisolated enum Kind: Equatable {
-        case dynamicIsland, notch, none
+        case dynamicIsland, notch
+        /// No centered cutout: the orb is pulled out of the top edge of the screen.
+        case bezel
+        case none
     }
 
     let kind: Kind
@@ -26,19 +32,48 @@ nonisolated struct IslandGeometry: Equatable {
     /// The notch is drawn this far above the screen edge so it fuses with the bezel.
     static let notchOverhang: CGFloat = 10
     static let notchBottomRadius: CGFloat = 20
+    /// The bezel is drawn as a band this deep above the screen edge, and this
+    /// far past either side, so the blur never thins it where it meets the drop.
+    static let bezelDepth: CGFloat = 40
+    /// The bezel's "island" sits just above the screen edge; the drop starts as
+    /// a circle half this tall, tucked out of sight behind it.
+    static let bezelHeight: CGFloat = 20
 
     static let none = IslandGeometry(kind: .none, width: 0, height: 0, top: 0)
+    static let bezel = IslandGeometry(kind: .bezel, width: 0, height: bezelHeight, top: -bezelHeight)
 
-    /// Portrait phones only; landscape and everything else has no morph.
-    static func make(topInset: CGFloat, screenSize: CGSize) -> IslandGeometry {
-        guard screenSize.height > screenSize.width else { return .none }
-        if topInset >= 59 {
-            return IslandGeometry(kind: .dynamicIsland, width: 125, height: 37, top: topInset >= 62 ? 14 : 11)
+    /// Portrait screen sizes (points) of the iPhones with a cutout centered at
+    /// the top: X through 17 Pro Max, and Air.
+    static let centeredCutoutSizes: Set<Size> = [
+        Size(375, 812), Size(414, 896), Size(390, 844), Size(428, 926),
+        Size(393, 852), Size(430, 932), Size(402, 874), Size(440, 956),
+        Size(420, 912),
+    ]
+
+    /// Portrait iPhones with a centered cutout pull from it. Everything else
+    /// pulls from the bezel, as long as the window reaches the top edge of the
+    /// screen; a floating window (Stage Manager, Slide Over) has no morph.
+    static func make(topInset: CGFloat, screenSize: CGSize, reachesTopEdge: Bool = true) -> IslandGeometry {
+        if screenSize.height > screenSize.width,
+           centeredCutoutSizes.contains(Size(screenSize.width, screenSize.height)) {
+            if topInset >= 59 {
+                return IslandGeometry(kind: .dynamicIsland, width: 125, height: 37, top: topInset >= 62 ? 14 : 11)
+            }
+            if topInset >= 44 {
+                return IslandGeometry(kind: .notch, width: 160, height: 31, top: 0)
+            }
         }
-        if topInset >= 44 {
-            return IslandGeometry(kind: .notch, width: 160, height: 31, top: 0)
+        return reachesTopEdge ? .bezel : .none
+    }
+
+    /// A screen size rounded to whole points, so it can be looked up.
+    nonisolated struct Size: Hashable {
+        let width: Int
+        let height: Int
+        init(_ width: CGFloat, _ height: CGFloat) {
+            self.width = Int(width.rounded())
+            self.height = Int(height.rounded())
         }
-        return .none
     }
 
     var hasMorph: Bool { kind != .none }
@@ -70,6 +105,14 @@ nonisolated struct IslandGeometry: Equatable {
                 width: width - 2 * Self.drawInset,
                 height: drawnBottom - y
             )
+        case .bezel:
+            let y = -Self.bezelDepth
+            return CGRect(
+                x: -Self.bezelDepth,
+                y: y,
+                width: screenWidth + 2 * Self.bezelDepth,
+                height: drawnBottom - y
+            )
         case .none:
             return .zero
         }
@@ -86,6 +129,8 @@ nonisolated struct IslandGeometry: Equatable {
                 cornerRadii: .init(topLeading: 0, bottomLeading: r, bottomTrailing: r, topTrailing: 0),
                 style: .continuous
             ).path(in: rect)
+        case .bezel:
+            return Rectangle().path(in: rect)
         case .none:
             return Path()
         }
