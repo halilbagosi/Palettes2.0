@@ -2,26 +2,11 @@
 //  SheetComponents.swift
 //  Palettes
 //
-//  Building blocks shared by the create/add sheets so they read as one family
-//  with the detail pages: the same section captions, color wash, hero window,
-//  palette strip and card radii.
+//  Building blocks shared by the create/edit sheets so they read as one family
+//  with the detail pages: the color wash, the palette strip, and a legible ink.
 //
 
 import SwiftUI
-
-/// Secondary semibold caption above a section, as on the detail pages.
-struct SheetSectionHeader: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
-            .accessibilityAddTraits(.isHeader)
-    }
-}
 
 /// The backdrop of `ColorDetailView` and `ColorEditView`: the color at the top,
 /// fading into a near-neutral tint of it. The system background while there is
@@ -52,52 +37,6 @@ struct ColorWashBackground: View {
         } else {
             return Color(hue: h, saturation: s * 0.08, brightness: 0.97)
         }
-    }
-}
-
-/// The large rounded color window from `ColorDetailView`, with the hex in a
-/// capsule. A dashed placeholder while there's no color yet.
-struct SwatchHero: View {
-    var color: Color?
-    var hex: String?
-    var placeholder: String = "Your color will appear here"
-    var height: CGFloat = 180
-
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let color {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(color.gradient)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                    )
-                    .shadow(color: color.opacity(0.3), radius: 10, x: 0, y: 5)
-
-                if let hex {
-                    let ink = color.legibleInk
-                    Text(hex)
-                        .font(.system(.subheadline, design: .monospaced).weight(.semibold))
-                        .foregroundStyle(ink)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(ink.opacity(0.12), in: Capsule())
-                        .padding(14)
-                }
-            } else {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                    .overlay {
-                        Label(placeholder, systemImage: "eyedropper.halffull")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 24)
-                    }
-            }
-        }
-        .frame(height: height)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(hex.map { "Preview, \($0)" } ?? placeholder)
     }
 }
 
@@ -135,46 +74,6 @@ struct PaletteStrip: View {
         .frame(height: height)
         .animation(.spring(response: 0.3), value: colors.count)
         .accessibilityHidden(true)
-    }
-}
-
-/// Name field on a glass card, with an optional swatch of the color it names.
-struct ColorNameField: View {
-    var color: Color?
-    @Binding var name: String
-    var placeholder: String = "Color Name"
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let color {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(color.gradient)
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                    )
-                    .accessibilityHidden(true)
-            }
-
-            TextField(placeholder, text: $name)
-                .font(.system(size: 18, weight: .medium))
-                .submitLabel(.done)
-
-            if !name.isEmpty {
-                Button {
-                    name = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear name")
-            }
-        }
-        .padding(color == nil ? 16 : 10)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
-        .padding(.horizontal)
     }
 }
 

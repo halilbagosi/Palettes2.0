@@ -1,124 +1,90 @@
 import SwiftUI
 
-/// Standalone "New Color" sheet for the Colors tab. Built like the color's
-/// detail page it's about to become: a large color window over a wash of the
-/// color, both following every change live, with the shared `ColorInputView`
-/// engine (Pick / Scan) below to shape it.
+/// Standalone "New Color" sheet for the Colors tab: the shared color editor,
+/// starting on a fresh color, with Add. A color that's already saved is
+/// flagged under its name before Add, not after.
 struct NewColorView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
 
-    @State private var inputController = ColorInputController()
+    @State private var color = Color(hue: Double.random(in: 0..<1), saturation: 0.65, brightness: 0.88)
+    @State private var name = ""
 
-    /// Entry waiting on the user's decision after a duplicate hex was found.
-    @State private var duplicateEntry: ColorInputEntry?
     @State private var duplicateExistingName = ""
     @State private var showDuplicateAlert = false
     @State private var showNameDuplicateAlert = false
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    SwatchHero(
-                        color: inputController.previewColor,
-                        hex: inputController.previewHex,
-                        placeholder: "Take or choose a photo to start"
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+    private var hex: String { ColorComposer.hexKey(color) }
 
-                    ColorInputView(
-                        sources: [.pick, .scan],
-                        scanExtraction: .dominant,
-                        addButtonTitle: "Create",
-                        onAdd: { entry in create(entry) },
-                        showsAddButton: false,
-                        showsPreview: false,
-                        controller: inputController
-                    )
-                    .environmentObject(appData)
-                }
-                .padding(.bottom, 20)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(
-                ColorWashBackground(color: inputController.previewColor)
-                    .animation(.easeOut(duration: 0.25), value: inputController.previewHex)
-            )
-            .navigationTitle("New Color")
-            .navigationBarTitleDisplayMode(.inline)
-            .softScrollEdge()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
-                    }
-                    .accessibilityLabel("Cancel")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { inputController.submit() }
-                        .glassButton(prominent: true)
-                        .fontWeight(.semibold)
-                        .disabled(!inputController.canAdd)
-                }
-            }
-            // Sheets cover the app-root toast overlay, so host one here too.
-            .toastOverlay()
-            .alert("Color Already Exists", isPresented: $showDuplicateAlert) {
-                Button("Overwrite") {
-                    if let entry = duplicateEntry { overwriteExisting(with: entry) }
-                }
-                Button("Cancel", role: .cancel) { duplicateEntry = nil }
-            } message: {
-                Text("\(duplicateEntry?.hex ?? "This color") is already saved as \"\(duplicateExistingName)\". Overwrite it with the new name?")
-            }
-            .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
-                Button("Save Anyway") {
-                    if let entry = duplicateEntry { save(entry) }
-                }
-                Button("Cancel", role: .cancel) { duplicateEntry = nil }
-            } message: {
-                Text("A color named \"\(duplicateEntry?.name ?? "")\" already exists (\(duplicateExistingName)).")
-            }
-        }
+    private var resolvedName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? ColorNamer.name(forHex: hex) : trimmed
     }
 
-    /// Saves a single new color to the library. A hex that already exists
-    /// raises the duplicate dialog and the sheet stays open; otherwise the
-    /// color is appended and the sheet dismisses.
-    private func create(_ entry: ColorInputEntry) {
-        if let existing = appData.existingColor(hex: entry.hex) {
-            duplicateEntry = entry
+    private var notice: String? {
+        guard let existing = appData.existingColor(hex: hex) else { return nil }
+        return "Already saved as \u{201C}\(existing.name)\u{201D}"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ColorComposer(color: $color, name: $name, namesFollowColor: true, notice: notice)
+                .navigationTitle("New Color")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        SheetCancelButton { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        SheetConfirmButton(title: "Add") { create() }
+                    }
+                }
+                .alert("Color Already Exists", isPresented: $showDuplicateAlert) {
+                    Button("Rename It") { overwriteExisting() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("\(hex) is already saved as \"\(duplicateExistingName)\". Rename it to \"\(resolvedName)\"?")
+                }
+                .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
+                    Button("Save Anyway") { save() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("A color named \"\(resolvedName)\" already exists (\(duplicateExistingName)).")
+                }
+        }
+        // Sheets cover the app-root toast overlay, so host one here too.
+        .toastOverlay()
+    }
+
+    /// Saves the color to the library. A hex or name that's already taken
+    /// asks first; otherwise the color is added and the sheet closes.
+    private func create() {
+        if let existing = appData.existingColor(hex: hex) {
             duplicateExistingName = existing.name
             showDuplicateAlert = true
             return
         }
-        if let existing = appData.existingColor(named: entry.name) {
-            duplicateEntry = entry
+        if let existing = appData.existingColor(named: resolvedName) {
             duplicateExistingName = existing.HEX
             showNameDuplicateAlert = true
             return
         }
-        save(entry)
+        save()
     }
 
-    private func save(_ entry: ColorInputEntry) {
-        let newColor = ColorViewModel(name: entry.name, color: entry.color, HEX: entry.hex, usedInPalette: false)
+    private func save() {
+        let newColor = ColorViewModel(name: resolvedName, color: color, HEX: hex, usedInPalette: false)
         withAnimation {
             appData.colors.append(newColor)
         }
-        duplicateEntry = nil
         dismiss()
     }
 
-    private func overwriteExisting(with entry: ColorInputEntry) {
-        if let idx = appData.colors.firstIndex(where: { $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame }) {
-            appData.colors[idx].name = entry.name
-            appData.colors[idx].color = entry.color
+    private func overwriteExisting() {
+        if let idx = appData.colors.firstIndex(where: { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }) {
+            appData.colors[idx].name = resolvedName
+            appData.colors[idx].color = color
         }
-        duplicateEntry = nil
         dismiss()
     }
 }

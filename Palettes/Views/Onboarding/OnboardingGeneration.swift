@@ -104,7 +104,7 @@ enum OnboardingPaletteMaker {
         onColors: @escaping @MainActor ([Color]) -> Void
     ) async throws -> Made {
         // The photo is already downscaled and the extractor samples 160 px,
-        // so this is quick enough on the main actor (as in ColorInputView).
+        // so this is quick enough on the main actor (as in ColorComposer).
         let extracted = try ImageColorExtractor.extractColors(from: image, count: size)
         try Task.checkCancellation()
         let palette = try photoPalette(hexes: extracted.map(\.hex), existingNames: existingNames)

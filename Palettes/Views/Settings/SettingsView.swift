@@ -15,7 +15,9 @@ struct SettingsView: View {
     @State private var debugStart = "pull"
     @AppStorage(OnboardingDebug.slowMoToggleKey) private var debugSlowMo = false
     @AppStorage(OnboardingDebug.aiOverrideKey) private var debugAI = OnboardingDebug.AIOverride.automatic.rawValue
+    @AppStorage(SubscriptionStatus.debugOverrideKey) private var debugPlan = ""
     #endif
+    @ObservedObject private var subscription = SubscriptionStatus.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var showDeleteConfirmation = false
@@ -168,6 +170,13 @@ struct SettingsView: View {
                     Picker("Apple Intelligence", selection: $debugAI) {
                         ForEach(OnboardingDebug.AIOverride.allCases) { Text($0.label).tag($0.rawValue) }
                     }
+                    Picker("Plan", selection: $debugPlan) {
+                        Text("Automatic").tag("")
+                        ForEach(AppPlan.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .onChange(of: debugPlan) { _, _ in
+                        Task { await subscription.refresh() }
+                    }
                     Button {
                         OnboardingDebug.requestFromSettings(start: debugStart)
                         // Same path as Replay Onboarding: the presenter restarts it in onDismiss.
@@ -190,9 +199,9 @@ struct SettingsView: View {
                         Label("Replay without Apple Intelligence", systemImage: "photo")
                     }
                 } header: {
-                    Text("Onboarding (Debug)")
+                    Text("Debug")
                 } footer: {
-                    Text("Starts onboarding at the chosen step with the sample image. Completing it behaves like a normal replay. Apple Intelligence picks the path: On picks a color and generates around it (simulated where the model can't run), Off makes the palette straight from the photo. This device: \(OnboardingPaletteMaker.deviceAIStatus).")
+                    Text("Plan overrides the Free/Premium tag. Starts onboarding at the chosen step with the sample image. Completing it behaves like a normal replay. Apple Intelligence picks the path: On picks a color and generates around it (simulated where the model can't run), Off makes the palette straight from the photo. This device: \(OnboardingPaletteMaker.deviceAIStatus).")
                 }
                 #endif
             }
@@ -206,6 +215,9 @@ struct SettingsView: View {
             }
             .alert("Couldn't export your library.", isPresented: $showExportError) {
                 Button("OK", role: .cancel) {}
+            }
+            .task {
+                await subscription.refresh()
             }
         }
     }
@@ -231,8 +243,11 @@ struct SettingsView: View {
             .accessibilityHidden(true)
 
             VStack(spacing: 2) {
-                Text("Palettes")
-                    .font(.system(.title2, design: .rounded).weight(.bold))
+                HStack(spacing: 8) {
+                    Text("Palettes")
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                    PlanBadge(plan: subscription.plan)
+                }
                 Text(librarySummary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -271,6 +286,41 @@ struct SettingsView: View {
             dismiss()
             ToastManager.shared.show("All data deleted", icon: "trash.fill")
         }
+    }
+}
+
+/// The plan tag beside the app name: a quiet gray "Free", or "Premium" in a
+/// warm gradient with a crown.
+private struct PlanBadge: View {
+    let plan: AppPlan
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if plan == .premium {
+                Image(systemName: "crown.fill")
+                    .imageScale(.small)
+            }
+            Text(plan.title)
+        }
+        .font(.caption.weight(.bold))
+        .textCase(.uppercase)
+        .tracking(0.6)
+        .foregroundStyle(plan == .premium ? Color.white : Color.secondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background {
+            if plan == .premium {
+                Capsule().fill(LinearGradient(
+                    colors: [Color(red: 0.98, green: 0.62, blue: 0.20), Color(red: 0.91, green: 0.30, blue: 0.47)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+            } else {
+                Capsule().fill(Color(.tertiarySystemFill))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(plan.title) plan")
     }
 }
 

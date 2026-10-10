@@ -1,351 +1,96 @@
 import SwiftUI
 
+/// "Edit Color" sheet: the shared color editor over a working copy, saved on
+/// Save. The same editor as New Color, so a color is shaped the same way
+/// whether it's being made or changed.
 struct ColorEditView: View {
     @Environment(\.dismiss) var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appData: AppData
-    
+
     // Original bindings
     @Binding var colorName: String
     @Binding var hexCode: String
     @Binding var colorValue: Color
-    
+
     var promptOnNameMatch: Bool = false
     var onSaveWithAction: ((_ isOverwrite: Bool) -> Void)? = nil
     var onSave: () -> Void = {}
-    
-    // Local editable states to allow user modification before saving
-    @State private var internalName: String = ""
-    @State private var internalHex: String = ""
-    @State private var internalColorValue: Color = .clear
-    @State private var originalName: String = ""
-    @State private var originalHex: String = ""
+
+    // Working copy, so Cancel leaves the original untouched.
+    @State private var internalName: String
+    @State private var internalColor: Color
+    private let originalName: String
+    private let originalHex: String
     @State private var showOverwriteAlert = false
-    
-    // Components of RGB for text fields
-    @State private var rString: String = "255"
-    @State private var gString: String = "255"
-    @State private var bString: String = "255"
-    
-    // Flag to prevent cyclic updates between color picker and text fields
-    @State private var isUpdatingFromHexOrRGB = false
-    @State private var isUpdatingFromSliders = false
-    
-    // Slider state
-    @State private var temperatureValue: Double = 0.5
-    @State private var saturationValue: Double = 0.5
-    @State private var brightnessValue: Double = 0.5
-    @State private var baseR: Double = 0
-    @State private var baseG: Double = 0
-    @State private var baseB: Double = 0
-    
-    // Error tracking
-    @State private var hexError = false
-    
-    // Gradient end color matched from ColorDetailView logic
-    private var gradientEnd: Color {
-        let (h, s, _) = internalColorValue.hsbComponents
-        if colorScheme == .dark {
-            return Color(hue: h, saturation: s, brightness: 0.08)
-        } else {
-            return Color(hue: h, saturation: s * 0.08, brightness: 0.97)
-        }
+
+    init(
+        colorName: Binding<String>,
+        hexCode: Binding<String>,
+        colorValue: Binding<Color>,
+        promptOnNameMatch: Bool = false,
+        onSaveWithAction: ((_ isOverwrite: Bool) -> Void)? = nil,
+        onSave: @escaping () -> Void = {}
+    ) {
+        _colorName = colorName
+        _hexCode = hexCode
+        _colorValue = colorValue
+        self.promptOnNameMatch = promptOnNameMatch
+        self.onSaveWithAction = onSaveWithAction
+        self.onSave = onSave
+        _internalName = State(initialValue: colorName.wrappedValue)
+        _internalColor = State(initialValue: colorValue.wrappedValue)
+        originalName = colorName.wrappedValue
+        let hex = hexCode.wrappedValue
+        originalHex = hex.hasPrefix("#") ? hex : "#\(hex)"
     }
-    
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    
-                    // MARK: - Preview Area
-                    VStack(spacing: 12) {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(internalColorValue.gradient)
-                            .frame(height: 180)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                            )
-                            .shadow(color: internalColorValue.opacity(0.3), radius: 10, x: 0, y: 5)
-                        
-                        TextField("Color Name", text: $internalName)
-                            .font(.system(size: 24, weight: .bold))
-                            .multilineTextAlignment(.center)
-                            .padding(.vertical, 8)
-                            .liquidGlass(.regular, in: .rect(cornerRadius: 12))
+            ColorComposer(color: $internalColor, name: $internalName)
+                .navigationTitle("Edit Color")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        SheetCancelButton { dismiss() }
                     }
-                    .padding(.horizontal)
-                    
-                    // MARK: - Color
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Color")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-
-                        // Same hue/saturation/brightness card as the New Color sheet.
-                        HSBSlidersCard(color: internalColorValue) { newColor in
-                            internalColorValue = newColor
-                            syncTextToColor()
-                        }
-                        .padding(.horizontal)
-                    }
-
-                    // MARK: - Temperature
-                    // Saturation and brightness live on the card above; warmth
-                    // is the one shift it can't make directly.
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Adjustments")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-
-                        AdjustmentSlider(
-                            title: "Temperature",
-                            valueLabel: ColorAdjustment.offsetLabel(temperatureValue, positive: "warm", negative: "cool"),
-                            leftLabel: "Cool",
-                            rightLabel: "Warm",
-                            value: Binding(
-                                get: { temperatureValue },
-                                set: { v in temperatureValue = v; applySliderAdjustments() }
-                            )
-                        )
-                        .padding(16)
-                        .liquidGlass(.regular, in: .rect(cornerRadius: 20))
-                        .padding(.horizontal)
-                    }
-
-                    // MARK: - Values Editor
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Values")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                        
-                        VStack(spacing: 12) {
-                            // HEX Field
-                            HStack {
-                                Text("HEX")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .frame(width: 50, alignment: .leading)
-                                
-                                Text("#")
-                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                
-                                TextField("FF0000", text: Binding(
-                                    get: { internalHex },
-                                    set: { newValue in
-                                        internalHex = newValue
-                                        hexError = false
-                                        updateColorFromHex(newValue)
-                                    }
-                                ))
-                                    .font(.system(size: 16, design: .monospaced))
-                                    .textInputAutocapitalization(.characters)
-                                    .autocorrectionDisabled()
-                            }
-                            .padding(12)
-                            .liquidGlass(.regular, in: .rect(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(hexError ? Color.red : Color.clear, lineWidth: 1.5)
-                            )
-                            
-                            // RGB Fields
-                            HStack(spacing: 12) {
-                                rgbField(label: "R", text: $rString)
-                                rgbField(label: "G", text: $gString)
-                                rgbField(label: "B", text: $bString)
-                            }
-                        }
-                        .padding(.horizontal)
+                    ToolbarItem(placement: .confirmationAction) {
+                        SheetConfirmButton(title: "Save") { handleSaveTapped() }
                     }
                 }
-                .padding(.vertical)
-            }
-            .background(
-                LinearGradient(
-                    colors: [internalColorValue.opacity(0.8), gradientEnd],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-            )
-            .navigationTitle("Edit Color")
-            .navigationBarTitleDisplayMode(.inline)
-            .softScrollEdge()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
+                .alert("Overwrite or Create New?", isPresented: $showOverwriteAlert) {
+                    Button("Overwrite Existing") {
+                        saveChanges(isOverwrite: true)
+                        dismiss()
                     }
-                    .accessibilityLabel("Cancel")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        handleSaveTapped()
+                    Button("Create New Color") {
+                        saveChanges(isOverwrite: false)
+                        dismiss()
                     }
-                    .glassButton(prominent: true)
-                    .fontWeight(.semibold)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("You changed this color without changing its name. Would you like to overwrite it globally or create a new global color?")
                 }
-            }
-            .alert("Overwrite or Create New?", isPresented: $showOverwriteAlert) {
-                Button("Overwrite Existing") {
-                    saveChanges(isOverwrite: true)
-                    dismiss()
-                }
-                Button("Create New Color") {
-                    saveChanges(isOverwrite: false)
-                    dismiss()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("You changed this color without changing its name. Would you like to overwrite it globally or create a new global color?")
-            }
-            .onAppear {
-                internalName = colorName
-                originalName = colorName
-                
-                let hc = hexCode.hasPrefix("#") ? String(hexCode.dropFirst()) : hexCode
-                internalHex = hc
-                originalHex = hc
-                
-                internalColorValue = colorValue
-                syncTextToColor()
-                resetSlidersAndSetBase()
-            }
         }
     }
-    
-    // MARK: - Subcomponents
-    
-    @ViewBuilder
-    private func rgbField(label: String, text: Binding<String>) -> some View {
-        HStack(spacing: 6) {
-            Text(label)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.secondary)
-            
-            TextField("0", text: Binding(
-                get: { text.wrappedValue },
-                set: { newValue in
-                    let filtered = newValue.filter { "0123456789".contains($0) }
-                    if filtered != text.wrappedValue {
-                        text.wrappedValue = filtered
-                    }
-                    updateColorFromRGB()
-                }
-            ))
-                .font(.system(size: 16, design: .monospaced))
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.center)
-        }
-        .padding(12)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
-    }
-    
-    // MARK: - Logic
-    
-    private func syncTextToColor() {
-        // Convert Color to RGB and Hex
-        let comps = internalColorValue.rgbComponents
-        let rInt = Int(round(comps.r))
-        let gInt = Int(round(comps.g))
-        let bInt = Int(round(comps.b))
-        
-        rString = "\(rInt)"
-        gString = "\(gInt)"
-        bString = "\(bInt)"
-        
-        internalHex = String(format: "%02X%02X%02X", rInt, gInt, bInt)
-        
-        resetSlidersAndSetBase()
-    }
-    
-    private func updateColorFromHex(_ hex: String) {
-        let cleanHex = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard cleanHex.count == 6 else { return }
-        if let newColor = Color(hex: cleanHex) {
-            internalColorValue = newColor
 
-            // Sync RGB text to match new hex
-            let c = newColor.rgbComponents
-            rString = "\(Int(round(c.r)))"
-            gString = "\(Int(round(c.g)))"
-            bString = "\(Int(round(c.b)))"
-
-            resetSlidersAndSetBase()
-        } else {
-            hexError = true
-        }
-    }
-    
-    private func updateColorFromRGB() {
-        guard let rVal = Int(rString), rVal <= 255,
-              let gVal = Int(gString), gVal <= 255,
-              let bVal = Int(bString), bVal <= 255 else { return }
-        
-        let newColor = Color(red: Double(rVal) / 255, green: Double(gVal) / 255, blue: Double(bVal) / 255)
-        internalColorValue = newColor
-        
-        // Sync hex text
-        internalHex = String(format: "%02X%02X%02X", rVal, gVal, bVal)
-        resetSlidersAndSetBase()
-    }
-    
-    // MARK: - Slider Logic
-
-    private var adjustedRGB: (r: Double, g: Double, b: Double) {
-        ColorAdjustment.apply(
-            baseR: baseR, baseG: baseG, baseB: baseB,
-            temperature: temperatureValue,
-            saturation: saturationValue,
-            brightness: brightnessValue
-        )
-    }
-
-    private func applySliderAdjustments() {
-        let c = adjustedRGB
-        let newColor = Color(red: c.r / 255.0, green: c.g / 255.0, blue: c.b / 255.0)
-        
-        internalColorValue = newColor
-        
-        rString = "\(Int(round(c.r)))"
-        gString = "\(Int(round(c.g)))"
-        bString = "\(Int(round(c.b)))"
-        internalHex = String(format: "%02X%02X%02X", Int(round(c.r)), Int(round(c.g)), Int(round(c.b)))
-    }
-
-    private func resetSlidersAndSetBase() {
-        let c = internalColorValue.rgbComponents
-        baseR = Double(Int(round(c.r)))
-        baseG = Double(Int(round(c.g)))
-        baseB = Double(Int(round(c.b)))
-        
-        temperatureValue = 0.5
-        saturationValue = 0.5
-        brightnessValue = 0.5
-    }
-    
     private func handleSaveTapped() {
-        let hasHexChanged = internalHex.caseInsensitiveCompare(originalHex) != .orderedSame
+        let hasHexChanged = ColorComposer.hexKey(internalColor).caseInsensitiveCompare(originalHex) != .orderedSame
         let hasNameChanged = internalName != originalName
-        
+
         if promptOnNameMatch && !hasNameChanged && hasHexChanged {
             showOverwriteAlert = true
         } else {
-            saveChanges(isOverwrite: false) // default behavior
+            saveChanges(isOverwrite: false)
             dismiss()
         }
     }
-    
+
     private func saveChanges(isOverwrite: Bool) {
-        colorName = internalName.isEmpty ? "Untitled" : internalName
-        hexCode = "#\(internalHex)"
-        colorValue = internalColorValue
-        
+        let trimmed = internalName.trimmingCharacters(in: .whitespacesAndNewlines)
+        colorName = trimmed.isEmpty ? "Untitled" : trimmed
+        hexCode = ColorComposer.hexKey(internalColor)
+        colorValue = internalColor
+
         if let action = onSaveWithAction {
             action(isOverwrite)
         } else {
@@ -360,5 +105,5 @@ struct ColorEditView: View {
         hexCode: .constant("#DC143C"),
         colorValue: .constant(Color(red: 220/255, green: 20/255, blue: 60/255))
     )
-    .environmentObject(AppData())
+    .environmentObject(AppData(inMemory: true))
 }
