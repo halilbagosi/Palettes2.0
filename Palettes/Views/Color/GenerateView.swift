@@ -31,8 +31,6 @@ struct GenerateView: View {
     /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
     /// the crease and the controls the side after it.
     @State private var fold: Fold?
-    /// The split form's color grid has rows below the visible two.
-    @State private var gridHasMore = true
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -268,30 +266,46 @@ struct GenerateView: View {
     /// Generate stacked after it. The colors are a grid that scrolls on its
     /// own, between the menus and the pinned vibe field.
     private func splitForm(_ fold: Fold) -> some View {
-        FoldSplit(fold: fold) {
-            VStack(spacing: 16) {
-                formOrb(diameter: foldedOrbDiameter(fold))
-                    // Above the copy: stretched over it, the glass bends it.
-                    .zIndex(1)
-                Text(GenerateHeaderView.description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
+        // Half open in landscape the colors run down beside the orb.
+        let colorsBesideOrb = self.fold != nil && fold.isVertical && !appData.colors.isEmpty
+        return FoldSplit(fold: fold) {
+            HStack(spacing: 12) {
+                VStack(spacing: 16) {
+                    formOrb(diameter: foldedOrbDiameter(fold, besideColors: colorsBesideOrb))
+                        // Above the copy: stretched over it, the glass bends it.
+                        .zIndex(1)
+                    Text(GenerateHeaderView.description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
+                .frame(maxWidth: .infinity)
+                .zIndex(1)
+
+                if colorsBesideOrb {
+                    colorColumn
+                }
             }
             .padding()
         } controls: {
             VStack(alignment: .leading, spacing: 20) {
                 generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
-                if !appData.colors.isEmpty {
+                if !appData.colors.isEmpty && !colorsBesideOrb {
                     VStack(alignment: .leading, spacing: 10) {
                         colorsHeader(short: false)
-                        splitColorGrid
+                        // Fills the space down to the vibe field and scrolls
+                        // under its fade; the top edge fades too.
+                        ScrollView {
+                            colorGrid
+                                .padding(.top, Self.scrollFade)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                        .fadingEdges(.top, length: Self.scrollFade)
                     }
+                } else {
+                    Spacer(minLength: 0)
                 }
-                // Keeps the grid's bottom off the pinned controls, so it
-                // doesn't scroll under them.
-                Spacer(minLength: 0)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -305,33 +319,48 @@ struct GenerateView: View {
         }
     }
 
-    /// Two rows of the color grid, cut off under a blurred band that says
-    /// there's more to scroll to. The band goes once the end is reached.
-    private var splitColorGrid: some View {
-        ScrollView {
-            colorGrid
+    /// How far scrolling content fades in and out at a cut edge.
+    private static var scrollFade: CGFloat { 18 }
+
+    /// The colors as one column that scrolls vertically, beside the orb.
+    private var colorColumn: some View {
+        VStack(spacing: 6) {
+            Text("Colors")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 14) {
+                    ForEach(appData.colors) { colorItem in
+                        colorSwatch(colorItem)
+                    }
+                }
+                .padding(.vertical, Self.scrollFade)
+                .padding(.horizontal, 6)
+            }
+            .fadingEdges([.top, .bottom], length: Self.scrollFade)
+
+            if !selectedColorIDs.isEmpty {
+                Button("Clear") {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selectedColorIDs.removeAll()
+                    }
+                }
+                .font(.caption.weight(.medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .transition(.opacity)
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .onScrollGeometryChange(for: Bool.self) { geo in
-            geo.contentOffset.y < geo.contentSize.height - geo.containerSize.height - 4
-        } action: { _, more in
-            gridHasMore = more
-        }
-        .frame(maxHeight: Self.twoRowGridHeight)
-        .overlay(alignment: .bottom) {
-            ScrollMoreBand()
-                .opacity(gridHasMore ? 1 : 0)
-                .animation(.easeInOut(duration: 0.2), value: gridHasMore)
-        }
+        .frame(width: Self.colorColumnWidth)
     }
 
-    /// Two rows of 64 pt swatches with their labels (86 pt each, 18 apart),
-    /// the grid's 6 pt inset, and the band under them.
-    private static var twoRowGridHeight: CGFloat { 6 + 86 + 18 + 86 + ScrollMoreBand.height }
+    private static var colorColumnWidth: CGFloat { 84 }
 
-    /// The orb's side of the fold, less room for the line of copy under it.
-    private func foldedOrbDiameter(_ fold: Fold) -> CGFloat {
-        let side = fold.span.lowerBound
+    /// The orb's side of the fold, less room for the line of copy under it
+    /// (and for the color column, when it's beside the orb).
+    private func foldedOrbDiameter(_ fold: Fold, besideColors: Bool = false) -> CGFloat {
+        let side = fold.span.lowerBound - (besideColors ? Self.colorColumnWidth + 12 + 32 : 0)
         let fit = fold.isVertical
             ? min(side * 0.78, stageSize.height - 150)
             : min(side - 120, stageSize.width * 0.7)
@@ -371,6 +400,22 @@ struct GenerateView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal)
         .padding(.bottom, 24)
+        // Content scrolling under the controls fades into the background
+        // instead of meeting them at a hard edge.
+        .background(alignment: .bottom) {
+            LinearGradient(
+                stops: [
+                    .init(color: Color(.systemBackground).opacity(0), location: 0),
+                    .init(color: Color(.systemBackground).opacity(0.92), location: 0.45),
+                    .init(color: Color(.systemBackground), location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .padding(.top, -36)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
+        }
         .animation(.spring(response: 0.3), value: vibeFocused)
     }
 
@@ -1021,23 +1066,22 @@ private struct GenerateHeaderView: View {
     }
 }
 
-/// The soft, blurred edge at the bottom of a cut-off scrolling list: the
-/// background fading in over a light blur.
-private struct ScrollMoreBand: View {
-    static let height: CGFloat = 34
-
-    var body: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .overlay {
-                LinearGradient(colors: [Color(.systemBackground).opacity(0), Color(.systemBackground).opacity(0.85)],
-                               startPoint: .top, endPoint: .bottom)
+extension View {
+    /// Fades the view out over `length` at the given edges, so scrolling
+    /// content softens away instead of being cut off.
+    func fadingEdges(_ edges: VerticalEdge.Set, length: CGFloat) -> some View {
+        mask {
+            VStack(spacing: 0) {
+                if edges.contains(.top) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: length)
+                }
+                Rectangle()
+                if edges.contains(.bottom) {
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: length)
+                }
             }
-            .mask {
-                LinearGradient(colors: [.clear, .black, .black], startPoint: .top, endPoint: .bottom)
-            }
-            .frame(height: Self.height)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        }
     }
 }

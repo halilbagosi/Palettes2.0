@@ -82,6 +82,11 @@
 - **Centring**: `centeredOnScreen()` pads the side with the smaller inset, so the generating stage and the result centre on the screen in landscape rather than on the safe area.
 - **Generate result**: only a landscape fold splits it. Half open in portrait, it keeps the portrait layout.
 
+### Round 5 refinements
+
+- **Generate**: the vibe field and Generate sit on a background-colored area that fades out upward, so content scrolling under them softens away. The split form's color grid fills the space down to them again, with a fade at its top edge (`fadingEdges`). The two-row cut-off and its band are gone.
+- **Generate, half open in landscape**: the colors are a vertical column, scrollable with faded ends, beside the orb. The orb shifts left to make room, and the controls side keeps size, mode, vibe and Generate.
+
 ## Part 2 — next, needs the iOS 27.1 SDK (Xcode 27.1, beta as of 2026-10)
 
 These APIs are iOS 27.1 and appear only in the 27.1 SDK. Xcode 27.0 and CI (`macos-15`, latest stable) can't compile them. Gate them behind a custom `PALETTES_DUO_SDK` condition until 27.1 is the stable Xcode, then switch to `#available(iOS 27.1, *)` only.
