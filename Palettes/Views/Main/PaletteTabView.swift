@@ -14,9 +14,29 @@ struct PaletteTabView: View {
     @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
     /// DEBUG `-onboardingStart` presents onboarding regardless of the flag, once.
     @State private var debugOnboardingFinished = false
+    /// What the cover is actually bound to. It follows `showsOnboarding`, but
+    /// a replay is presented a beat later: on iOS 17 a cover asked for while
+    /// the Settings sheet is still finishing its dismissal is silently
+    /// dropped, and with a constant binding SwiftUI never asks again.
+    @State private var isOnboardingPresented = false
+    @State private var presentTask: Task<Void, Never>?
 
     private var showsOnboarding: Bool {
         OnboardingDebug.isLaunchArgument ? !debugOnboardingFinished : !didCompleteOnboarding
+    }
+
+    /// Read from the store rather than the `@AppStorage` copy, which can lag
+    /// a write made elsewhere (the Settings replay resets the flag directly).
+    private var onboardingWanted: Bool {
+        OnboardingDebug.isLaunchArgument
+            ? !debugOnboardingFinished
+            : !UserDefaults.standard.bool(forKey: OnboardingKeys.didComplete)
+    }
+
+    init() {
+        // First launch: the cover is up from the first frame, no flash of the tabs.
+        _isOnboardingPresented = State(initialValue: OnboardingDebug.isLaunchArgument
+            || !UserDefaults.standard.bool(forKey: OnboardingKeys.didComplete))
     }
 
     var body: some View {
@@ -33,8 +53,12 @@ struct PaletteTabView: View {
         // Attached after the environment objects so onboarding (and the views
         // it reuses) can read AppData. The only way out is `onFinish`.
         .fullScreenCover(isPresented: Binding(
-            get: { showsOnboarding },
-            set: { _ in }
+            get: { isOnboardingPresented },
+            // The only way out is `onFinish`; anything else re-presents it.
+            set: { shown in
+                isOnboardingPresented = shown
+                if !shown, onboardingWanted { presentOnboarding(after: .milliseconds(300)) }
+            }
         )) {
             OnboardingView { reason in
                 if case .completed(let id) = reason {
@@ -49,6 +73,30 @@ struct PaletteTabView: View {
             }
             .environmentObject(appData)
             .toastOverlay()
+        }
+        // Belt and braces for the replay: re-check whenever defaults change.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            if onboardingWanted, !isOnboardingPresented {
+                presentOnboarding(after: .milliseconds(450))
+            }
+        }
+        .onChange(of: showsOnboarding) { _, shows in
+            if shows {
+                presentOnboarding(after: .milliseconds(450))
+            } else {
+                presentTask?.cancel()
+                isOnboardingPresented = false
+            }
+        }
+    }
+
+    /// Presents the cover once whatever was on screen has fully gone.
+    private func presentOnboarding(after delay: Duration) {
+        presentTask?.cancel()
+        presentTask = Task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, onboardingWanted else { return }
+            isOnboardingPresented = true
         }
     }
 
