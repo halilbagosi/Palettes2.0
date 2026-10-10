@@ -6,8 +6,7 @@
 //  whose cutout sits centered at the top, and the top bezel everywhere else
 //  (iPad, iPhone Duo, landscape). There is no public API for the cutout's
 //  frame, so a centered cutout is recognised by the iPhone's screen size and
-//  the inset (and, for the smaller iPhone 18 Pro island, the model) is
-//  mapped to the hardware's known sizes. Any other device,
+//  the inset is mapped to the hardware's known sizes. Any other device,
 //  including one with an off-center cutout, pulls from the bezel.
 //
 
@@ -56,55 +55,14 @@ nonisolated struct IslandGeometry: Equatable {
     static func make(topInset: CGFloat, screenSize: CGSize) -> IslandGeometry {
         if screenSize.height > screenSize.width,
            centeredCutoutSizes.contains(Size(screenSize.width, screenSize.height)) {
-            // The cutout's bottom edge sits a fixed distance above the safe
-            // area on each kind of hardware, so it's placed from the inset:
-            // the neck must leave from exactly that edge to read as one black
-            // shape with the real cutout.
             if topInset >= 59 {
-                // 37 pt tall, its bottom 11 pt above the safe area (top 14 at a
-                // 62 pt inset, 11 at 59). iPhone 18 Pro's and Pro Max's are as
-                // tall and sit as high, only narrower: 95 pt, measured from a
-                // screen recording, rather than 125.
-                let height: CGFloat = 37
-                let width: CGFloat = hasCompactIsland ? 95 : 125
-                return IslandGeometry(kind: .dynamicIsland, width: width,
-                                      height: height, top: topInset - 11 - height)
+                return IslandGeometry(kind: .dynamicIsland, width: 125, height: 37, top: topInset >= 62 ? 14 : 11)
             }
             if topInset >= 44 {
-                // The notch runs from the top edge to 14 pt above the safe area
-                // (30 pt deep at a 44 pt inset, 33 at 47).
-                let height = min(max(topInset - 14, 28), 36)
-                return IslandGeometry(kind: .notch, width: 160, height: height, top: 0)
+                return IslandGeometry(kind: .notch, width: 160, height: 31, top: 0)
             }
         }
         return .bezel
-    }
-
-    /// iPhone 18 Pro and Pro Max keep the 17 Pro's screen sizes and insets but
-    /// have a narrower Dynamic Island, so they're told apart by model: the
-    /// iPhone 18 family's identifiers start at iPhone19,x, and later models
-    /// are assumed to keep the smaller island.
-    static let hasCompactIsland: Bool = {
-        // Simulator also names the device it's simulating.
-        if let name = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"],
-           name.contains("iPhone 18 Pro") {
-            return true
-        }
-        guard let identifier = modelIdentifier, identifier.hasPrefix("iPhone") else { return false }
-        let major = identifier.dropFirst("iPhone".count).prefix { $0.isNumber }
-        return (Int(major) ?? 0) >= 19
-    }()
-
-    /// The hardware model, e.g. "iPhone18,1"; the simulated one in Simulator.
-    private static var modelIdentifier: String? {
-        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
-            return simulated
-        }
-        var info = utsname()
-        uname(&info)
-        return withUnsafePointer(to: &info.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
-        }
     }
 
     /// A screen size rounded to whole points, so it can be looked up.
@@ -127,34 +85,6 @@ nonisolated struct IslandGeometry: Equatable {
 
     /// Height of the visible part of the drawn shape (the notch's overhang excluded).
     var drawnHeight: CGFloat { height - 2 * Self.drawInset }
-
-    /// The drawn shape's bottom edge as a flat run between two rounded ends,
-    /// for joining the neck to it smoothly. Nil for the bezel and none.
-    nonisolated struct BottomEdge {
-        /// Half the flat run's width, from the centre line.
-        var flatHalfWidth: CGFloat
-        /// Radius of the rounded ends, and the y of their centres.
-        var cornerRadius: CGFloat
-        var cornerCenterY: CGFloat
-    }
-
-    /// The hardware's bottom edge, not the drawn shape's (1 pt inside it):
-    /// a corner tangent to the drawn edge would cross the real one at an
-    /// angle and read as sharp.
-    var bottomEdge: BottomEdge? {
-        switch kind {
-        case .dynamicIsland:
-            let radius = height / 2
-            return BottomEdge(flatHalfWidth: width / 2 - radius,
-                              cornerRadius: radius, cornerCenterY: bottom - radius)
-        case .notch:
-            let radius = Self.notchBottomRadius
-            return BottomEdge(flatHalfWidth: width / 2 - radius,
-                              cornerRadius: radius, cornerCenterY: bottom - radius)
-        case .bezel, .none:
-            return nil
-        }
-    }
 
     /// The drawn shape's rect in screen coordinates.
     func drawnRect(screenWidth: CGFloat) -> CGRect {
