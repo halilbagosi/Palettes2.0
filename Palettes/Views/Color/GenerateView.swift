@@ -806,7 +806,7 @@ struct GenerateView: View {
                 Button {
                     startGeneration()
                 } label: {
-                    Label("Generate Palette", systemImage: "sparkles")
+                    Text("Generate Palette")
                         .font(.headline)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 6)
@@ -823,7 +823,7 @@ struct GenerateView: View {
         Button {
             startGeneration()
         } label: {
-            Label("Generate", systemImage: "sparkles")
+            Text("Generate")
                 .font(.headline)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
