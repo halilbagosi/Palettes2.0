@@ -96,55 +96,43 @@ struct GenerationResultView: View {
 
     // MARK: - Name
 
-    /// The generated name in the generated gradient; editing swaps in a field.
+    /// The generated name in the generated gradient. Editing swaps it for a field
+    /// laid out identically, so nothing moves: the display text keeps its place
+    /// (hidden) and the field sits exactly over it.
     private var nameField: some View {
-        ZStack {
-            if !nameFocused {
-                // The pencil says the name can be changed; tapping either renames.
-                OnboardingPaletteName(name: name.isEmpty ? "Untitled Palette" : name,
-                                      usesGradient: true, trailingSymbol: "pencil")
-                .lineLimit(2)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-                .onTapGesture { nameFocused = true }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Palette name, \(name)")
-                .accessibilityHint("Renames the palette")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { nameFocused = true }
-            }
-            nameTextField
-                .opacity(nameFocused ? 1 : 0)
-                .accessibilityHidden(!nameFocused)
-        }
-    }
-
-    private var nameTextField: some View {
-        TextField("Palette Name", text: $name)
-            .font(.system(.title, design: .rounded).weight(.bold))
-            .multilineTextAlignment(.center)
-            .focused($nameFocused)
-            .submitLabel(.done)
-            .onSubmit {
-                name = name.trimmingCharacters(in: .whitespaces)
-            }
+        let shown = name.isEmpty ? "Untitled Palette" : name
+        return OnboardingPaletteName(name: shown, usesGradient: true, trailingSymbol: "pencil")
+            .lineLimit(3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 44)
-            .overlay(alignment: .trailing) {
-                if !nameFocused {
-                    Button {
-                        nameFocused = true
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .contentShape(Circle())
+            .opacity(nameFocused ? 0 : 1)
+            .overlay {
+                TextField("Palette Name", text: $name, axis: .vertical)
+                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1...3)
+                    .focused($nameFocused)
+                    .submitLabel(.done)
+                    .onSubmit { name = name.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .onChange(of: name) { _, new in
+                        // Return ends editing rather than adding a line.
+                        if new.contains("\n") { name = new.replacingOccurrences(of: "\n", with: ""); nameFocused = false }
                     }
-                    .accessibilityLabel("Edit palette name")
-                }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .opacity(nameFocused ? 1 : 0)
+                    .allowsHitTesting(nameFocused)
+                    .accessibilityHidden(!nameFocused)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { nameFocused = true }
+            .animation(.easeInOut(duration: 0.18), value: nameFocused)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Palette name, \(shown)")
+            .accessibilityHint("Renames the palette")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { nameFocused = true }
     }
 
     // MARK: - Swatches

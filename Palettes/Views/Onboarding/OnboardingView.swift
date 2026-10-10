@@ -415,20 +415,41 @@ private struct PullDrivenBackground: View {
     }
 }
 
-/// "Pull down to begin", fading as soon as the pull starts.
+/// "Pull down to begin": a cascade of chevrons pulsing downward, the copy
+/// drifting gently, all fading as soon as the pull starts.
 private struct PullPrompt: View {
     @ObservedObject var pull: SpringValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "chevron.compact.down")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("Pull down to begin")
-                .font(.title3.weight(.medium))
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            VStack(spacing: 18) {
+                VStack(spacing: -7) {
+                    ForEach(0..<3, id: \.self) { index in
+                        let phase = (t * 0.9 - Double(index) * 0.2).truncatingRemainder(dividingBy: 1)
+                        let wave = pow(sin(.pi * (phase < 0 ? phase + 1 : phase)), 2)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .opacity(reduceMotion ? 0.5 : 0.12 + 0.78 * wave)
+                            .offset(y: reduceMotion ? 0 : CGFloat(wave) * 5)
+                    }
+                }
+                VStack(spacing: 6) {
+                    Text("Pull down to begin")
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                    Text("Drag from the top of the screen")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 .multilineTextAlignment(.center)
+                .offset(y: reduceMotion ? 0 : CGFloat(sin(t * 1.6)) * 3)
+            }
         }
         .padding(.horizontal, 32)
+        // The cue follows the pull a little, then is gone.
+        .offset(y: CGFloat(Easing.smoothstep(0, 60, pull.value)) * 14)
         .opacity(1 - Easing.smoothstep(0, 40, pull.value))
         .allowsHitTesting(false)
         .accessibilityElement(children: .combine)

@@ -149,7 +149,7 @@ struct OnboardingPaletteName: View {
     private var label: some View {
         var text = Text(name)
         if let trailingSymbol {
-            text = text + Text("  ") + Text(Image(systemName: trailingSymbol))
+            text = text + Text("\u{00A0}") + Text(Image(systemName: trailingSymbol))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.secondary)
         }

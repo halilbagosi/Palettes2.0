@@ -65,14 +65,12 @@ private struct OnboardingCoachMarkModifier: ViewModifier {
         Button(action: { dismiss() }) {
             Label(message, systemImage: "hand.tap")
                 .font(.callout.weight(.medium))
+                .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(.white.opacity(0.3), lineWidth: 1))
-                .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
+                .liquidGlass(.interactive, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
         .buttonStyle(.plain)
         // A banner, not content: at the largest sizes it would cover the colors.
