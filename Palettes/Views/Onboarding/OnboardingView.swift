@@ -55,7 +55,12 @@ struct OnboardingView: View {
         var roomy = false
 
         var orbDiameter: CGFloat {
-            compact ? min(240, full.width * 0.62) : min(310, full.width * 0.76)
+            if compact { return min(240, full.width * 0.62) }
+            let phone = min(310, full.width * 0.76)
+            // iPad and iPhone Duo: grows with the screen, leaving room under it for the text.
+            guard full.width >= 600 else { return phone }
+            let shortSide = min(full.width, full.height)
+            return max(phone, min(460, shortSide * 0.5, full.height * 0.4))
         }
         /// Skip's pill: 6 below the top safe area, 30 tall.
         var skipBottom: CGFloat { topInset + 6 + 30 }

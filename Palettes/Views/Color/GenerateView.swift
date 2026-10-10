@@ -6,6 +6,8 @@ import Foundation
 @available(iOS 26.0, *)
 struct GenerateView: View {
     @EnvironmentObject var appData: AppData
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private enum Phase { case form, generating, result }
     @State private var phase: Phase = .form
@@ -24,6 +26,8 @@ struct GenerateView: View {
     @State private var showCamera = false
     @State private var showPhotoPicker = false
     @FocusState private var vibeFocused: Bool
+    /// The stage is taller than it is wide.
+    @State private var isPortrait = true
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -56,6 +60,12 @@ struct GenerateView: View {
         if case .available = SystemLanguageModel.default.availability { return true }
         return false
         #endif
+    }
+
+    /// iPad and iPhone Duo in portrait at full size: every color is shown in
+    /// a grid that fills the space under the options, instead of a strip.
+    private var showsColorGrid: Bool {
+        horizontalSizeClass == .regular && verticalSizeClass == .regular && isPortrait
     }
 
     private var selectedColors: [Color] {
@@ -100,6 +110,7 @@ struct GenerateView: View {
 
     private var stage: some View {
         stageContent
+            .onGeometryChange(for: Bool.self) { $0.size.height > $0.size.width } action: { isPortrait = $0 }
             .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
                 Button("Save Anyway") { performSave() }
                 Button("Cancel", role: .cancel) {}
@@ -227,7 +238,8 @@ struct GenerateView: View {
         .sensoryFeedback(.selection, trigger: paletteSize)
         .sensoryFeedback(.impact, trigger: phase == .generating)
         .onChange(of: vibeFocused) { _, focused in
-            guard focused else { return }
+            // The grid is already in view; scrolling to its end would hide the options.
+            guard focused, !showsColorGrid else { return }
             // Scroll fully down once the keyboard inset lands, so the color
             // strip isn't hidden behind the pinned field.
             Task { @MainActor in
@@ -380,43 +392,61 @@ struct GenerateView: View {
                     Spacer(minLength: 8)
                 }
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        ForEach(appData.colors) { colorItem in
-                            colorSwatch(colorItem)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 2)
-                }
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    geo.contentOffset.x > 4
-                } action: { _, scrolled in
-                    colorsFadeLeading = scrolled
-                }
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    geo.contentOffset.x < geo.contentSize.width - geo.containerSize.width - 4
-                } action: { _, more in
-                    colorsFadeTrailing = more
-                }
-                // Soften the edges while there is off-screen content, so
-                // swatches fade out instead of cutting off harshly.
-                .mask {
-                    HStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: colorsFadeLeading ? 28 : 0)
-                        Rectangle()
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: colorsFadeTrailing ? 28 : 0)
-                    }
-                    .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
-                    .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+                if showsColorGrid {
+                    colorGrid
+                } else {
+                    colorStrip
                 }
             }
         }
     }
 
-    private func colorSwatch(_ colorItem: ColorViewModel) -> some View {
+    private var colorGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 14)], spacing: 18) {
+            ForEach(appData.colors) { colorItem in
+                colorSwatch(colorItem, diameter: 64)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 2)
+    }
+
+    private var colorStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(appData.colors) { colorItem in
+                    colorSwatch(colorItem)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 2)
+        }
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.x > 4
+        } action: { _, scrolled in
+            colorsFadeLeading = scrolled
+        }
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.x < geo.contentSize.width - geo.containerSize.width - 4
+        } action: { _, more in
+            colorsFadeTrailing = more
+        }
+        // Soften the edges while there is off-screen content, so
+        // swatches fade out instead of cutting off harshly.
+        .mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: colorsFadeLeading ? 28 : 0)
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: colorsFadeTrailing ? 28 : 0)
+            }
+            .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
+            .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+        }
+    }
+
+    private func colorSwatch(_ colorItem: ColorViewModel, diameter: CGFloat = 54) -> some View {
         let isSelected = selectedColorIDs.contains(colorItem.id)
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -431,7 +461,7 @@ struct GenerateView: View {
                 ZStack(alignment: .bottomTrailing) {
                     Circle()
                         .fill(colorItem.color.gradient)
-                        .frame(width: 54, height: 54)
+                        .frame(width: diameter, height: diameter)
                         .overlay {
                             Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
                         }
@@ -457,7 +487,7 @@ struct GenerateView: View {
                     .font(.caption2)
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .lineLimit(1)
-                    .frame(width: 62)
+                    .frame(width: diameter + 8)
             }
         }
         .buttonStyle(.plain)
