@@ -97,8 +97,13 @@ extension View {
 
     /// Fades the view out over `length` at the given edges, so scrolling
     /// content softens away instead of being cut off.
+    ///
+    /// The other edges stay open: a scroll view draws into the safe area
+    /// around it, and a glow (the Generate orb's) spreads past its frame, so
+    /// a mask the size of the frame would cut them off in a hard line.
     func fadingEdges(_ edges: VerticalEdge.Set, length: CGFloat) -> some View {
-        mask {
+        let overflow: CGFloat = 2000
+        return mask {
             VStack(spacing: 0) {
                 if edges.contains(.top) {
                     LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
@@ -110,6 +115,9 @@ extension View {
                         .frame(height: length)
                 }
             }
+            .padding(.horizontal, -overflow)
+            .padding(.top, edges.contains(.top) ? 0 : -overflow)
+            .padding(.bottom, edges.contains(.bottom) ? 0 : -overflow)
         }
     }
 }

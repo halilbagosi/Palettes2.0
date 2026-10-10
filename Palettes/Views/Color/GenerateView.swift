@@ -108,7 +108,9 @@ struct GenerateView: View {
             .navigationTitle(phase == .form ? "Generate" : "")
             // Folded, the orb needs the height a large title would take.
             .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
-            .toolbar(phase == .generating ? .hidden : .automatic, for: .navigationBar)
+            // Kept in landscape: bringing the bar back for the result moved the
+            // side insets a moment after the result appeared, so it jumped over.
+            .toolbar(phase == .generating && isPortrait ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
                 withAnimation(.easeInOut(duration: GeneratedGradient.cycleDuration).repeatForever(autoreverses: true)) {
@@ -500,58 +502,64 @@ struct GenerateView: View {
     /// on both compact phones and wider iPad layouts. Menus avoid the
     /// six-segment squeeze that made the previous size control hard to use.
     /// Side by side normally; stacked above the colors on the controls side
-    /// of a landscape split.
+    /// of a landscape split. The photo button sits beside them either way.
     private func generationOptions(axis: Axis) -> some View {
         let layout = axis == .horizontal
             ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
             : AnyLayout(VStackLayout(spacing: 10))
-        return layout {
-            Menu {
-                ForEach(sizeOptions, id: \.self) { size in
-                    Button {
-                        paletteSize = size
-                    } label: {
-                        if size == paletteSize {
-                            Label("\(size) colors", systemImage: "checkmark")
-                        } else {
-                            Text("\(size) colors")
-                        }
-                    }
-                }
-            } label: {
-                generationOptionLabel(
-                    title: "Palette Size",
-                    value: "\(paletteSize) colors",
-                    systemImage: "square.stack.3d.up"
-                )
-            }
-            .accessibilityLabel("Palette size")
-
-            if canChooseMode {
+        return HStack(alignment: .top, spacing: 12) {
+            layout {
                 Menu {
-                    ForEach(HarmonyScheme.allCases) { option in
+                    ForEach(sizeOptions, id: \.self) { size in
                         Button {
-                            scheme = option
+                            paletteSize = size
                         } label: {
-                            if option == scheme {
-                                Label(option.displayName, systemImage: "checkmark")
+                            if size == paletteSize {
+                                Label("\(size) colors", systemImage: "checkmark")
                             } else {
-                                Text(option.displayName)
+                                Text("\(size) colors")
                             }
                         }
                     }
                 } label: {
                     generationOptionLabel(
-                        title: "Mode",
-                        value: scheme.displayName,
-                        systemImage: "paintpalette"
+                        title: "Palette Size",
+                        value: "\(paletteSize) colors",
+                        systemImage: "square.stack.3d.up"
                     )
                 }
-                .accessibilityLabel("Palette mode")
-                .transition(.scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
+                .accessibilityLabel("Palette size")
+
+                if canChooseMode {
+                    Menu {
+                        ForEach(HarmonyScheme.allCases) { option in
+                            Button {
+                                scheme = option
+                            } label: {
+                                if option == scheme {
+                                    Label(option.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(option.displayName)
+                                }
+                            }
+                        }
+                    } label: {
+                        generationOptionLabel(
+                            title: "Mode",
+                            value: scheme.displayName,
+                            systemImage: "paintpalette"
+                        )
+                    }
+                    .accessibilityLabel("Palette mode")
+                    .transition(.scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
+                }
             }
+            .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
+
+            // The photo source sits with the other inputs, matching their height.
+            imageMenuButton
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func generationOptionLabel(title: String, value: String, systemImage: String) -> some View {
@@ -757,10 +765,6 @@ struct GenerateView: View {
             .frame(maxWidth: .infinity)
             .liquidGlass(.interactive, in: .capsule)
 
-            if !vibeFocused {
-                imageMenuButton
-                    .transition(.pop)
-            }
         }
     }
 
@@ -884,12 +888,13 @@ struct GenerateView: View {
         } label: {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.title3)
-                .frame(width: 52, height: 52)
-                .foregroundColor(.accentColor)
-                .contentShape(Circle())
-                .liquidGlass(.interactive, in: .circle)
+                .foregroundStyle(.tint)
+                .frame(width: 52)
+                .frame(minHeight: 50, maxHeight: .infinity)
+                .contentShape(.rect(cornerRadius: 14))
+                .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
         }
-        .clipShape(Circle())
+        .accessibilityLabel("Add photo")
         .photosPicker(isPresented: $showPhotoPicker, selection: $photosPickerItem, matching: .images)
         .onChange(of: photosPickerItem) { _, newItem in
             Task {
