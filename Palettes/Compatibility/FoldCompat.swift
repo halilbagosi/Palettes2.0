@@ -205,27 +205,46 @@ struct FoldAwareGrid<Content: View>: View {
     }
 }
 
+/// A view's leading and trailing safe-area insets.
+nonisolated struct SideInsets: Equatable {
+    var leading: CGFloat = 0
+    var trailing: CGFloat = 0
+
+    /// Both sides at the larger inset, which centres a view on the screen
+    /// rather than on the safe area when bars sit along one side.
+    var balanced: SideInsets {
+        let side = max(leading, trailing)
+        return SideInsets(leading: side, trailing: side)
+    }
+}
+
 extension View {
-    /// Centres the view on the screen rather than on the safe area, for when
-    /// bars sit along one side (iPhone Duo and iPhone in landscape): both
-    /// sides are inset by `margin`, the larger side inset, and the uneven
-    /// safe area is ignored. nil leaves the view in the safe area.
+    /// Insets the view by `insets` at the sides in place of its own side safe
+    /// area, which it ignores. nil leaves the view in its safe area.
     ///
-    /// Measure `margin` with `onSideInsetChange` on a view that's already on
-    /// screen, not on the view being centred: measured as it appears, the
-    /// inset arrives a moment late and the view jumps sideways.
-    func centeredOnScreen(margin: CGFloat?) -> some View {
-        padding(.horizontal, margin ?? 0)
-            .ignoresSafeArea(.container, edges: margin == nil ? [] : .horizontal)
+    /// For a view whose bars change under it: on iPhone Duo the bars run down
+    /// the side, and the generated result's toolbar lands there at the end of
+    /// its transition, widening the inset; following the live safe area, the
+    /// view would jump sideways. Measure `insets` with `onSideInsetsChange` on
+    /// a view that's already on screen and hold them. The safe area is
+    /// ignored inside the insets too, or a scroll view in the view would
+    /// still inset its content by whatever the bar adds.
+    func fixedSideInsets(_ insets: SideInsets?) -> some View {
+        let edges: Edge.Set = insets == nil ? [] : .horizontal
+        return ignoresSafeArea(.container, edges: edges)
+            .padding(.leading, insets?.leading ?? 0)
+            .padding(.trailing, insets?.trailing ?? 0)
+            .ignoresSafeArea(.container, edges: edges)
     }
 
-    /// Reports the larger of the view's leading and trailing safe-area insets.
-    func onSideInsetChange(_ action: @escaping (CGFloat) -> Void) -> some View {
+    /// Reports the view's leading and trailing safe-area insets.
+    func onSideInsetsChange(_ action: @escaping (SideInsets) -> Void) -> some View {
         background {
             Color.clear
                 .ignoresSafeArea()
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    max(proxy.safeAreaInsets.leading, proxy.safeAreaInsets.trailing)
+                .onGeometryChange(for: SideInsets.self) { proxy in
+                    SideInsets(leading: proxy.safeAreaInsets.leading,
+                               trailing: proxy.safeAreaInsets.trailing)
                 } action: { newValue in
                     action(newValue)
                 }
