@@ -70,14 +70,6 @@ struct GenerationOrbView: View {
     var photo: UIImage? = nil
     var expectedCount: Int = 0
     var showsProgress: Bool = false
-    /// When false the orb is purely decorative: no stretch-on-drag and no
-    /// debug triple-tap panel.
-    var interactive: Bool = true
-    /// Content that sits inside the glass, under the liquid (e.g. a camera
-    /// preview). Its edge fades out. Change `backdropID` when swapping it to
-    /// cross-fade.
-    var backdrop: AnyView? = nil
-    var backdropID: Int = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -104,60 +96,35 @@ struct GenerationOrbView: View {
     }
 
     private func orb(diameter: CGFloat) -> some View {
-        TimelineView(.animation) { timeline in
-            let now = timeline.date
-            let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
+        ZStack {
+            // Fixed light under the orb; it doesn't move with the drop.
+            BubbleStageGlow(diameter: diameter)
+            bubble(diameter: diameter)
+        }
+    }
 
-            ZStack {
-                OrbShellBackground()
-                    .frame(width: diameter, height: diameter)
-
-                ZStack {
-                    if let backdrop {
-                        backdrop
-                            .frame(width: diameter, height: diameter)
-                            .mask(
-                                RadialGradient(
-                                    stops: [
-                                        .init(color: .black, location: 0),
-                                        .init(color: .black, location: 0.7),
-                                        .init(color: .clear, location: 1),
-                                    ],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: diameter / 2
-                                )
-                            )
-                            .id(backdropID)
-                            .transition(.opacity)
-                    }
-                }
-                .frame(width: diameter, height: diameter)
-                .clipShape(Circle())
-                .animation(.easeInOut(duration: 0.4), value: backdropID)
+    private func bubble(diameter: CGFloat) -> some View {
+        // A clear water bubble: busy while colors are arriving, calm otherwise,
+        // and it jiggles as each color lands or when it is let go after a pull.
+        LiquidBubble(diameter: diameter,
+                     energy: showsProgress ? 1 : 0.4,
+                     kick: colors.count,
+                     externalPull: dragOffset) {
+            TimelineView(.animation) { timeline in
+                let now = timeline.date
+                let t = reduceMotion ? 0.0 : now.timeIntervalSince(startDate)
 
                 liquid(diameter: diameter, time: t, now: now)
-                    .clipShape(Circle())
-
-                // Clear glass shell (iOS 26) or specular rim (earlier) on top
-                OrbShellOverlay()
                     .frame(width: diameter, height: diameter)
-
-                // Drawn above the liquid so it stays readable as colors arrive
-                innerContent(diameter: diameter)
             }
-            .frame(width: diameter, height: diameter)
         }
-        .scaleEffect(
-            x: 1 + abs(squish.width) * malleability - abs(squish.height) * crossThin,
-            y: 1 + abs(squish.height) * malleability - abs(squish.width) * crossThin,
-            anchor: stretchAnchor
-        )
-        .offset(x: dragOffset.width * translation, y: dragOffset.height * translation)
+        // Text, photo and progress sit on top of the glass so they stay crisp;
+        // under it, the glass would frost them.
+        .overlay { innerContent(diameter: diameter) }
+        // Pulling deforms the drop itself (LiquidBubble's externalPull).
         .contentShape(Circle())
 #if DEBUG
-        .gesture(TapGesture(count: 3).onEnded { showDebugPanel = true },
-                 including: interactive ? .all : .none)
+        .onTapGesture(count: 3) { showDebugPanel = true }
         .sheet(isPresented: $showDebugPanel) {
             OrbDebugPanel(settings: debug)
                 .presentationDetents([.medium])
@@ -169,11 +136,9 @@ struct GenerationOrbView: View {
                     dragOffset = value.translation
                 }
                 .onEnded { _ in
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
-                        dragOffset = .zero
-                    }
-                },
-            including: interactive ? .all : .none
+                    // The bubble springs back with its own jiggle.
+                    dragOffset = .zero
+                }
         )
         .sensoryFeedback(.impact(weight: .light), trigger: colors.count)
         .onChange(of: colors.count) { oldCount, newCount in

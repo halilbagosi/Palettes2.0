@@ -97,6 +97,7 @@ struct PaletteEditSheet: View {
             .toastOverlay()
             .navigationTitle("Edit Palette")
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

@@ -19,6 +19,10 @@ struct PaletteView: View {
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
+    /// The one-time options card after onboarding's "Start creating".
+    @State private var showsOptionsTour = false
+    @State private var optionsTourTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
 
@@ -141,6 +145,35 @@ struct PaletteView: View {
                 } message: {
                     Text("Delete \(selectedIDs.count) palette\(selectedIDs.count == 1 ? "" : "s")? This cannot be undone.")
                 }
+                .overlay(alignment: .topTrailing) {
+                    if showsOptionsTour {
+                        LibraryOptionsTourCard(
+                            layout: layoutBinding,
+                            sort: sortBinding,
+                            favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                            originFilter: originFilterBinding.animation(.spring(response: 0.3)),
+                            onDone: endOptionsTour
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        // Grows out of the ••• button it describes.
+                        .transition(reduceMotion
+                            ? .opacity
+                            : .scale(scale: 0.6, anchor: .topTrailing).combined(with: .opacity))
+                    }
+                }
+                .onReceive(appData.$libraryOptionsTourPending) { pending in
+                    if pending { beginOptionsTour() }
+                }
+                .onChange(of: path.count) { _, count in
+                    // Opening a palette puts the card away.
+                    if count > 0, showsOptionsTour { endOptionsTour() }
+                    // Back at the library after closing the extras sheet with ×.
+                    if count == 0, appData.libraryOptionsTourOnReturn {
+                        appData.libraryOptionsTourOnReturn = false
+                        showOptionsTour(after: .milliseconds(450))
+                    }
+                }
                 .onReceive(appData.$pendingOpenPaletteID) { id in
                     guard let id, let palette = appData.palettes.first(where: { $0.id == id }) else { return }
                     appData.pendingOpenPaletteID = nil
@@ -156,7 +189,8 @@ struct PaletteView: View {
         if appData.palettes.isEmpty {
             PaletteEmptyView(
                 imageName: "swatchpalette.fill",
-                message: "You currently have no palettes. Create one!",
+                title: "No palettes yet",
+                message: "Capture colors you love and mix them into your first palette.",
                 actionTitle: "Create Palette",
                 action: { isCreatingPalette = true }
             )
@@ -176,11 +210,20 @@ struct PaletteView: View {
     @ViewBuilder
     private var libraryContent: some View {
         if displayedPalettes.isEmpty {
-            ContentUnavailableView(
-                filteredEmptyTitle,
-                systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
-                description: Text(filteredEmptyMessage)
-            )
+            PaletteEmptyView(
+                imageName: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
+                title: filteredEmptyTitle,
+                message: filteredEmptyMessage,
+                actionTitle: "Show All Palettes",
+                actionImage: "line.3.horizontal.decrease.circle",
+                compact: true
+            ) {
+                withAnimation(.spring(response: 0.3)) {
+                    favoritesOnly = false
+                    originFilterRaw = LibraryOriginFilter.all.rawValue
+                }
+            }
+            .frame(maxHeight: .infinity)
         } else {
             ScrollView {
                 MorphingCardGrid(
@@ -195,6 +238,10 @@ struct PaletteView: View {
                 }
                 .padding()
                 .padding(.bottom, 88)
+                // Implicit as well as the binding's withAnimation: a change from a
+                // Toggle (the onboarding options card) arrives in the Toggle's own
+                // transaction and would otherwise snap.
+                .animation(.spring(response: 0.35, dampingFraction: 0.9), value: layout)
             }
         }
     }
@@ -392,6 +439,53 @@ struct PaletteView: View {
             )
         } label: {
             Image(systemName: "ellipsis")
+                .symbolEffect(.bounce, value: showsOptionsTour)
+        }
+    }
+
+    // MARK: - Options tour
+
+    /// Waits for the extras sheet to finish closing, returns to the library,
+    /// then brings in the options card.
+    private func beginOptionsTour() {
+        appData.libraryOptionsTourPending = false
+        optionsTourTask?.cancel()
+        optionsTourTask = Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            if !path.isEmpty {
+                path = NavigationPath()
+                try? await Task.sleep(for: .milliseconds(550))
+                guard !Task.isCancelled else { return }
+            }
+            presentOptionsTour()
+        }
+    }
+
+    /// Brings in the card over the library as it is, after `delay` (the pop
+    /// back to the library finishing).
+    private func showOptionsTour(after delay: Duration) {
+        appData.libraryOptionsTourPending = false
+        optionsTourTask?.cancel()
+        optionsTourTask = Task {
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, path.isEmpty else { return }
+            presentOptionsTour()
+        }
+    }
+
+    private func presentOptionsTour() {
+        exitSelection()
+        guard !appData.palettes.isEmpty else { return }
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(duration: 0.5, bounce: 0.2)) {
+            showsOptionsTour = true
+        }
+    }
+
+    private func endOptionsTour() {
+        optionsTourTask?.cancel()
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(duration: 0.35, bounce: 0)) {
+            showsOptionsTour = false
         }
     }
 

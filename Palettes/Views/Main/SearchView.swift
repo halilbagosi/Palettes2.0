@@ -117,6 +117,7 @@ struct SearchView: View {
                 }
             }
             .navigationTitle("Search")
+            .featureIntro(.search)
             .navigationDestination(for: ColorViewModel.self) { color in
                 ColorDetailView(colorItem: color)
             }
@@ -266,11 +267,17 @@ struct SearchView: View {
             }
 
             if browseColors.isEmpty && browsePalettes.isEmpty, (!selectedHues.isEmpty || !selectedTags.isEmpty) {
-                ContentUnavailableView(
-                    "No matches",
-                    systemImage: "paintpalette",
-                    description: Text("Nothing in your library matches the selected filters.")
-                )
+                PaletteEmptyView(
+                    imageName: "paintpalette",
+                    title: "No matches",
+                    message: "Nothing in your library matches the selected filters.",
+                    actionTitle: "Clear Filters",
+                    actionImage: "xmark.circle",
+                    compact: true
+                ) {
+                    selectedHues.removeAll()
+                    selectedTags.removeAll()
+                }
                 .padding(.top, 40)
                 .transition(.opacity)
             }

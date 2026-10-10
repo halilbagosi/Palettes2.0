@@ -94,6 +94,7 @@ struct ExportPaletteSheet: View {
             .padding(.top, 8)
             .navigationTitle("Export Palette")
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

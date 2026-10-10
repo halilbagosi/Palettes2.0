@@ -10,6 +10,11 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
+    #if DEBUG
+    @State private var debugStart = "pull"
+    @AppStorage(OnboardingDebug.slowMoToggleKey) private var debugSlowMo = false
+    @AppStorage(OnboardingDebug.aiOverrideKey) private var debugAI = OnboardingDebug.AIOverride.automatic.rawValue
+    #endif
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
@@ -79,9 +84,47 @@ struct SettingsView: View {
                     }
                     LabeledContent("Version", value: versionString)
                 }
+
+                #if DEBUG
+                Section {
+                    Picker("Start at", selection: $debugStart) {
+                        ForEach(OnboardingDebug.stepNames, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                    Toggle("Slow motion (0.25×)", isOn: $debugSlowMo)
+                    Picker("Apple Intelligence", selection: $debugAI) {
+                        ForEach(OnboardingDebug.AIOverride.allCases) { Text($0.label).tag($0.rawValue) }
+                    }
+                    Button {
+                        OnboardingDebug.requestFromSettings(start: debugStart)
+                        // Same path as Replay Onboarding: the presenter restarts it in onDismiss.
+                        replayOnboarding()
+                    } label: {
+                        Label("Try Onboarding", systemImage: "play.circle")
+                    }
+                    Button {
+                        debugAI = OnboardingDebug.AIOverride.on.rawValue
+                        OnboardingDebug.requestFromSettings(start: "pull")
+                        replayOnboarding()
+                    } label: {
+                        Label("Replay with Apple Intelligence", systemImage: "sparkles")
+                    }
+                    Button {
+                        debugAI = OnboardingDebug.AIOverride.off.rawValue
+                        OnboardingDebug.requestFromSettings(start: "pull")
+                        replayOnboarding()
+                    } label: {
+                        Label("Replay without Apple Intelligence", systemImage: "photo")
+                    }
+                } header: {
+                    Text("Onboarding (Debug)")
+                } footer: {
+                    Text("Starts onboarding at the chosen step with the sample image. Completing it behaves like a normal replay. Apple Intelligence picks the path: On picks a color and generates around it (simulated where the model can't run), Off makes the palette straight from the photo. This device: \(OnboardingPaletteMaker.deviceAIStatus).")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

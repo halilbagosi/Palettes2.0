@@ -40,7 +40,7 @@ struct GenerateView: View {
     @State private var duplicateOfName = ""
 
     private let sizeOptions = [2, 4, 6, 8, 10, 12]
-    private let formOrbDiameter: CGFloat = 138
+    private let formOrbDiameter: CGFloat = 156
 
     /// Iridescent tint reserved for the Apple Intelligence glyph.
     private var glowGradient: AnyShapeStyle {
@@ -67,6 +67,7 @@ struct GenerateView: View {
             Group {
                 if isModelAvailable {
                     stage
+                        .featureIntro(.generate)
                 } else if case .unavailable(let reason) = SystemLanguageModel.default.availability {
                     unavailableView(for: reason)
                 }
@@ -145,16 +146,27 @@ struct GenerateView: View {
         }
     }
 
+    /// The orb, then the same copy and filling swatch row as onboarding.
     private var generatingOrb: some View {
-        GenerationOrbView(
-            colors: arrivedColors,
-            promptText: generationStatusText,
-            photo: selectedImage,
-            expectedCount: paletteSize,
-            showsProgress: true
-        )
-        .matchedGeometryEffect(id: "orb", in: orbNamespace)
-        .frame(width: 260, height: 260)
+        VStack(spacing: 28) {
+            GenerationOrbView(
+                colors: arrivedColors,
+                photo: selectedImage,
+                showsProgress: true
+            )
+            .matchedGeometryEffect(id: "orb", in: orbNamespace)
+            .frame(width: 300, height: 300)
+            // Above the text: stretched over it, the glass bends it.
+            .zIndex(1)
+
+            VStack(spacing: 20) {
+                OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
+                GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+                    .frame(maxWidth: 360)
+            }
+            .padding(.horizontal, 24)
+            .transition(.blurFade)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
@@ -520,7 +532,10 @@ struct GenerateView: View {
 
     private var generationStatusText: String {
         let vibe = vibeDescription.trimmingCharacters(in: .whitespaces)
-        return vibe.isEmpty ? "Generating palette…" : vibe
+        if !vibe.isEmpty { return "“\(vibe)”" }
+        if selectedImage != nil { return "Pulling colors out of your photo." }
+        if !selectedColorIDs.isEmpty { return "Building around your colors." }
+        return "Composing something new."
     }
 
     // MARK: - Generate Button
@@ -630,6 +645,12 @@ struct GenerateView: View {
                 }
                 resultName = palette.name
                 resultPaletteColors = palette.paletteColors
+                #if DEBUG
+                // `-generateHold YES` keeps the waiting moment up for screenshots.
+                if UserDefaults.standard.bool(forKey: "generateHold") {
+                    try? await Task.sleep(for: .seconds(8))
+                }
+                #endif
                 // Let the last drop settle before revealing the result
                 try? await Task.sleep(for: .milliseconds(900))
                 withAnimation(.smooth(duration: 0.7)) { phase = .result }

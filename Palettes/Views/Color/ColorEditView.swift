@@ -200,6 +200,7 @@ struct ColorEditView: View {
             )
             .navigationTitle("Edit Color")
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
