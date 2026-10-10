@@ -98,6 +98,7 @@ struct ColorsView: View {
         NavigationStack(path: $path) {
             content
                 .navigationTitle(isSelecting ? "\(selectedIDs.count) Selected" : "Colors")
+                .featureIntro(.colors)
                 .navigationDestination(for: ColorViewModel.self) { color in
                     ColorDetailView(colorItem: color)
                 }
@@ -165,8 +166,9 @@ struct ColorsView: View {
         if appData.colors.isEmpty {
             PaletteEmptyView(
                 imageName: "circle.grid.cross.fill",
-                message: "You currently have no colors. Create one!",
-                actionTitle: "Create Color",
+                title: "No colors yet",
+                message: "Pick one, scan it from the world around you, or pull it from a photo.",
+                actionTitle: "Add Color",
                 action: { isCreatingColor = true }
             )
             .transition(.opacity)
@@ -195,11 +197,20 @@ struct ColorsView: View {
     private var libraryContent: some View {
         let colors = displayedColors
         if colors.isEmpty {
-            ContentUnavailableView(
-                filteredEmptyTitle,
-                systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
-                description: Text(filteredEmptyMessage)
-            )
+            PaletteEmptyView(
+                imageName: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
+                title: filteredEmptyTitle,
+                message: filteredEmptyMessage,
+                actionTitle: "Show All Colors",
+                actionImage: "line.3.horizontal.decrease.circle",
+                compact: true
+            ) {
+                withAnimation(.spring(response: 0.3)) {
+                    favoritesOnly = false
+                    originFilterRaw = LibraryOriginFilter.all.rawValue
+                }
+            }
+            .frame(maxHeight: .infinity)
         } else {
             ScrollView {
                 LazyMorphingCardGrid(

@@ -127,11 +127,13 @@ final class OnboardingModelTests: XCTestCase {
 
     func testReplayResetsAllOnboardingFlags() {
         let defaults = UserDefaults(suiteName: "OnboardingModelTests.\(UUID().uuidString)")!
-        for key in [OnboardingKeys.didComplete, OnboardingKeys.didShowCoachMark, OnboardingKeys.didShowExtras] {
+        let keys = [OnboardingKeys.didComplete, OnboardingKeys.didShowCoachMark, OnboardingKeys.didShowExtras,
+                    OnboardingKeys.didIntroColors, OnboardingKeys.didIntroSearch, OnboardingKeys.didIntroGenerate]
+        for key in keys {
             defaults.set(true, forKey: key)
         }
         OnboardingKeys.resetForReplay(defaults)
-        for key in [OnboardingKeys.didComplete, OnboardingKeys.didShowCoachMark, OnboardingKeys.didShowExtras] {
+        for key in keys {
             XCTAssertFalse(defaults.bool(forKey: key), key)
         }
     }

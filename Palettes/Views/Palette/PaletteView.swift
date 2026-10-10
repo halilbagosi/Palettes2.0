@@ -184,7 +184,8 @@ struct PaletteView: View {
         if appData.palettes.isEmpty {
             PaletteEmptyView(
                 imageName: "swatchpalette.fill",
-                message: "You currently have no palettes. Create one!",
+                title: "No palettes yet",
+                message: "Capture colors you love and mix them into your first palette.",
                 actionTitle: "Create Palette",
                 action: { isCreatingPalette = true }
             )
@@ -204,11 +205,20 @@ struct PaletteView: View {
     @ViewBuilder
     private var libraryContent: some View {
         if displayedPalettes.isEmpty {
-            ContentUnavailableView(
-                filteredEmptyTitle,
-                systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
-                description: Text(filteredEmptyMessage)
-            )
+            PaletteEmptyView(
+                imageName: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
+                title: filteredEmptyTitle,
+                message: filteredEmptyMessage,
+                actionTitle: "Show All Palettes",
+                actionImage: "line.3.horizontal.decrease.circle",
+                compact: true
+            ) {
+                withAnimation(.spring(response: 0.3)) {
+                    favoritesOnly = false
+                    originFilterRaw = LibraryOriginFilter.all.rawValue
+                }
+            }
+            .frame(maxHeight: .infinity)
         } else {
             ScrollView {
                 MorphingCardGrid(

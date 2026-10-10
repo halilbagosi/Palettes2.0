@@ -130,33 +130,13 @@ struct SearchEmptyLibraryView: View {
     let onCreate: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "swatchpalette")
-                .font(.system(size: 44))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.indigo)
-
-            Text("Nothing to search yet")
-                .font(.title3.bold())
-
-            Text("Create colors and palettes and they'll show up here, ready to browse and search.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            Button {
-                onCreate()
-            } label: {
-                Label("Create a Palette", systemImage: "plus")
-                    .font(.headline)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-            }
-            .glassButton(prominent: true)
-            .tint(.accentColor)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 80)
+        PaletteEmptyView(
+            imageName: "magnifyingglass",
+            title: "Nothing to search yet",
+            message: "Your colors and palettes will gather here, ready to browse by hue, tag or name.",
+            actionTitle: "Create a Palette",
+            action: onCreate
+        )
+        .padding(.top, 48)
     }
 }

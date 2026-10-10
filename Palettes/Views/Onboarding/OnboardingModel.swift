@@ -27,13 +27,20 @@ enum OnboardingKeys {
     static let didShowCoachMark = "didShowOnboardingCoachMark"
     /// Set once the post-onboarding extras sheet has been shown.
     static let didShowExtras = "didShowOnboardingExtras"
+    /// Set once each tab's first-visit welcome sheet has been shown.
+    static let didIntroColors = "didShowColorsIntro"
+    static let didIntroSearch = "didShowSearchIntro"
+    static let didIntroGenerate = "didShowGenerateIntro"
 
     /// Replay from Settings: the whole experience runs again, including the
-    /// one-time coach mark and extras sheet.
+    /// one-time coach mark, extras sheet and tab welcomes.
     static func resetForReplay(_ defaults: UserDefaults = .standard) {
         defaults.set(false, forKey: didComplete)
         defaults.set(false, forKey: didShowCoachMark)
         defaults.set(false, forKey: didShowExtras)
+        for key in [didIntroColors, didIntroSearch, didIntroGenerate] {
+            defaults.set(false, forKey: key)
+        }
     }
 }
 

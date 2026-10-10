@@ -67,6 +67,7 @@ struct GenerateView: View {
             Group {
                 if isModelAvailable {
                     stage
+                        .featureIntro(.generate)
                 } else if case .unavailable(let reason) = SystemLanguageModel.default.availability {
                     unavailableView(for: reason)
                 }
