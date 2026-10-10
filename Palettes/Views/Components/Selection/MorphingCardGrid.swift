@@ -169,9 +169,7 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
         } action: { newValue in
             viewport = newValue
         }
-        .onGeometryChange(for: ClosedRange<CGFloat>?.self) { proxy in
-            proxy.verticalFoldSpan
-        } action: { newValue in
+        .onVerticalFoldSpanChange { newValue in
             // Cards move and resize to their new columns as the device folds.
             withAnimation(.smooth(duration: 0.35)) { foldSpan = newValue }
         }

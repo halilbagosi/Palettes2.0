@@ -66,11 +66,50 @@ extension GeometryProxy {
 
 extension View {
     /// Reports the active fold crossing this view, in its own coordinates.
+    ///
+    /// Read from a `GeometryReader`, as Apple's examples do: folding the
+    /// device changes the reserved regions without changing the view's size,
+    /// and `onGeometryChange` only re-measures when the size or position
+    /// changes, so it would miss a fold made while the view is on screen.
     func onFoldChange(_ action: @escaping (Fold?) -> Void) -> some View {
-        onGeometryChange(for: Fold?.self) { proxy in
-            proxy.activeFold?.dividing(proxy.size)
-        } action: { fold in
-            action(fold)
+        background {
+            GeometryReader { proxy in
+                let fold = proxy.activeFold?.dividing(proxy.size)
+                Color.clear
+                    .onAppear { action(fold) }
+                    .onChange(of: fold) { _, newFold in action(newFold) }
+            }
+        }
+    }
+
+    /// Reports the x extent of an active vertical fold across this view, for
+    /// layouts that scroll vertically (see `GeometryProxy.verticalFoldSpan`).
+    func onVerticalFoldSpanChange(_ action: @escaping (ClosedRange<CGFloat>?) -> Void) -> some View {
+        background {
+            GeometryReader { proxy in
+                let span = proxy.verticalFoldSpan
+                Color.clear
+                    .onAppear { action(span) }
+                    .onChange(of: span) { _, newSpan in action(newSpan) }
+            }
+        }
+    }
+
+    /// Fades the view out over `length` at the given edges, so scrolling
+    /// content softens away instead of being cut off.
+    func fadingEdges(_ edges: VerticalEdge.Set, length: CGFloat) -> some View {
+        mask {
+            VStack(spacing: 0) {
+                if edges.contains(.top) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: length)
+                }
+                Rectangle()
+                if edges.contains(.bottom) {
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: length)
+                }
+            }
         }
     }
 }
@@ -120,9 +159,7 @@ struct FoldAwareGrid<Content: View>: View {
     var body: some View {
         grid
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            .onGeometryChange(for: ClosedRange<CGFloat>?.self) { proxy in
-                proxy.verticalFoldSpan
-            } action: { newValue in
+            .onVerticalFoldSpanChange { newValue in
                 withAnimation(.smooth(duration: 0.35)) { foldSpan = newValue }
             }
     }

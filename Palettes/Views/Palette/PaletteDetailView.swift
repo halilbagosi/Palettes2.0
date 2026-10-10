@@ -259,7 +259,10 @@ struct PaletteDetailView: View {
             ScrollView {
                 colorGrid
                     .padding()
+                    .padding(.vertical, 6)
             }
+            // Colors fade out at the cut edges as they scroll.
+            .fadingEdges([.top, .bottom], length: 18)
         }
     }
 

@@ -289,6 +289,7 @@ struct GenerateView: View {
             }
             .padding()
         } controls: {
+            VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 20) {
                 generationOptions(axis: fold.isVertical ? .vertical : .horizontal)
                 if !appData.colors.isEmpty && !colorsBesideOrb {
@@ -298,10 +299,10 @@ struct GenerateView: View {
                         // under its fade; the top edge fades too.
                         ScrollView {
                             colorGrid
-                                .padding(.top, Self.scrollFade)
+                                .padding(.vertical, Self.scrollFade)
                         }
                         .scrollDismissesKeyboard(.interactively)
-                        .fadingEdges(.top, length: Self.scrollFade)
+                        .fadingEdges([.top, .bottom], length: Self.scrollFade)
                     }
                 } else {
                     Spacer(minLength: 0)
@@ -311,10 +312,12 @@ struct GenerateView: View {
             .padding(.top, 8)
             .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
             .frame(maxWidth: .infinity)
-            .safeAreaInset(edge: .bottom) {
-                if phase == .form {
-                    pinnedControls
-                }
+
+            // In the stack, not an inset: the grid ends above the vibe field
+            // (fading out) instead of scrolling behind it.
+            if phase == .form {
+                pinnedControls
+            }
             }
         }
     }
@@ -400,22 +403,6 @@ struct GenerateView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal)
         .padding(.bottom, 24)
-        // Content scrolling under the controls fades into the background
-        // instead of meeting them at a hard edge.
-        .background(alignment: .bottom) {
-            LinearGradient(
-                stops: [
-                    .init(color: Color(.systemBackground).opacity(0), location: 0),
-                    .init(color: Color(.systemBackground).opacity(0.92), location: 0.45),
-                    .init(color: Color(.systemBackground), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .padding(.top, -36)
-            .ignoresSafeArea(edges: .bottom)
-            .allowsHitTesting(false)
-        }
         .animation(.spring(response: 0.3), value: vibeFocused)
     }
 
@@ -423,6 +410,7 @@ struct GenerateView: View {
     /// Generate pinned under them.
     private var stackedForm: some View {
         ScrollViewReader { scrollProxy in
+        VStack(spacing: 0) {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 GenerateHeaderView(
@@ -453,15 +441,18 @@ struct GenerateView: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.bottom, Self.scrollFade)
         }
         .scrollDismissesKeyboard(.interactively)
+        // Ends above the vibe field and fades out into it, so nothing
+        // scrolls behind the field.
+        .fadingEdges(.bottom, length: Self.scrollFade)
+
         // Pinned above the keyboard and home indicator, like the result
         // view's describe-change field.
-        .safeAreaInset(edge: .bottom) {
-            if phase == .form {
-                pinnedControls
-            }
+        if phase == .form {
+            pinnedControls
+        }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
         .sensoryFeedback(.selection, trigger: paletteSize)
@@ -1063,25 +1054,5 @@ private struct GenerateHeaderView: View {
     if #available(iOS 26.0, *) {
         GenerateView()
             .environmentObject(AppData())
-    }
-}
-
-extension View {
-    /// Fades the view out over `length` at the given edges, so scrolling
-    /// content softens away instead of being cut off.
-    func fadingEdges(_ edges: VerticalEdge.Set, length: CGFloat) -> some View {
-        mask {
-            VStack(spacing: 0) {
-                if edges.contains(.top) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: length)
-                }
-                Rectangle()
-                if edges.contains(.bottom) {
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: length)
-                }
-            }
-        }
     }
 }
