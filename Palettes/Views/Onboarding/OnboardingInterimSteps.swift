@@ -134,7 +134,14 @@ extension OnboardingInterimFlow {
     ) -> OnboardingStepContent {
         switch genState {
         case .generating:
-            return OnboardingStepContent(key: "gen-wait", title: "Mixing your palette", subtitle: "Pulling colors out of yours.", primary: nil)
+            return OnboardingStepContent(
+                key: "gen-wait",
+                title: "Mixing your palette",
+                subtitle: "Pulling colors out of yours.",
+                body: AnyView(GenerationSwatchRow(colors: genColors, expected: OnboardingPaletteMaker.paletteSize)
+                    .frame(maxWidth: 360)),
+                primary: nil
+            )
         case .ready(let made):
             return OnboardingStepContent(
                 key: "gen-ready",
@@ -196,14 +203,9 @@ private struct ReadyInterimBody: View {
     var body: some View {
         VStack(spacing: 20) {
             OnboardingPaletteName(name: made.palette.name, usesGradient: made.usedAI)
-            HStack(spacing: 12) {
-                ForEach(made.palette.paletteColors) { color in
-                    Circle().fill(color.color)
-                        .frame(width: 56, height: 56)
-                        .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
-                }
-            }
-            .accessibilityElement(children: .ignore)
+            GenerationSwatchRow(colors: made.palette.colors, expected: made.palette.colors.count)
+                .frame(maxWidth: 360)
+                .accessibilityElement(children: .ignore)
             .accessibilityLabel("Palette colors")
             .accessibilityValue(made.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; "))
         }

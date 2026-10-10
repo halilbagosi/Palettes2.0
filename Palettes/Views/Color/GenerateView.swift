@@ -145,16 +145,25 @@ struct GenerateView: View {
         }
     }
 
+    /// The orb, then the same copy and filling swatch row as onboarding.
     private var generatingOrb: some View {
-        GenerationOrbView(
-            colors: arrivedColors,
-            promptText: generationStatusText,
-            photo: selectedImage,
-            expectedCount: paletteSize,
-            showsProgress: true
-        )
-        .matchedGeometryEffect(id: "orb", in: orbNamespace)
-        .frame(width: 300, height: 300)
+        VStack(spacing: 28) {
+            GenerationOrbView(
+                colors: arrivedColors,
+                photo: selectedImage,
+                showsProgress: true
+            )
+            .matchedGeometryEffect(id: "orb", in: orbNamespace)
+            .frame(width: 300, height: 300)
+
+            VStack(spacing: 20) {
+                OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
+                GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+                    .frame(maxWidth: 360)
+            }
+            .padding(.horizontal, 24)
+            .transition(.blurFade)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
@@ -520,7 +529,10 @@ struct GenerateView: View {
 
     private var generationStatusText: String {
         let vibe = vibeDescription.trimmingCharacters(in: .whitespaces)
-        return vibe.isEmpty ? "Generating palette…" : vibe
+        if !vibe.isEmpty { return "“\(vibe)”" }
+        if selectedImage != nil { return "Pulling colors out of your photo." }
+        if !selectedColorIDs.isEmpty { return "Building around your colors." }
+        return "Composing something new."
     }
 
     // MARK: - Generate Button
