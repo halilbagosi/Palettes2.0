@@ -95,6 +95,21 @@ struct PaletteDraft: Equatable {
         if let i = colors.firstIndex(where: { $0.id == id }) { colors[i].role = role }
     }
 
+    /// A custom tag was renamed app-wide: every color holding `old`
+    /// (case-insensitive) now holds `new`.
+    mutating func renameRole(_ old: String, to new: String) {
+        for i in colors.indices where colors[i].role?.caseInsensitiveCompare(old) == .orderedSame {
+            colors[i].role = new
+        }
+    }
+
+    /// A custom tag was deleted app-wide: colors holding it lose their role.
+    mutating func clearRole(_ name: String) {
+        for i in colors.indices where colors[i].role?.caseInsensitiveCompare(name) == .orderedSame {
+            colors[i].role = nil
+        }
+    }
+
     /// Doesn't check hex uniqueness; callers check `contains(hex:)` first.
     mutating func update(id: UUID, color: Color, hex: String, name: String) {
         guard let i = colors.firstIndex(where: { $0.id == id }) else { return }

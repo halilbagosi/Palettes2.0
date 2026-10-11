@@ -99,4 +99,16 @@ struct PaletteDraftTests {
         draft.setRole(nil, for: draft.colors[0].id)
         #expect(draft.colors[0].role == nil)
     }
+
+    @Test func renameRoleRewritesEveryHolderCaseInsensitively() {
+        var draft = PaletteDraft(colors: [pc("#111111", role: "Brand"), pc("#222222", role: "brand"), pc("#333333", role: "Accent"), pc("#444444")])
+        draft.renameRole("BRAND", to: "Hero")
+        #expect(draft.colors.map(\.role) == ["Hero", "Hero", "Accent", nil])
+    }
+
+    @Test func clearRoleRemovesOnlyThatRole() {
+        var draft = PaletteDraft(colors: [pc("#111111", role: "Brand"), pc("#222222", role: "Accent"), pc("#333333")])
+        draft.clearRole("brand")
+        #expect(draft.colors.map(\.role) == [nil, "Accent", nil])
+    }
 }

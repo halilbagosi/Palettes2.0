@@ -21,6 +21,12 @@ struct RoleList: View {
     let current: String?
     /// Called with the chosen role, or `nil` to remove the tag.
     var onSelect: (String?) -> Void
+    /// Called after a custom tag is renamed (`appData.renameCustomTag` has
+    /// already rewritten saved palettes). A host holding a draft remaps its
+    /// own copy so saving doesn't write the old name back.
+    var onTagRenamed: ((_ old: String, _ new: String) -> Void)? = nil
+    /// Called after a custom tag is deleted, for the same reason.
+    var onTagDeleted: ((_ name: String) -> Void)? = nil
 
     @EnvironmentObject var appData: AppData
 
@@ -82,6 +88,7 @@ struct RoleList: View {
                     .onDelete { offsets in
                         for name in offsets.map({ appData.customTags[$0] }) {
                             appData.deleteCustomTag(name)
+                            onTagDeleted?(name)
                         }
                     }
                 }
@@ -96,7 +103,13 @@ struct RoleList: View {
             Button("Cancel", role: .cancel) { renamingTag = nil }
             Button("Save") {
                 if let old = renamingTag {
+                    let before = appData.customTags
                     appData.renameCustomTag(old, to: renameText)
+                    // AppData ignores empty or taken names; only a real rename
+                    // is reported.
+                    if appData.customTags != before {
+                        onTagRenamed?(old, renameText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
                 }
                 renamingTag = nil
             }
