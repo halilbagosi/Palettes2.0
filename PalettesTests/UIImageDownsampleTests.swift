@@ -31,4 +31,20 @@ struct UIImageDownsampleTests {
         let result = image(3000, 4000).downsampled(longSide: 2048)
         #expect(result.size == CGSize(width: 1536, height: 2048))
     }
+
+    @Test func dataIsDecodedToAThumbnailWithAspectKept() throws {
+        let data = try #require(image(4000, 3000).pngData())
+        let result = try #require(UIImage.downsampled(from: data, longSide: 2048))
+        #expect(result.size == CGSize(width: 2048, height: 1536))
+    }
+
+    @Test func smallDataIsNotEnlarged() throws {
+        let data = try #require(image(1000, 500).pngData())
+        let result = try #require(UIImage.downsampled(from: data, longSide: 2048))
+        #expect(result.size == CGSize(width: 1000, height: 500))
+    }
+
+    @Test func garbageDataGivesNil() {
+        #expect(UIImage.downsampled(from: Data([1, 2, 3]), longSide: 2048) == nil)
+    }
 }
