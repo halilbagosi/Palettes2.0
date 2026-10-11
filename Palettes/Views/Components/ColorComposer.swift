@@ -7,12 +7,12 @@ import SwiftUI
 import PhotosUI
 
 /// The one color editor, shared by New Color, Edit Color and adding a color to
-/// a palette. The color and its name stay pinned at the top while you work, so
-/// every change is visible as you make it. Below, in a standard grouped list,
-/// are the ways to change it: the system color picker (spectrum, grid and
-/// eyedropper), the Temperature / Saturation / Brightness sliders for tuning a
-/// picked color, and HEX and RGB values. Sample a Photo and Take Photo open
-/// the photo sampler to pick an exact spot, then the sliders fine-tune it.
+/// a palette. The color and its name stay pinned at the top as a compact swatch,
+/// with the always-visible picker (Spectrum, Grid, RGB Sliders) right under it,
+/// so every change is visible as you make it. Below, in a standard grouped
+/// list, scroll the Fine-tune sliders (Temperature / Saturation / Brightness)
+/// and the HEX and RGB values. The swatch's eyedropper menu opens the photo
+/// sampler (Choose Photo, Take Photo) to pick an exact spot.
 ///
 /// Hosts own `color` and `name` and supply the navigation title and toolbar.
 struct ColorComposer: View {
@@ -23,8 +23,13 @@ struct ColorComposer: View {
     var namesFollowColor: Bool = false
     /// A short status under the name, e.g. "Already in this palette".
     var notice: String? = nil
+    /// When set, a "Tag" row appears first in the scrolling part; tapping it
+    /// calls `onTap` so the host can present its own tag picker.
+    var tag: (role: String?, onTap: () -> Void)? = nil
 
     @EnvironmentObject private var appData: AppData
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Field: Hashable {
         case name, hex, red, green, blue
@@ -70,24 +75,42 @@ struct ColorComposer: View {
     // isSourceTypeAvailable(.camera) probes capture hardware and is slow.
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
-    /// While a value field has the keyboard, the header shrinks and its photo
-    /// buttons step aside so the fields stay in view.
+    private var isRegular: Bool { horizontalSizeClass == .regular }
+
+    /// While a value field has the keyboard, the swatch shrinks and the picker
+    /// steps aside so the fields stay in view.
     private var isEditingValues: Bool {
         guard let focusedField else { return false }
         return focusedField != .name
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
+    private var layoutAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
+    }
 
-            Form {
-                pickerSection
-                adjustSection
-                valuesSection
+    var body: some View {
+        // The picker is drag-based, so it stays outside the Form's scroll view
+        // in both layouts.
+        Group {
+            if isRegular {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(spacing: 0) {
+                        header
+                        pickerPanel
+                    }
+                    .frame(maxWidth: 380)
+                    .animation(layoutAnimation, value: isEditingValues)
+
+                    form
+                }
+            } else {
+                VStack(spacing: 0) {
+                    header
+                    pickerPanel
+                    form
+                }
+                .animation(layoutAnimation, value: isEditingValues)
             }
-            .scrollContentBackground(.hidden)
-            .scrollDismissesKeyboard(.interactively)
         }
         .background(ColorWashBackground(color: color))
         .toolbar {
@@ -137,18 +160,8 @@ struct ColorComposer: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             swatch
-
-            TextField("Name", text: nameBinding)
-                .font(.title3.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .submitLabel(.done)
-                .focused($focusedField, equals: .name)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityLabel("Color name")
 
             if let notice {
                 Label(notice, systemImage: "info.circle")
@@ -156,83 +169,117 @@ struct ColorComposer: View {
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
-
-            if !isEditingValues {
-                photoActions
-                    .transition(.opacity)
-            }
         }
         .padding(.horizontal)
         .padding(.top, 8)
-        .padding(.bottom, 4)
-        .animation(.spring(duration: 0.3, bounce: 0), value: isEditingValues)
+        .padding(.bottom, 12)
         .animation(.easeOut(duration: 0.2), value: notice)
     }
 
     private var swatch: some View {
         let ink = color.legibleInk
-        return RoundedRectangle(cornerRadius: 24, style: .continuous)
+        return RoundedRectangle(cornerRadius: 22, style: .continuous)
             .fill(color.gradient)
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             )
             .overlay(alignment: .bottomLeading) {
-                Text(syncedHex)
-                    .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                VStack(alignment: .leading, spacing: 0) {
+                    TextField(
+                        "Name",
+                        text: nameBinding,
+                        prompt: Text("Name").foregroundStyle(ink.opacity(0.55))
+                    )
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(ink)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(ink.opacity(0.12), in: Capsule())
-                    .padding(12)
+                    .tint(ink)
+                    .submitLabel(.done)
+                    .focused($focusedField, equals: .name)
+                    .accessibilityLabel("Color name")
+
+                    Text(syncedHex)
+                        .font(.subheadline.monospaced())
+                        .foregroundStyle(ink.opacity(0.7))
+                        .accessibilityLabel("Color preview, \(syncedHex)")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
             }
-            .frame(height: isEditingValues ? 64 : 128)
+            .overlay(alignment: .topTrailing) {
+                samplePhotoMenu
+                    .padding(10)
+            }
+            .frame(height: isEditingValues ? 64 : 96)
             .shadow(color: color.opacity(0.3), radius: 10, x: 0, y: 5)
             .contextMenu {
                 Button("Copy HEX", systemImage: "doc.on.doc") {
                     copyToClipboard(syncedHex, label: "Copied HEX")
                 }
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Color preview, \(syncedHex)")
     }
 
-    private var photoActions: some View {
-        HStack(spacing: 10) {
-            Button {
+    private var samplePhotoMenu: some View {
+        Menu {
+            Button("Choose Photo", systemImage: "photo.on.rectangle") {
                 showPhotoLibrary = true
-            } label: {
-                Label("Sample a Photo", systemImage: "photo.on.rectangle")
-                    .frame(maxWidth: .infinity)
             }
-
             if Self.cameraAvailable {
-                Button {
+                Button("Take Photo", systemImage: "camera") {
                     showCamera = true
-                } label: {
-                    Label("Take Photo", systemImage: "camera")
-                        .frame(maxWidth: .infinity)
                 }
             }
+        } label: {
+            Image(systemName: "eyedropper")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: Circle())
         }
-        .font(.subheadline.weight(.semibold))
-        .glassButton()
-        .buttonBorderShape(.capsule)
-        .tint(.primary)
+        .accessibilityLabel("Sample a Photo")
+    }
+
+    private var pickerPanel: some View {
+        Group {
+            if !isEditingValues {
+                ColorPickerPanel(
+                    color: $color,
+                    compact: !isRegular,
+                    onPick: { apply($0, from: .outside) }
+                )
+                .padding(.horizontal, 16)
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private var form: some View {
+        Form {
+            if let tag {
+                tagSection(tag)
+            }
+            adjustSection
+            valuesSection
+        }
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Sections
 
-    private var pickerSection: some View {
+    private func tagSection(_ tag: (role: String?, onTap: () -> Void)) -> some View {
         Section {
-            ColorPicker(
-                selection: Binding(get: { color }, set: { apply($0, from: .outside) }),
-                supportsOpacity: false
-            ) {
-                Label("Spectrum & Eyedropper", systemImage: "eyedropper")
+            Button(action: tag.onTap) {
+                HStack {
+                    LabeledContent("Tag") {
+                        Text(tag.role ?? "None")
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
-        } header: {
-            Text("Color")
+            .foregroundStyle(.primary)
         }
     }
 
@@ -265,9 +312,9 @@ struct ColorComposer: View {
             )
             .padding(.vertical, 4)
         } header: {
-            Text("Adjustments")
+            Text("Fine-tune")
         } footer: {
-            Text("Tune the color after picking it, for example from a photo.")
+            Text("Nudge the color warmer, richer or lighter.")
         }
     }
 
