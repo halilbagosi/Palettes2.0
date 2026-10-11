@@ -29,6 +29,9 @@ struct ColorComposer: View {
 
     @EnvironmentObject private var appData: AppData
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @ScaledMetric(relativeTo: .title3) private var swatchHeight: CGFloat = 96
+    @ScaledMetric(relativeTo: .title3) private var shrunkSwatchHeight: CGFloat = 64
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Field: Hashable {
@@ -77,6 +80,10 @@ struct ColorComposer: View {
 
     private var isRegular: Bool { horizontalSizeClass == .regular }
 
+    /// Side by side when wide (iPad) or short (iPhone landscape), so the Form
+    /// isn't squeezed under the pinned swatch and picker.
+    private var usesTwoColumns: Bool { isRegular || verticalSizeClass == .compact }
+
     /// While a value field has the keyboard, the swatch shrinks and the picker
     /// steps aside so the fields stay in view.
     private var isEditingValues: Bool {
@@ -84,7 +91,13 @@ struct ColorComposer: View {
         return focusedField != .name
     }
 
-    private var layoutAnimation: Animation {
+    /// Swatch height and Form position follow the header with a spring; with
+    /// Reduce Motion they snap and only the picker fades.
+    private var layoutAnimation: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.35, bounce: 0)
+    }
+
+    private var pickerAnimation: Animation {
         reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
     }
 
@@ -92,7 +105,7 @@ struct ColorComposer: View {
         // The picker is drag-based, so it stays outside the Form's scroll view
         // in both layouts.
         Group {
-            if isRegular {
+            if usesTwoColumns {
                 HStack(alignment: .top, spacing: 20) {
                     VStack(spacing: 0) {
                         header
@@ -178,45 +191,51 @@ struct ColorComposer: View {
 
     private var swatch: some View {
         let ink = color.legibleInk
-        return RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .fill(color.gradient)
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            TextField(
+                "Name",
+                text: nameBinding,
+                prompt: Text("Name").foregroundStyle(ink.opacity(0.55))
             )
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 0) {
-                    TextField(
-                        "Name",
-                        text: nameBinding,
-                        prompt: Text("Name").foregroundStyle(ink.opacity(0.55))
-                    )
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(ink)
-                    .tint(ink)
-                    .submitLabel(.done)
-                    .focused($focusedField, equals: .name)
-                    .accessibilityLabel("Color name")
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(ink)
+            .tint(ink)
+            .submitLabel(.done)
+            .focused($focusedField, equals: .name)
+            .padding(.trailing, 46)   // clear of the eyedropper
+            .accessibilityLabel("Color name")
 
-                    Text(syncedHex)
-                        .font(.subheadline.monospaced())
-                        .foregroundStyle(ink.opacity(0.7))
-                        .accessibilityLabel("Color preview, \(syncedHex)")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+            if !isEditingValues {
+                Text(syncedHex)
+                    .font(.subheadline.monospaced())
+                    .foregroundStyle(ink.opacity(0.7))
+                    .accessibilityLabel("Color preview, \(syncedHex)")
+                    .transition(.opacity)
             }
-            .overlay(alignment: .topTrailing) {
-                samplePhotoMenu
-                    .padding(10)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: isEditingValues ? shrunkSwatchHeight : swatchHeight,
+            alignment: .bottomLeading
+        )
+        .background(shape.fill(color.gradient))
+        .overlay(shape.stroke(Color.primary.opacity(0.1), lineWidth: 1))
+        .overlay(alignment: .topTrailing) {
+            samplePhotoMenu
+                .padding(10)
+        }
+        .shadow(color: color.opacity(0.3), radius: 10, x: 0, y: 5)
+        .contextMenu {
+            Button("Copy HEX", systemImage: "doc.on.doc") {
+                copyToClipboard(syncedHex, label: "Copied HEX")
             }
-            .frame(height: isEditingValues ? 64 : 96)
-            .shadow(color: color.opacity(0.3), radius: 10, x: 0, y: 5)
-            .contextMenu {
-                Button("Copy HEX", systemImage: "doc.on.doc") {
-                    copyToClipboard(syncedHex, label: "Copied HEX")
-                }
-            }
+        }
+        .accessibilityAction(named: "Copy HEX") {
+            copyToClipboard(syncedHex, label: "Copied HEX")
+        }
     }
 
     private var samplePhotoMenu: some View {
@@ -251,18 +270,25 @@ struct ColorComposer: View {
                 .transition(.opacity)
             }
         }
+        .animation(pickerAnimation, value: isEditingValues)
     }
 
     private var form: some View {
         Form {
+            // The container animates the Form's frame as the header changes;
+            // its contents (e.g. the HEX footer) must not animate with focus.
             if let tag {
                 tagSection(tag)
+                    .transaction { $0.animation = nil }
             }
             adjustSection
+                .transaction { $0.animation = nil }
             valuesSection
+                .transaction { $0.animation = nil }
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        .softScrollEdge()
     }
 
     // MARK: - Sections
@@ -277,6 +303,7 @@ struct ColorComposer: View {
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
             }
             .foregroundStyle(.primary)
