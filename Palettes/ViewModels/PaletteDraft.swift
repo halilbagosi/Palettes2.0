@@ -58,22 +58,27 @@ struct PaletteDraft: Equatable {
         guard let index = colors.firstIndex(where: { $0.id == id }) else { return }
         let source = colors[index]
         let rgb = source.color.rgbComponents
-        var b = Int(rgb.b.rounded())
-        var hex = source.hex
+        let baseBlue = Int(rgb.b.rounded())
+        var found: (b: Int, hex: String)?
         for step in 1...255 {
-            b = (Int(rgb.b.rounded()) + step) % 256
-            hex = ColorAdjustment.hexString(r: rgb.r, g: rgb.g, b: Double(b))
-            if !contains(hex: hex) { break }
+            let b = (baseBlue + step) % 256
+            let hex = ColorAdjustment.hexString(r: rgb.r, g: rgb.g, b: Double(b))
+            if !contains(hex: hex) {
+                found = (b, hex)
+                break
+            }
         }
+        guard let found else { return }
         let copy = PaletteColor(
-            color: ColorAdjustment.color(r: rgb.r, g: rgb.g, b: Double(b)),
-            hex: hex,
+            color: ColorAdjustment.color(r: rgb.r, g: rgb.g, b: Double(found.b)),
+            hex: found.hex,
             name: source.name,
             role: nil
         )
         colors.insert(copy, at: index + 1)
     }
 
+    /// `index` is the item's final position after it is removed (not SwiftUI `onMove`'s pre-removal offset).
     mutating func move(id: UUID, to index: Int) {
         guard let from = colors.firstIndex(where: { $0.id == id }) else { return }
         let item = colors.remove(at: from)
@@ -90,6 +95,7 @@ struct PaletteDraft: Equatable {
         if let i = colors.firstIndex(where: { $0.id == id }) { colors[i].role = role }
     }
 
+    /// Doesn't check hex uniqueness; callers check `contains(hex:)` first.
     mutating func update(id: UUID, color: Color, hex: String, name: String) {
         guard let i = colors.firstIndex(where: { $0.id == id }) else { return }
         colors[i].color = color

@@ -2,6 +2,7 @@ import Testing
 import SwiftUI
 @testable import Palettes
 
+@MainActor
 struct PaletteDraftTests {
     private func pc(_ hex: String, _ name: String = "", role: String? = nil) -> PaletteColor {
         PaletteColor(color: Color(hex: hex) ?? .gray, hex: hex, name: name, role: role)
@@ -71,5 +72,31 @@ struct PaletteDraftTests {
         var edited = draft
         edited.name = "Q"
         #expect(edited != draft)   // drives Cancel's "Discard changes?" check
+    }
+
+    @Test func replaceAllDedupsWithinIncomingBatch() {
+        var draft = PaletteDraft(colors: [pc("#999999")])
+        draft.replaceAll(with: [pc("#111111"), pc("#111111"), pc("#222222")])
+        #expect(draft.colors.map(\.hex) == ["#111111", "#222222"])
+    }
+
+    @Test func moveClampsOutOfRangeIndex() {
+        var draft = PaletteDraft(colors: [pc("#111111"), pc("#222222"), pc("#333333")])
+        draft.move(id: draft.colors[0].id, to: 99)
+        #expect(draft.colors.map(\.hex) == ["#222222", "#333333", "#111111"])
+        draft.move(id: draft.colors[2].id, to: -5)
+        #expect(draft.colors.map(\.hex) == ["#111111", "#222222", "#333333"])
+    }
+
+    @Test func removeUnknownIDReturnsNil() {
+        var draft = PaletteDraft(colors: [pc("#111111")])
+        #expect(draft.remove(id: UUID()) == nil)
+        #expect(draft.colors.count == 1)
+    }
+
+    @Test func setRoleNilClearsRole() {
+        var draft = PaletteDraft(colors: [pc("#111111", role: "Primary")])
+        draft.setRole(nil, for: draft.colors[0].id)
+        #expect(draft.colors[0].role == nil)
     }
 }
