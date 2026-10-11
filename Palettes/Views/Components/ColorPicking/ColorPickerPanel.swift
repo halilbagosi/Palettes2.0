@@ -30,13 +30,15 @@ struct ColorPickerPanel: View {
             .pickerStyle(.segmented)
 
             ZStack(alignment: .top) {
-                switch mode {
-                case .spectrum: SpectrumPad(color: $color, height: compact ? 180 : 220, onPick: onPick)
-                case .grid: SwatchGridPicker(color: $color, onPick: onPick)
-                case .sliders: RGBSliders(color: $color, onPick: onPick)
+                Group {
+                    switch mode {
+                    case .spectrum: SpectrumPad(color: $color, height: compact ? 180 : 220, onPick: onPick)
+                    case .grid: SwatchGridPicker(color: $color, onPick: onPick)
+                    case .sliders: RGBSliders(color: $color, onPick: onPick)
+                    }
                 }
+                .transition(.opacity)
             }
-            .transition(.opacity)
         }
         .animation(.snappy, value: modeRaw)
     }

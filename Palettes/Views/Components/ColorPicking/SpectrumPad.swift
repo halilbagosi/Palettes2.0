@@ -35,6 +35,9 @@ struct SpectrumPad: View {
                 .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                     let x = min(max(value.location.x / geo.size.width, 0), 1)
                     let y = min(max(value.location.y / geo.size.height, 0), 1)
+                    // The field is drawn vivid for grays; adopt that saturation so
+                    // the picked color matches what's under the finger.
+                    if saturation < 0.05 { saturation = 0.5 }
                     set(hue: x, brightness: 1 - y * (1 - Self.minBrightness))
                 })
             }
@@ -75,9 +78,9 @@ struct SpectrumPad: View {
         }
     }
 
-    /// The field is drawn at a vivid saturation even when the color is gray,
-    /// so it never turns into a gray slab. Picked colors use the real saturation.
-    private var fieldSaturation: Double { max(saturation, 0.5) }
+    /// True grays (saturation < 0.05) are drawn at 0.5 so the field never turns
+    /// into a gray slab; touching the field adopts that saturation. Pastels stay exact.
+    private var fieldSaturation: Double { saturation < 0.05 ? 0.5 : saturation }
 
     private var thumb: some View {
         Circle()

@@ -74,11 +74,11 @@ struct SwatchGridPicker: View {
                                 .frame(width: cell, height: cell)
                                 .overlay {
                                     if hex == selectedHex {
-                                        // Inset so the ring survives the grid's rounded clip.
+                                        // Inset so the ring survives the grid's rounded clip,
+                                        // and drawn in the cell's legible ink so it shows on light cells.
                                         Rectangle()
-                                            .strokeBorder(.white, lineWidth: 2)
-                                            .shadow(color: .black.opacity(0.4), radius: 1.5)
-                                            .padding(2)
+                                            .strokeBorder(swatch.legibleInk, lineWidth: 2)
+                                            .padding(4)
                                     }
                                 }
                                 .accessibilityElement()
