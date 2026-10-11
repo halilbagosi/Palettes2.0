@@ -16,9 +16,16 @@ struct SheetCancelButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(role: .cancel, action: action) {
-            Label("Cancel", systemImage: "xmark")
-                .labelStyle(.iconOnly)
+        if #available(iOS 26.0, *) {
+            // Bare Label: the system picks icon or title (Duo bars, overflow menus).
+            Button(role: .cancel, action: action) {
+                Label("Cancel", systemImage: "xmark")
+            }
+        } else {
+            Button(role: .cancel, action: action) {
+                Label("Cancel", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
+            }
         }
     }
 }
@@ -52,27 +59,28 @@ struct SheetConfirmButton: View {
 
     var body: some View {
         if #available(iOS 26.0, *) {
+            // The system decides icon vs. title unless a count makes the title essential.
             Button(action: action) {
-                label
+                if showsTitle {
+                    Label(title, systemImage: symbol)
+                        .labelStyle(.titleAndIcon)
+                } else {
+                    Label(title, systemImage: symbol)
+                }
             }
             .buttonStyle(.glassProminent)
         } else {
             Button(action: action) {
-                label
-                    .fontWeight(.semibold)
+                if showsTitle {
+                    Label(title, systemImage: symbol)
+                        .labelStyle(.titleAndIcon)
+                        .fontWeight(.semibold)
+                } else {
+                    Label(title, systemImage: symbol)
+                        .labelStyle(.iconOnly)
+                        .fontWeight(.semibold)
+                }
             }
-        }
-    }
-
-    @ViewBuilder
-    private var label: some View {
-        if showsTitle {
-            Label(title, systemImage: symbol)
-                .labelStyle(.titleAndIcon)
-        } else {
-            Label(title, systemImage: symbol)
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(title)
         }
     }
 }
