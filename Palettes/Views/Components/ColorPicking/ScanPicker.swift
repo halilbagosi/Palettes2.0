@@ -186,6 +186,10 @@ struct ScanPicker: View {
     }
     @GestureState private var drag: Drag?
 
+    /// Shown once per install the first time a Scan view appears; also used by
+    /// the palette add panel's Scan source.
+    static let trueToneMessage = "For accurate color scanning, turn off True Tone in Settings → Display & Brightness. True Tone adjusts your screen's warmth, which can affect how scanned colors appear."
+
     private static let markerSize: CGFloat = 30
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
@@ -202,7 +206,7 @@ struct ScanPicker: View {
         .alert("Turn Off True Tone", isPresented: $showTrueToneAlert) {
             Button("Got It") { didAcknowledgeTrueToneWarning = true }
         } message: {
-            Text("For accurate color scanning, turn off True Tone in Settings → Display & Brightness. True Tone adjusts your screen's warmth, which can affect how scanned colors appear.")
+            Text(Self.trueToneMessage)
         }
         .photosPicker(isPresented: $showLibrary, selection: $photosPickerItem, matching: .images)
         .fullScreenCover(isPresented: $showCamera) {

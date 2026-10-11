@@ -44,6 +44,20 @@ enum ColorPickerModel {
         return randomStarter(using: &rng)
     }
 
+    /// A starter that isn't in `excluded` (uppercased "#RRGGBB"), so the picker
+    /// that just added a color moves on to one that can be added too. Falls
+    /// back to any starter if every one is taken.
+    static func nextStarter<G: RandomNumberGenerator>(excluding excluded: Set<String>, using rng: inout G) -> String {
+        let free = vividStarters.filter { !excluded.contains($0.uppercased()) }
+        guard !free.isEmpty else { return randomStarter(using: &rng) }
+        return free[Int(rng.next() % UInt64(free.count))]
+    }
+
+    static func nextStarter(excluding excluded: Set<String>) -> String {
+        var rng = SystemRandomNumberGenerator()
+        return nextStarter(excluding: excluded, using: &rng)
+    }
+
     static let previewSchemes: [HarmonyScheme] = [.complementary, .splitComplementary, .analogous, .triadic, .monochromatic]
 
     /// One palette per scheme, each starting with `hex`. A fixed seed per

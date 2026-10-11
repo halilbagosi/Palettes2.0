@@ -3,8 +3,9 @@
 //  Palettes
 //
 //  The palette strip that is the editor: tap a band to edit it, hold and drag
-//  to reorder (system drag and drop), a context menu per band, and a + at the
-//  end. The host (PaletteEditor) owns the draft and what the buttons open.
+//  to reorder (system drag and drop), and a context menu per band. Colors are
+//  added from the add panel under the list, not from the strip. The host
+//  (PaletteEditor) owns the draft and what the buttons open.
 //
 
 import SwiftUI
@@ -27,12 +28,10 @@ private struct BandDragItem: Codable, Transferable {
 
 struct PaletteStripEditor: View {
     @Binding var draft: PaletteDraft
-    /// The band "Colors That Go With…" uses.
+    /// The band last tapped; the add panel's Harmony source builds on it.
     @Binding var selection: UUID?
     var onEdit: (UUID) -> Void
     var onTag: (UUID) -> Void
-    /// The + menu content, supplied by PaletteEditor.
-    var addMenu: AnyView
     /// For the Undo toast.
     var onRemove: (_ index: Int, _ color: PaletteColor) -> Void
 
@@ -55,9 +54,8 @@ struct PaletteStripEditor: View {
         var ink: Color
     }
 
-    private let height: CGFloat = 120
-    private let cornerRadius: CGFloat = 20
-    private let addTileWidth: CGFloat = 44
+    private let height: CGFloat = 72
+    private let cornerRadius: CGFloat = 16
 
     /// The final index (after removal) when band `id` is dropped on band
     /// `targetID`: `id` takes the target's slot and the target shifts away
@@ -102,7 +100,6 @@ struct PaletteStripEditor: View {
             ForEach(draft.colors) { entry in
                 band(entry)
             }
-            addTile
         }
         .frame(height: height)
         .background(draft.colors.last?.color ?? Color.clear)
@@ -130,7 +127,7 @@ struct PaletteStripEditor: View {
     private var insertionBar: some View {
         GeometryReader { geo in
             let count = max(draft.colors.count, 1)
-            let bandWidth = (geo.size.width - (draft.colors.isEmpty ? 0 : addTileWidth)) / CGFloat(count)
+            let bandWidth = geo.size.width / CGFloat(count)
             let slot = currentSlot ?? lastSlot
             Rectangle()
                 .fill(slot?.ink ?? .clear)
@@ -235,28 +232,6 @@ struct PaletteStripEditor: View {
         if selection == id { selection = nil }
         onRemove(removed.index, removed.color)
     }
-
-    // MARK: +
-
-    private var addTile: some View {
-        Menu {
-            addMenu
-        } label: {
-            Image(systemName: "plus")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: draft.colors.isEmpty ? .infinity : addTileWidth, maxHeight: .infinity)
-                .background(Color(.secondarySystemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius - 6, style: .continuous)
-                        .strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                        .padding(4)
-                )
-                .contentShape(Rectangle())
-        }
-        .frame(maxWidth: draft.colors.isEmpty ? .infinity : addTileWidth)
-        .accessibilityLabel("Add Color")
-    }
 }
 
 #Preview {
@@ -274,7 +249,6 @@ struct PaletteStripEditor: View {
         selection: $selection,
         onEdit: { _ in },
         onTag: { _ in },
-        addMenu: AnyView(Button("Pick a Color") {}),
         onRemove: { _, _ in }
     )
     .padding()

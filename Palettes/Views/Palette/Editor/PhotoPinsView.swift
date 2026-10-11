@@ -1,11 +1,13 @@
 //
-//  PhotoPinsPage.swift
+//  PhotoPinsView.swift
 //  Palettes
 //
-//  "From a Photo". Colors are pulled from the photo automatically, then the
-//  photo is shown with a pin where each one was found. Dragging a pin picks a
-//  different color; the strip under the photo follows live. "+ Add N" hands
-//  the colors to the editor.
+//  The add panel's Scan source once a photo is chosen. Colors are pulled from
+//  the photo automatically, then the photo is shown with a pin where each one
+//  was found. Dragging a pin picks a different color; the strip under the
+//  photo follows live. "+ Add N" hands the colors to the editor, which appends
+//  them. The photo and its pins are drag surfaces, so this view must never sit
+//  inside a scroll view.
 //
 
 import SwiftUI
@@ -36,9 +38,13 @@ enum PhotoPinGeometry {
     }
 }
 
-struct PhotoPinsPage: View {
+struct PhotoPinsView: View {
     let image: UIImage
     let onAdd: ([PaletteColor]) -> Void
+    /// Opens the Camera / Library choice for another photo.
+    let onChangePhoto: () -> Void
+    /// The photo gave no colors; the host drops it.
+    let onFail: () -> Void
 
     struct Pin: Identifiable, Equatable {
         let id: Int
@@ -49,7 +55,6 @@ struct PhotoPinsPage: View {
         var nameHex: String
     }
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var pins: [Pin] = []
@@ -72,13 +77,14 @@ struct PhotoPinsPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             GeometryReader { geo in
                 let rect = PhotoLoupeGeometry.imageRect(imageSize: image.size, in: geo.size)
                 ZStack {
                     Image(uiImage: image)
                         .resizable()
                         .frame(width: rect.width, height: rect.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .position(x: rect.midX, y: rect.midY)
                         .accessibilityLabel("Photo")
 
@@ -92,26 +98,34 @@ struct PhotoPinsPage: View {
                 }
                 .coordinateSpace(name: Self.space)
             }
-            // Room for a pin to hang over the photo's edge.
-            .padding(.horizontal, Self.pinSize / 2 + 4)
-            .padding(.vertical, Self.pinSize / 2)
-
-            PaletteStrip(colors: pins.compactMap { Color(hex: $0.hex) }, height: 56)
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 12)
-                .accessibilityHidden(true)
-        }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
-        .navigationTitle("From a Photo")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                SheetConfirmButton(kind: .add(count: colors.count)) { onAdd(colors) }
-                    .disabled(colors.isEmpty)
+            .overlay(alignment: .topTrailing) {
+                Button(action: onChangePhoto) {
+                    Label("Change Photo", systemImage: "photo.on.rectangle")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .padding(6)
             }
+
+            PaletteStrip(colors: pins.compactMap { Color(hex: $0.hex) }, height: 32, cornerRadius: 10)
+                .accessibilityHidden(true)
+
+            Button { onAdd(colors) } label: {
+                Label(colors.isEmpty ? "Add" : "Add \(colors.count)", systemImage: "plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .glassButton(prominent: true)
+            .controlSize(.large)
+            .disabled(colors.isEmpty)
         }
-        .task { await load() }
+        // Room for a pin to hang over the photo's edge.
+        .padding(.horizontal, Self.pinSize / 2)
+        .padding(.top, Self.pinSize / 2 - 4)
+        .task(id: ObjectIdentifier(image)) { await load() }
     }
 
     // MARK: - Pin
@@ -203,11 +217,14 @@ struct PhotoPinsPage: View {
 
     // MARK: - Loading
 
-    /// Pulls the colors, then finds where each sits in the photo. Waits out the
-    /// push first so the transition isn't stalled by the work.
+    /// Pulls the colors, then finds where each sits in the photo. Gives the
+    /// spinner a moment to draw first.
     private func load() async {
-        try? await Task.sleep(for: .milliseconds(300))
-        // `try?` swallows cancellation; don't extract or dismiss after Back.
+        pins = []
+        sampler = nil
+        isLoading = true
+        try? await Task.sleep(for: .milliseconds(50))
+        // `try?` swallows cancellation; don't extract after the photo changed.
         guard !Task.isCancelled else { return }
         guard let sampler = ImageColorExtractor.PixelSampler(image: image) else {
             fail(AppError.imageProcessingFailed.localizedDescription)
@@ -232,7 +249,7 @@ struct PhotoPinsPage: View {
 
     private func fail(_ message: String) {
         ToastManager.shared.show(message, icon: "exclamationmark.triangle.fill")
-        dismiss()
+        onFail()
     }
 }
 
@@ -244,7 +261,7 @@ struct PhotoPinsPage: View {
             ctx.fill(CGRect(x: 0, y: CGFloat(i) * 100, width: 400, height: 100))
         }
     }
-    return NavigationStack {
-        PhotoPinsPage(image: image, onAdd: { _ in })
-    }
+    return PhotoPinsView(image: image, onAdd: { _ in }, onChangePhoto: {}, onFail: {})
+        .frame(height: 300)
+        .padding()
 }

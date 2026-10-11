@@ -4,6 +4,8 @@ import SwiftUI
 /// a 12 × 8 grid of hues by lightness. Tap or drag across cells to pick.
 struct SwatchGridPicker: View {
     @Binding var color: Color
+    /// The "Your Colors" row above the grid. Off where space is tight.
+    var showsRecents = true
     var onPick: (Color) -> Void
 
     @EnvironmentObject private var appData: AppData
@@ -19,7 +21,7 @@ struct SwatchGridPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            let recents = ColorPickerModel.recentColors(appData.colors)
+            let recents = showsRecents ? ColorPickerModel.recentColors(appData.colors) : []
             if !recents.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Your Colors")

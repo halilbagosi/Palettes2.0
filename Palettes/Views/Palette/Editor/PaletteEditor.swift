@@ -2,23 +2,19 @@
 //  PaletteEditor.swift
 //  Palettes
 //
-//  The one palette editor, for New Palette and Edit Palette. It works on a
-//  `PaletteDraft`: the palette strip is pinned at the top (tap a band to edit
-//  it, hold to reorder, + to add), the name sits under it, and an empty
-//  palette offers ways to start instead of a list. Nothing reaches AppData
-//  until ✓; the wrapper that presents the editor decides what ✓ does.
+//  The one palette editor, for New Palette and Edit Palette, laid out like the
+//  New Palette sheet: the palette strip pinned at the top (tap a band to edit
+//  it, hold to reorder), a scrolling middle with the name and the "Added
+//  Colors" rows, and the add panel pinned at the bottom (Pick · Scan · Library
+//  · Harmony). It works on a `PaletteDraft`: nothing reaches AppData until ✓;
+//  the wrapper that presents the editor decides what ✓ does.
 //
 
 import SwiftUI
-import PhotosUI
 
 enum PaletteEditorRoute: Hashable {
-    case newColor
-    case library
     case edit(UUID)
     case tag(UUID)
-    case harmony(base: String?)
-    case photo
 }
 
 struct PaletteEditor: View {
@@ -44,21 +40,13 @@ struct PaletteEditor: View {
     /// Used when the name is left blank; recomputed as the colors change.
     @State private var suggestedName = ""
     @State private var showDiscardConfirmation = false
-    /// Generate asked to leave with unsaved changes; once they're discarded,
-    /// go on to the Generate tab.
-    @State private var generateAfterDiscard = false
     @FocusState private var nameFocused: Bool
-
-    // Photo
-    @State private var showPhotoLibrary = false
-    @State private var photoItem: PhotosPickerItem?
-    @State private var showCamera = false
-    @State private var cameraImage: UIImage?
-    @State private var didCameraCapture = false
-    /// The photo being turned into colors on the From a Photo page.
-    @State private var photoImage: UIImage?
-
-    private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
+    /// The add panel's Pick name field has the keyboard.
+    @State private var colorNameFocused = false
+    /// The editor's height before a keyboard took some, so the bands keep
+    /// their sizes while one is up.
+    @State private var stableHeight: CGFloat = 0
+    @AppStorage("paletteAddSource") private var sourceRaw = PaletteAddSource.pick.rawValue
 
     init(mode: Mode, draft: PaletteDraft, onConfirm: @escaping (PaletteDraft, String) -> Void) {
         self.mode = mode
@@ -69,33 +57,72 @@ struct PaletteEditor: View {
 
     private var isCreating: Bool { mode == .create }
     private var hasChanges: Bool { draft != original }
+    private var keyboardUp: Bool { nameFocused || colorNameFocused }
+
+    private var source: Binding<PaletteAddSource> {
+        Binding(
+            get: { PaletteAddSource(rawValue: sourceRaw) ?? .pick },
+            set: { sourceRaw = $0.rawValue }
+        )
+    }
 
     private var nameHint: String {
         suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
     }
 
-    /// Generate is a tab, and only some devices have it. It starts a new
-    /// palette, so it has no place when editing one.
-    private var showsGenerate: Bool { isCreating && AppleIntelligence.isDeviceSupported }
-
     private var appendAnimation: Animation {
         reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
     }
 
+    private var keyboardAnimation: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.35, bounce: 0)
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                header
+            GeometryReader { geo in
+                let available = stableHeight > 0 ? stableHeight : geo.size.height
+                let panelHeight = PaletteEditorLayout.panelHeight(available: available)
 
-                List {
-                    if draft.colors.isEmpty {
-                        startSection
-                    } else {
-                        hintSection
+                VStack(spacing: 0) {
+                    // Named-color typing in the panel needs the room: the
+                    // strip and list step aside (hidden, not removed, so
+                    // their state stays).
+                    VStack(spacing: 0) {
+                        header
+                        list
                     }
+                    .frame(maxHeight: colorNameFocused ? 0 : .infinity)
+                    .clipped()
+                    .opacity(colorNameFocused ? 0 : 1)
+                    .allowsHitTesting(!colorNameFocused)
+                    .accessibilityHidden(colorNameFocused)
+
+                    PaletteAddPanel(
+                        draft: draft,
+                        selection: $selection,
+                        source: source,
+                        height: panelHeight,
+                        colorNameFocused: $colorNameFocused,
+                        onAdd: add
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
+                    // The palette's own name field needs the whole screen
+                    // above the keyboard.
+                    .frame(height: nameFocused ? 0 : panelHeight + 12, alignment: .top)
+                    .clipped()
+                    .opacity(nameFocused ? 0 : 1)
+                    .allowsHitTesting(!nameFocused)
+                    .accessibilityHidden(nameFocused)
                 }
-                .listStyle(.insetGrouped)
-                .scrollDismissesKeyboard(.interactively)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .animation(keyboardAnimation, value: keyboardUp)
+                .onChange(of: geo.size.height, initial: true) { _, height in
+                    // Heights seen while a keyboard is up are not the editor's own.
+                    if !keyboardUp { stableHeight = height }
+                }
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle(isCreating ? "New Palette" : "Edit Palette")
@@ -110,7 +137,6 @@ struct PaletteEditor: View {
                         ) {
                             Button(isCreating ? "Discard Palette" : "Discard Changes", role: .destructive) {
                                 ToastManager.shared.dismissUndo()
-                                if generateAfterDiscard { appData.activeTab = .generate }
                                 dismiss()
                             }
                             Button("Keep Editing", role: .cancel) {}
@@ -124,23 +150,13 @@ struct PaletteEditor: View {
             .navigationDestination(for: PaletteEditorRoute.self) { route in
                 destination(for: route)
             }
-            .photosPicker(isPresented: $showPhotoLibrary, selection: $photoItem, matching: .images)
-            .onChange(of: photoItem) { _, item in
-                loadPhoto(item)
-            }
-            .fullScreenCover(isPresented: $showCamera, onDismiss: {
-                if let image = cameraImage {
-                    cameraImage = nil
-                    showPhotoPins(for: image)
-                }
-            }) {
-                CameraPicker(image: $cameraImage, didCapture: $didCameraCapture, isPresented: $showCamera)
-            }
         }
         // Sheets cover the app-root toast overlay, so host one here too.
         .toastOverlay()
         // A swipe down mustn't silently throw away changes; Cancel asks first.
-        .interactiveDismissDisabled(hasChanges)
+        // Nor may it steal a drag on the pickers: Pick and Scan are drag
+        // surfaces, so a downward drag there would otherwise close the sheet.
+        .interactiveDismissDisabled(hasChanges || source.wrappedValue.isDragSurface)
         .onAppear { updateSuggestedName() }
         // A pending Undo mustn't outlive the draft it would act on.
         .onDisappear { ToastManager.shared.dismissUndo() }
@@ -149,135 +165,109 @@ struct PaletteEditor: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Strip
 
-    /// The palette as it will look, and its name. Pinned, so it stays in view
-    /// while the list scrolls.
+    /// The palette as it will look, pinned so it stays in view while the list
+    /// scrolls and the panel is used.
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 6) {
             if draft.colors.isEmpty {
-                emptyStrip
+                emptyPreview
             } else {
                 PaletteStripEditor(
                     draft: $draft,
                     selection: $selection,
                     onEdit: { path.append(.edit($0)) },
                     onTag: { path.append(.tag($0)) },
-                    addMenu: AnyView(addMenuContent),
-                    onRemove: { index, color in removed(color, at: index) }
+                    onRemove: { index, color in showUndo(for: color, at: index) }
                 )
-                .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
             }
 
-            TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $draft.name)
-                .font(.title3.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .submitLabel(.done)
-                .focused($nameFocused)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityLabel("Palette name")
-                .accessibilityHint(nameHint)
+            // Always laid out, so the first color doesn't move the list.
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(draft.colors.isEmpty ? 0 : 1)
+                .accessibilityHidden(draft.colors.isEmpty)
         }
         .padding(.horizontal)
         .padding(.top, 8)
-        .padding(.bottom, 4)
     }
 
-    private var emptyStrip: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(Color(.secondarySystemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-            )
-            .overlay {
-                Text("Your palette will appear here")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(height: 120)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Empty palette")
+    private var caption: String {
+        let count = draft.colors.count
+        if count == 1 { return "1 color \u{00B7} add one more to create" }
+        return "\(count) colors"
+    }
+
+    private var emptyPreview: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "swatchpalette")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text("Add at least 2 colors to build your palette")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 72)
+        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+        // Vanish instantly when the first color arrives, so a fading glass
+        // rim doesn't read as a stray hairline over the strip.
+        .transition(.asymmetric(insertion: .opacity, removal: .identity))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Empty palette. Add at least 2 colors to build your palette.")
     }
 
     // MARK: - List
 
-    private var startSection: some View {
-        Section {
-            PaletteStartTiles(
-                showsLibrary: !appData.colors.isEmpty,
-                showsGenerate: showsGenerate,
-                cameraAvailable: Self.cameraAvailable,
-                onChoosePhoto: { showPhotoLibrary = true },
-                onTakePhoto: { showCamera = true },
-                onLibrary: { path.append(.library) },
-                onOneColor: { path.append(.harmony(base: nil)) },
-                onGenerate: generate,
-                onStartBlank: { path.append(.newColor) }
-            )
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-        }
-    }
+    private var list: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $draft.name)
+                        .font(.system(size: 18, weight: .medium))
+                        .submitLabel(.done)
+                        .focused($nameFocused)
+                        .onSubmit { nameFocused = false }
+                        .padding()
+                        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+                        .accessibilityLabel("Palette name")
+                        .accessibilityHint(nameHint)
 
-    /// Footer-style guidance under the strip, in a clear row so it shows
-    /// whatever the list has to say.
-    private var hintSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Tap a color to edit it. Touch and hold to move it.")
-                if draft.colors.count == 1 {
-                    Text("Add one more color to create the palette.")
+                    if !draft.colors.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Added Colors")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .accessibilityAddTraits(.isHeader)
+
+                            LazyVStack(spacing: 8) {
+                                ForEach(draft.colors) { entry in
+                                    PaletteColorRow(
+                                        color: entry,
+                                        onEdit: { selection = entry.id; path.append(.edit(entry.id)) },
+                                        onRemove: { removeColor(entry.id) }
+                                    )
+                                    .transition(.opacity)
+                                }
+                            }
+                        }
+                        .padding(.top, 20)
+                    }
                 }
+                .padding(.horizontal)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
             }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
-        }
-    }
-
-    // MARK: - + menu
-
-    private var harmonyBase: String? {
-        if let selection, let hex = draft.colors.first(where: { $0.id == selection })?.hex {
-            return hex
-        }
-        return draft.colors.last?.hex
-    }
-
-    @ViewBuilder
-    private var addMenuContent: some View {
-        Button { path.append(.newColor) } label: {
-            Label("New Color", systemImage: "plus.circle")
-        }
-
-        if !appData.colors.isEmpty {
-            Button { path.append(.library) } label: {
-                Label("From My Colors", systemImage: "square.grid.2x2")
+            .scrollDismissesKeyboard(.interactively)
+            .softScrollEdge()
+            .onChange(of: draft.colors.count) { old, new in
+                // Show what was just added.
+                guard new > old, let last = draft.colors.last else { return }
+                withAnimation(appendAnimation) { proxy.scrollTo(last.id, anchor: .bottom) }
             }
-        }
-
-        if Self.cameraAvailable {
-            Menu {
-                Button("Choose Photo", systemImage: "photo.on.rectangle") { showPhotoLibrary = true }
-                Button("Take Photo", systemImage: "camera") { showCamera = true }
-            } label: {
-                Label("From a Photo", systemImage: "photo")
-            }
-        } else {
-            Button { showPhotoLibrary = true } label: {
-                Label("From a Photo", systemImage: "photo")
-            }
-        }
-
-        Button { path.append(.harmony(base: harmonyBase)) } label: {
-            Label("Colors That Go With…", systemImage: "paintpalette")
         }
     }
 
@@ -286,14 +276,6 @@ struct PaletteEditor: View {
     @ViewBuilder
     private func destination(for route: PaletteEditorRoute) -> some View {
         switch route {
-        case .newColor:
-            NewPaletteColorPage(excludedHexes: draft.hexes) { entry in
-                append([entry])
-            }
-        case .library:
-            LibraryColorPicker(excludedHexes: draft.hexes, onAdd: { picked in
-                append(picked.map { PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name) })
-            })
         case .edit(let id):
             EditColorPage(draft: $draft, id: id) { path.append(.tag(id)) }
         case .tag(let id):
@@ -316,70 +298,36 @@ struct PaletteEditor: View {
             )
             .navigationTitle("Tag")
             .navigationBarTitleDisplayMode(.inline)
-        case .harmony(let base):
-            HarmonyPage(base: base) { colors in accept(colors) }
-        case .photo:
-            if let photoImage {
-                PhotoPinsPage(image: photoImage) { colors in accept(colors) }
-            }
-        }
-    }
-
-    /// A page hands back colors: an empty palette takes them as they are, one
-    /// with colors gets them appended (duplicates by hex skipped). Pops the page,
-    /// unless nothing new came of it.
-    private func accept(_ colors: [PaletteColor]) {
-        var added = 0
-        withAnimation(appendAnimation) {
-            if draft.colors.isEmpty {
-                draft.replaceAll(with: colors)
-                added = draft.colors.count
-            } else {
-                added = draft.append(colors)
-            }
-        }
-        if added == 0 {
-            ToastManager.shared.show("Already in this palette", icon: "info.circle")
-        } else if !path.isEmpty {
-            path.removeLast()
         }
     }
 
     // MARK: - Draft
 
-    private func append(_ colors: [PaletteColor]) {
-        withAnimation(appendAnimation) { _ = draft.append(colors) }
+    /// Colors from the add panel are appended (duplicates by hex skipped). An
+    /// empty palette takes them as they are, which is the same thing.
+    private func add(_ colors: [PaletteColor]) {
+        var added = 0
+        withAnimation(appendAnimation) { added = draft.append(colors) }
+        if added == 0 {
+            ToastManager.shared.show("Already in this palette", icon: "info.circle")
+        }
+    }
+
+    /// The row's minus: remove, then offer Undo.
+    private func removeColor(_ id: UUID) {
+        var removed: (index: Int, color: PaletteColor)?
+        withAnimation(appendAnimation) { removed = draft.remove(id: id) }
+        guard let removed else { return }
+        if selection == id { selection = nil }
+        showUndo(for: removed.color, at: removed.index)
     }
 
     /// Remove → Undo puts the color back where it was, role included.
-    private func removed(_ color: PaletteColor, at index: Int) {
+    private func showUndo(for color: PaletteColor, at index: Int) {
         ToastManager.shared.show("Color removed", icon: "trash.fill") {
             // Something added since may have taken the hex or the role; the
             // draft sorts both out.
             withAnimation(appendAnimation) { _ = draft.reinsert(color, at: index) }
-        }
-    }
-
-    private func loadPhoto(_ item: PhotosPickerItem?) {
-        guard let item else { return }
-        Task {
-            let data = try? await item.loadTransferable(type: Data.self)
-            photoItem = nil   // so the same photo can be chosen again
-            guard let data, let image = UIImage(data: data) else {
-                ToastManager.shared.show("Couldn't open that photo", icon: "exclamationmark.triangle.fill")
-                return
-            }
-            showPhotoPins(for: image)
-        }
-    }
-
-    /// Opens From a Photo for the image. Waits for the picker or camera to
-    /// finish dismissing before pushing.
-    private func showPhotoPins(for image: UIImage) {
-        Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            photoImage = image.downsampled(longSide: 2048)
-            path.append(.photo)
         }
     }
 
@@ -399,20 +347,8 @@ struct PaletteEditor: View {
 
     // MARK: - Actions
 
-    private func generate() {
-        if hasChanges {
-            // Leaving throws the draft away, so ask like Cancel does.
-            generateAfterDiscard = true
-            showDiscardConfirmation = true
-        } else {
-            appData.activeTab = .generate
-            dismiss()
-        }
-    }
-
     private func cancel() {
         if hasChanges {
-            generateAfterDiscard = false
             showDiscardConfirmation = true
         } else {
             ToastManager.shared.dismissUndo()
