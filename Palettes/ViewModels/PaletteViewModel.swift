@@ -76,3 +76,10 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         hasher.combine(id)
     }
 }
+
+extension PaletteViewModel {
+    /// Plain-text form for drag and drop: the name, then one hex per line.
+    var dragText: String {
+        ([name] + hexCodes).joined(separator: "\n")
+    }
+}

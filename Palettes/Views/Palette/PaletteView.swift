@@ -2,12 +2,10 @@ import SwiftUI
 
 struct PaletteView: View {
 
-    @State private var isCreatingPalette = false
     @State private var path = NavigationPath()
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
     @State private var paletteToExport: PaletteViewModel?
-    @State private var showSettings = false
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
@@ -19,12 +17,14 @@ struct PaletteView: View {
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
+    /// iPhone Duo's fold across the grid (see `MorphingCardGrid.foldSpan`).
+    @State private var foldSpan: ClosedRange<CGFloat>?
     /// The one-time options card after onboarding's "Start creating".
     @State private var showsOptionsTour = false
     @State private var optionsTourTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appData: AppData
-    @EnvironmentObject private var replay: OnboardingReplayCoordinator
+    @EnvironmentObject private var router: SceneRouter
 
     // MARK: - Display state
 
@@ -102,7 +102,7 @@ struct PaletteView: View {
                 .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
                 .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
-                .sheet(isPresented: $isCreatingPalette) {
+                .sheet(isPresented: $router.isCreatingPalette) {
                     NewPaletteView()
                         .environmentObject(appData)
                         .presentationDetents([.large])
@@ -116,13 +116,6 @@ struct PaletteView: View {
                 .sheet(item: $paletteToExport) { palette in
                     ExportPaletteSheet(palette: palette)
                         .presentationDetents([.medium, .large])
-                }
-                .sheet(isPresented: $showSettings, onDismiss: {
-                    if replay.consume() { OnboardingKeys.resetForReplay() }
-                }) {
-                    SettingsView()
-                        .environmentObject(appData)
-                        .environmentObject(replay)
                 }
                 .alert("Delete Palette", isPresented: $showDeleteAlert, presenting: paletteToDelete) { palette in
                     Button("Delete", role: .destructive) {
@@ -156,7 +149,7 @@ struct PaletteView: View {
                         )
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
-                        // Grows out of the ••• button it describes.
+                        // Grows out of the options button it describes.
                         .transition(reduceMotion
                             ? .opacity
                             : .scale(scale: 0.6, anchor: .topTrailing).combined(with: .opacity))
@@ -192,15 +185,15 @@ struct PaletteView: View {
                 title: "No palettes yet",
                 message: "Capture colors you love and mix them into your first palette.",
                 actionTitle: "Create Palette",
-                action: { isCreatingPalette = true }
+                action: { router.isCreatingPalette = true }
             )
             .transition(.opacity)
         } else {
             libraryContent
                 .overlay(alignment: .bottomTrailing) {
                     if !isSelecting {
-                        FloatingAddButton { isCreatingPalette = true }
-                            .keyboardShortcut("n", modifiers: .command)
+                        // ⌘N lives in the menu bar (PalettesCommands).
+                        FloatingAddButton(title: "New Palette") { router.isCreatingPalette = true }
                             .padding(20)
                     }
                 }
@@ -230,11 +223,16 @@ struct PaletteView: View {
                     minColumnWidth: layout == .compact ? 320 : 340,
                     maxColumnWidth: 560,
                     rowHeight: layout == .compact ? 108 : 180,
-                    spacing: layout == .compact ? 10 : 20
+                    spacing: layout == .compact ? 10 : 20,
+                    foldSpan: foldSpan
                 ) {
                     ForEach(displayedPalettes) { palette in
                         paletteCard(palette)
                     }
+                }
+                .onVerticalFoldSpanChange { newValue in
+                    // Cards move and resize to their new columns as the device folds.
+                    withAnimation(.smooth(duration: 0.35)) { foldSpan = newValue }
                 }
                 .padding()
                 .padding(.bottom, 88)
@@ -274,6 +272,8 @@ struct PaletteView: View {
         .onTapGesture {
             if !isSelecting { path.append(palette) }
         }
+        // Drag into Notes, Freeform, a design tool or another Palettes window.
+        .draggable(palette.dragText)
         .contextMenu { paletteContextMenu(palette) } preview: {
             PaletteMorphCard(
                 paletteName: palette.name,
@@ -346,7 +346,7 @@ struct PaletteView: View {
                 return ColorViewModel(name: name, color: palette.colors[index], HEX: hex, usedInPalette: true)
             }
             if let image = PaletteImageRenderer.renderImage(for: palette, colors: colorVMs) {
-                presentShare(items: [image])
+                ShareSheetPresenter.present(items: [image])
             }
         } label: {
             Label("Export as PNG", systemImage: "photo")
@@ -354,7 +354,7 @@ struct PaletteView: View {
 
         Button {
             let textToShare = "Check out this palette: \(palette.name)\n" + palette.hexCodes.joined(separator: ", ")
-            presentShare(items: [textToShare])
+            ShareSheetPresenter.present(items: [textToShare])
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -380,27 +380,23 @@ struct PaletteView: View {
         if !isSelecting {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    showSettings = true
+                    router.isShowingSettings = true
                 } label: {
-                    Image(systemName: "gearshape")
+                    Label("Settings", systemImage: "gearshape")
                 }
-                .accessibilityLabel("Settings")
             }
         }
         if !appData.palettes.isEmpty {
             if isSelecting {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(allVisibleSelected ? "Deselect All" : "Select All") {
-                        toggleSelectAll()
-                    }
+                    SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         exitSelection()
                     } label: {
-                        Image(systemName: "xmark")
+                        Label("Done Selecting", systemImage: "xmark")
                     }
-                    .accessibilityLabel("Done Selecting")
                     optionsMenu
                 }
                 SelectionBottomBar(
@@ -415,9 +411,7 @@ struct PaletteView: View {
                 )
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Select") {
-                        withAnimation { isSelecting = true }
-                    }
+                    SelectButton { withAnimation { isSelecting = true } }
                 }
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -438,7 +432,7 @@ struct PaletteView: View {
                 originFilter: originFilterBinding.animation(.spring(response: 0.3))
             )
         } label: {
-            Image(systemName: "ellipsis")
+            LibraryOptionsLabel()
                 .symbolEffect(.bounce, value: showsOptionsTour)
         }
     }
@@ -545,14 +539,7 @@ struct PaletteView: View {
         let text = selected.map { palette in
             "\(palette.name)\n" + palette.hexCodes.joined(separator: ", ")
         }.joined(separator: "\n\n")
-        presentShare(items: [text])
+        ShareSheetPresenter.present(items: [text])
     }
 
-    private func presentShare(items: [Any]) {
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityVC, animated: true)
-        }
-    }
 }

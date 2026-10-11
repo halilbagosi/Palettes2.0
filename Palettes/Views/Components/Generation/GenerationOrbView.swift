@@ -162,7 +162,7 @@ struct GenerationOrbView: View {
                     .frame(width: diameter * 0.24, height: diameter * 0.24)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1))
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(.pop)
             }
 
             if let promptText, !promptText.isEmpty {

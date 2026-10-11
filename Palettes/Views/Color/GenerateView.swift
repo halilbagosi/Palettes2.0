@@ -6,6 +6,8 @@ import Foundation
 @available(iOS 26.0, *)
 struct GenerateView: View {
     @EnvironmentObject var appData: AppData
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private enum Phase { case form, generating, result }
     @State private var phase: Phase = .form
@@ -24,6 +26,11 @@ struct GenerateView: View {
     @State private var showCamera = false
     @State private var showPhotoPicker = false
     @FocusState private var vibeFocused: Bool
+    /// The stage's size, for its orientation and the generating orb's size.
+    @State private var stageSize: CGSize = .zero
+    /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
+    /// the crease and the controls the side after it.
+    @State private var fold: Fold?
 
     // Generation state
     @State private var arrivedColors: [Color] = []
@@ -58,6 +65,30 @@ struct GenerateView: View {
         #endif
     }
 
+    /// In landscape the bars run down one side; the generating orb and the
+    /// result centre on the screen there, this far from both edges (enough
+    /// to clear a side bar).
+    private var screenMargin: CGFloat? {
+        isPortrait ? nil : 88
+    }
+
+    /// The stage is taller than it is wide (or hasn't been measured yet).
+    private var isPortrait: Bool {
+        stageSize == .zero || stageSize.height > stageSize.width
+    }
+
+    /// A wide, short stage (an iPhone, or iPhone Duo's outer display, in
+    /// landscape), where `splitForm` packs its controls tighter.
+    private var isWideAndShort: Bool {
+        !isPortrait && (verticalSizeClass == .compact || stageSize.height < 500)
+    }
+
+    /// iPad and iPhone Duo in portrait at full size: every color is shown in
+    /// a grid that scrolls under the options (`gridForm`), instead of a strip.
+    private var showsColorGrid: Bool {
+        horizontalSizeClass == .regular && verticalSizeClass == .regular && isPortrait
+    }
+
     private var selectedColors: [Color] {
         appData.colors.filter { selectedColorIDs.contains($0.id) }.map { $0.color }
     }
@@ -82,7 +113,11 @@ struct GenerateView: View {
                 .ignoresSafeArea()
             }
             .navigationTitle(phase == .form ? "Generate" : "")
-            .toolbar(phase == .generating ? .hidden : .automatic, for: .navigationBar)
+            // Folded, the orb needs the height a large title would take.
+            .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
+            // Kept in landscape: bringing the bar back for the result moved the
+            // side insets a moment after the result appeared, so it jumped over.
+            .toolbar(phase == .generating && isPortrait ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
                 withAnimation(.easeInOut(duration: GeneratedGradient.cycleDuration).repeatForever(autoreverses: true)) {
@@ -100,6 +135,10 @@ struct GenerateView: View {
 
     private var stage: some View {
         stageContent
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            .onFoldChange { newFold in
+                withAnimation(.smooth(duration: 0.35)) { fold = newFold }
+            }
             .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
                 Button("Save Anyway") { performSave() }
                 Button("Cancel", role: .cancel) {}
@@ -133,7 +172,8 @@ struct GenerateView: View {
                         pendingRefinement = change
                         startGeneration()
                     },
-                    onSave: saveResult
+                    onSave: saveResult,
+                    screenMargin: screenMargin
                 )
                 .environmentObject(appData)
                 .transition(.blurReplace)
@@ -147,33 +187,246 @@ struct GenerateView: View {
     }
 
     /// The orb, then the same copy and filling swatch row as onboarding.
+    /// Stacked and centred on the stage; side by side only when the stage is
+    /// too short for the stack (iPhone in landscape, iPhone Duo's outer
+    /// display). Folded, the orb takes the side before the crease and the
+    /// copy the side after it.
+    @ViewBuilder
     private var generatingOrb: some View {
-        VStack(spacing: 28) {
-            GenerationOrbView(
-                colors: arrivedColors,
-                photo: selectedImage,
-                showsProgress: true
-            )
-            .matchedGeometryEffect(id: "orb", in: orbNamespace)
-            .frame(width: 300, height: 300)
-            // Above the text: stretched over it, the glass bends it.
-            .zIndex(1)
-
-            VStack(spacing: 20) {
-                OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
-                GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+        if let fold {
+            FoldSplit(fold: fold) {
+                generationOrb(diameter: foldedOrbDiameter(fold))
+            } controls: {
+                generationCopy
                     .frame(maxWidth: 360)
             }
-            .padding(.horizontal, 24)
-            .transition(.blurFade)
+        } else {
+            let sideBySide = !isPortrait && stageSize.height < 520
+            let layout = sideBySide
+                ? AnyLayout(HStackLayout(spacing: 40))
+                : AnyLayout(VStackLayout(spacing: 28))
+            layout {
+                generationOrb(diameter: generatingOrbDiameter(sideBySide: sideBySide))
+                generationCopy
+                    .frame(maxWidth: sideBySide ? 360 : nil)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            // In landscape the bars sit on one side; centre on the screen.
+            .centeredOnScreen(margin: screenMargin)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func generationOrb(diameter: CGFloat) -> some View {
+        GenerationOrbView(
+            colors: arrivedColors,
+            photo: selectedImage,
+            showsProgress: true
+        )
+        .matchedGeometryEffect(id: "orb", in: orbNamespace)
+        .frame(width: diameter, height: diameter)
+        // Above the text: stretched over it, the glass bends it.
+        .zIndex(1)
+    }
+
+    private var generationCopy: some View {
+        VStack(spacing: 20) {
+            OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
+            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+                .frame(maxWidth: 360)
+        }
+        .padding(.horizontal, 24)
+        .transition(.blurFade)
+    }
+
+    /// 300 pt where there's room, shrinking with the stage so the orb and its
+    /// copy always fit together.
+    private func generatingOrbDiameter(sideBySide: Bool) -> CGFloat {
+        guard stageSize != .zero else { return 300 }
+        let fit = sideBySide
+            ? min(stageSize.height * 0.7, stageSize.width * 0.4)
+            : min(stageSize.width * 0.7, stageSize.height * 0.45)
+        return min(300, max(160, fit))
     }
 
     // MARK: - Form
 
+    @ViewBuilder
     private var formContent: some View {
+        if let split = formSplit {
+            splitForm(split)
+        } else if showsColorGrid {
+            gridForm
+        } else {
+            stackedForm
+        }
+    }
+
+    /// Where the form splits into orb and controls: iPhone Duo's fold while
+    /// half open, or down the middle of any other landscape stage (an iPhone,
+    /// iPhone Duo's displays, iPad), where the side-by-side layout reads
+    /// better than one long column.
+    private var formSplit: Fold? {
+        if let fold { return fold }
+        guard !isPortrait, stageSize != .zero else { return nil }
+        return Fold(frame: CGRect(x: stageSize.width / 2, y: 0, width: 0, height: stageSize.height))
+    }
+
+    /// The orb, as large as its side allows, before the split (on the left in
+    /// landscape, on top in portrait), and the size, mode, colors, vibe and
+    /// Generate stacked after it. The colors are a grid that scrolls on its
+    /// own, between the menus and the pinned vibe field. On a short stage
+    /// (an iPhone in landscape) the orb drops its copy, the menus sit side by
+    /// side and Generate joins the vibe field's row, leaving the grid room.
+    private func splitForm(_ fold: Fold) -> some View {
+        let compact = isWideAndShort && fold.isVertical
+        return FoldSplit(fold: fold) {
+            VStack(spacing: 16) {
+                formOrb(diameter: foldedOrbDiameter(fold, showsCopy: !compact))
+                    // Above the copy: stretched over it, the glass bends it.
+                    .zIndex(1)
+                if !compact {
+                    Text(GenerateHeaderView.description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(compact ? 8 : 16)
+        } controls: {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: compact ? 12 : 20) {
+                    generationOptions(axis: fold.isVertical && !compact ? .vertical : .horizontal)
+                    scrollingColors(shortHeader: compact)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity)
+
+                // In the stack, not an inset: the grid ends above the vibe field
+                // (fading out) instead of scrolling behind it.
+                if phase == .form {
+                    pinnedControls(compact: compact)
+                }
+            }
+        }
+        .sensoryFeedback(.selection, trigger: selectedColorIDs)
+        .sensoryFeedback(.selection, trigger: paletteSize)
+        .sensoryFeedback(.impact, trigger: phase == .generating)
+    }
+
+    /// iPad and iPhone Duo's inner display in portrait: the orb and menus
+    /// stay put at the top, and only the color grid scrolls, between them
+    /// and the pinned vibe field, as it does in landscape.
+    private var gridForm: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 24) {
+                GenerateHeaderView(
+                    showsOrb: phase == .form,
+                    orbDiameter: formOrbDiameter,
+                    colors: selectedColors,
+                    orbNamespace: orbNamespace
+                )
+                .zIndex(1)
+
+                generationOptions(axis: .horizontal)
+                scrollingColors(shortHeader: false)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .frame(maxWidth: 640, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity)
+
+            if phase == .form {
+                pinnedControls(compact: false)
+            }
+        }
+        .sensoryFeedback(.selection, trigger: selectedColorIDs)
+        .sensoryFeedback(.selection, trigger: paletteSize)
+        .sensoryFeedback(.impact, trigger: phase == .generating)
+    }
+
+    /// The colors header over a grid that fills the space left and scrolls
+    /// on its own, its cut edges fading.
+    @ViewBuilder
+    private func scrollingColors(shortHeader: Bool) -> some View {
+        if !appData.colors.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                colorsHeader(short: shortHeader)
+                ScrollView {
+                    colorGrid
+                        .padding(.vertical, Self.scrollFade)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .fadingEdges([.top, .bottom], length: Self.scrollFade)
+            }
+        } else {
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// How far scrolling content fades in and out at a cut edge.
+    private static var scrollFade: CGFloat { 18 }
+
+    /// The orb's side of the fold, less room for the copy under it.
+    private func foldedOrbDiameter(_ fold: Fold, showsCopy: Bool = true) -> CGFloat {
+        let side = fold.span.lowerBound
+        let fit = fold.isVertical
+            ? min(side * 0.78, stageSize.height - (showsCopy ? 150 : 24))
+            : min(side - 120, stageSize.width * 0.7)
+        return min(460, max(showsCopy ? 120 : 80, fit))
+    }
+
+    /// The form's orb; it expands into the generation orb.
+    private func formOrb(diameter: CGFloat) -> some View {
+        ZStack {
+            if phase == .form {
+                GenerationOrbView(colors: selectedColors)
+                    .matchedGeometryEffect(id: "orb", in: orbNamespace)
+                    .frame(width: diameter, height: diameter)
+            }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    /// The photo chip, the vibe field and Generate, pinned above the keyboard
+    /// and home indicator, like the result view's describe-change field.
+    /// `compact` puts Generate beside the field, for short stages.
+    private func pinnedControls(compact: Bool) -> some View {
+        VStack(spacing: compact ? 8 : 12) {
+            if compact {
+                HStack(spacing: 12) {
+                    vibeField
+                    if !vibeFocused && canGenerateFromSource {
+                        compactGenerateButton
+                            .transition(.pop)
+                    }
+                }
+            } else {
+                vibeField
+
+                // While typing, the field's send arrow takes over — hide the bar.
+                if !vibeFocused && canGenerateFromSource {
+                    generateBar
+                        .padding(.top, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal)
+        .padding(.bottom, compact ? 8 : 24)
+        .animation(.spring(response: 0.3), value: vibeFocused)
+    }
+
+    /// The orb and the options in one scrolling column, the vibe field and
+    /// Generate pinned under them.
+    private var stackedForm: some View {
         ScrollViewReader { scrollProxy in
+        VStack(spacing: 0) {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 GenerateHeaderView(
@@ -184,8 +437,8 @@ struct GenerateView: View {
                 )
                 .zIndex(1)
 
-                generationOptionsSection
-                colorsSection
+                generationOptions(axis: .horizontal)
+                colorsSection()
 
                 Color.clear
                     .frame(height: 1)
@@ -195,33 +448,18 @@ struct GenerateView: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.bottom, Self.scrollFade)
         }
         .scrollDismissesKeyboard(.interactively)
+        // Ends above the vibe field and fades out into it, so nothing
+        // scrolls behind the field.
+        .fadingEdges(.bottom, length: Self.scrollFade)
+
         // Pinned above the keyboard and home indicator, like the result
         // view's describe-change field.
-        .safeAreaInset(edge: .bottom) {
-            if phase == .form {
-                VStack(spacing: 12) {
-                    if let image = selectedImage {
-                        imageChip(image)
-                    }
-
-                    vibeField
-
-                    // While typing, the field's send arrow takes over — hide the bar.
-                    if !vibeFocused && canGenerateFromSource {
-                        generateBar
-                            .padding(.top, 8)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-                .padding(.bottom, 24)
-                .animation(.spring(response: 0.3), value: vibeFocused)
-            }
+        if phase == .form {
+            pinnedControls(compact: false)
+        }
         }
         .sensoryFeedback(.selection, trigger: selectedColorIDs)
         .sensoryFeedback(.selection, trigger: paletteSize)
@@ -266,54 +504,65 @@ struct GenerateView: View {
     /// Keep the two generation controls together so they remain discoverable
     /// on both compact phones and wider iPad layouts. Menus avoid the
     /// six-segment squeeze that made the previous size control hard to use.
-    private var generationOptionsSection: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Menu {
-                ForEach(sizeOptions, id: \.self) { size in
-                    Button {
-                        paletteSize = size
-                    } label: {
-                        if size == paletteSize {
-                            Label("\(size) colors", systemImage: "checkmark")
-                        } else {
-                            Text("\(size) colors")
-                        }
-                    }
-                }
-            } label: {
-                generationOptionLabel(
-                    title: "Palette Size",
-                    value: "\(paletteSize) colors",
-                    systemImage: "square.stack.3d.up"
-                )
-            }
-            .accessibilityLabel("Palette size")
-
-            if canChooseMode {
+    /// Side by side normally; stacked above the colors on the controls side
+    /// of a landscape split. The photo button sits beside them either way.
+    private func generationOptions(axis: Axis) -> some View {
+        let layout = axis == .horizontal
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            : AnyLayout(VStackLayout(spacing: 10))
+        return HStack(alignment: .top, spacing: 12) {
+            layout {
                 Menu {
-                    ForEach(HarmonyScheme.allCases) { option in
+                    ForEach(sizeOptions, id: \.self) { size in
                         Button {
-                            scheme = option
+                            paletteSize = size
                         } label: {
-                            if option == scheme {
-                                Label(option.displayName, systemImage: "checkmark")
+                            if size == paletteSize {
+                                Label("\(size) colors", systemImage: "checkmark")
                             } else {
-                                Text(option.displayName)
+                                Text("\(size) colors")
                             }
                         }
                     }
                 } label: {
                     generationOptionLabel(
-                        title: "Mode",
-                        value: scheme.displayName,
-                        systemImage: "paintpalette"
+                        title: "Palette Size",
+                        value: "\(paletteSize) colors",
+                        systemImage: "square.stack.3d.up"
                     )
                 }
-                .accessibilityLabel("Palette mode")
-                .transition(.scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
+                .accessibilityLabel("Palette size")
+
+                if canChooseMode {
+                    Menu {
+                        ForEach(HarmonyScheme.allCases) { option in
+                            Button {
+                                scheme = option
+                            } label: {
+                                if option == scheme {
+                                    Label(option.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(option.displayName)
+                                }
+                            }
+                        }
+                    } label: {
+                        generationOptionLabel(
+                            title: "Mode",
+                            value: scheme.displayName,
+                            systemImage: "paintpalette"
+                        )
+                    }
+                    .accessibilityLabel("Palette mode")
+                    .transition(.scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
+                }
             }
+            .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
+
+            // The photo source sits with the other inputs, matching their height.
+            imageMenuButton(axis: axis)
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func generationOptionLabel(title: String, value: String, systemImage: String) -> some View {
@@ -351,72 +600,94 @@ struct GenerateView: View {
 
     // MARK: - Colors
 
+    /// The user's colors to start from, as a strip (compact portrait; larger
+    /// stages use `scrollingColors`).
     @ViewBuilder
-    private var colorsSection: some View {
+    private func colorsSection() -> some View {
         if !appData.colors.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Text("Start From Your Colors")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
+                colorsHeader(short: false)
 
-                    if !selectedColorIDs.isEmpty {
-                        Text("· \(selectedColorIDs.count) selected")
-                            .font(.subheadline)
-                            .foregroundStyle(.tint)
-
-                        Spacer(minLength: 0)
-
-                        Button("Clear") {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                selectedColorIDs.removeAll()
-                            }
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.tint)
-                    }
-
-                    Spacer(minLength: 8)
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        ForEach(appData.colors) { colorItem in
-                            colorSwatch(colorItem)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 2)
-                }
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    geo.contentOffset.x > 4
-                } action: { _, scrolled in
-                    colorsFadeLeading = scrolled
-                }
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    geo.contentOffset.x < geo.contentSize.width - geo.containerSize.width - 4
-                } action: { _, more in
-                    colorsFadeTrailing = more
-                }
-                // Soften the edges while there is off-screen content, so
-                // swatches fade out instead of cutting off harshly.
-                .mask {
-                    HStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: colorsFadeLeading ? 28 : 0)
-                        Rectangle()
-                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: colorsFadeTrailing ? 28 : 0)
-                    }
-                    .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
-                    .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
-                }
+                colorStrip
             }
         }
     }
 
-    private func colorSwatch(_ colorItem: ColorViewModel) -> some View {
+    private func colorsHeader(short: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(short ? "Your Colors" : "Start From Your Colors")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if !selectedColorIDs.isEmpty {
+                Text("· \(selectedColorIDs.count) selected")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Button("Clear") {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selectedColorIDs.removeAll()
+                    }
+                }
+                .font(.subheadline.weight(.medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+            }
+
+            Spacer(minLength: 8)
+        }
+    }
+
+    private var colorGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 14)], spacing: 18) {
+            ForEach(appData.colors) { colorItem in
+                colorSwatch(colorItem, diameter: 64)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 2)
+    }
+
+    private var colorStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(appData.colors) { colorItem in
+                    colorSwatch(colorItem)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 2)
+        }
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.x > 4
+        } action: { _, scrolled in
+            colorsFadeLeading = scrolled
+        }
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.x < geo.contentSize.width - geo.containerSize.width - 4
+        } action: { _, more in
+            colorsFadeTrailing = more
+        }
+        // Soften the edges while there is off-screen content, so
+        // swatches fade out instead of cutting off harshly.
+        .mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: colorsFadeLeading ? 28 : 0)
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: colorsFadeTrailing ? 28 : 0)
+            }
+            .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
+            .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+        }
+    }
+
+    private func colorSwatch(_ colorItem: ColorViewModel, diameter: CGFloat = 54) -> some View {
         let isSelected = selectedColorIDs.contains(colorItem.id)
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -431,7 +702,7 @@ struct GenerateView: View {
                 ZStack(alignment: .bottomTrailing) {
                     Circle()
                         .fill(colorItem.color.gradient)
-                        .frame(width: 54, height: 54)
+                        .frame(width: diameter, height: diameter)
                         .overlay {
                             Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
                         }
@@ -449,7 +720,7 @@ struct GenerateView: View {
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, Color.accentColor)
                             .offset(x: 3, y: 3)
-                            .transition(.scale.combined(with: .opacity))
+                            .transition(.pop)
                     }
                 }
 
@@ -457,7 +728,7 @@ struct GenerateView: View {
                     .font(.caption2)
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .lineLimit(1)
-                    .frame(width: 62)
+                    .frame(width: diameter + 8)
             }
         }
         .buttonStyle(.plain)
@@ -489,7 +760,7 @@ struct GenerateView: View {
                             .foregroundStyle(hasInput ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                     }
                     .disabled(!hasInput)
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(.pop)
                 }
             }
             .padding(.horizontal, 16)
@@ -497,10 +768,6 @@ struct GenerateView: View {
             .frame(maxWidth: .infinity)
             .liquidGlass(.interactive, in: .capsule)
 
-            if !vibeFocused {
-                imageMenuButton
-                    .transition(.scale.combined(with: .opacity))
-            }
         }
     }
 
@@ -546,7 +813,7 @@ struct GenerateView: View {
                 Button {
                     startGeneration()
                 } label: {
-                    Label("Generate Palette", systemImage: "sparkles")
+                    Text("Generate Palette")
                         .font(.headline)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 6)
@@ -558,39 +825,26 @@ struct GenerateView: View {
         }
     }
 
-    private func imageChip(_ image: UIImage) -> some View {
-        HStack(spacing: 10) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            Text("Colors will be pulled from this photo")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                withAnimation(.spring(response: 0.3)) {
-                    selectedImage = nil
-                    photosPickerItem = nil
-                }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-            }
+    /// Generate as a single glass button, beside the vibe field on short stages.
+    private var compactGenerateButton: some View {
+        Button {
+            startGeneration()
+        } label: {
+            Text("Generate")
+                .font(.headline)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
         }
-        .padding(8)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
-        .transition(.scale.combined(with: .opacity))
+        .glassButton(prominent: true)
+        .keyboardShortcut(.return, modifiers: .command)
+        .fixedSize()
     }
 
+    /// Square: as tall as the menus beside it, or as one of them when they're
+    /// stacked (`axis` is the menus' axis). With a photo picked it widens to
+    /// show it and say what it's for.
     @ViewBuilder
-    private var imageMenuButton: some View {
+    private func imageMenuButton(axis: Axis) -> some View {
         Menu {
             Button {
                 showCamera = true
@@ -607,14 +861,65 @@ struct GenerateView: View {
                 Label("Choose Photo", systemImage: "photo.on.rectangle")
             }
         } label: {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.title3)
-                .frame(width: 52, height: 52)
-                .foregroundColor(.accentColor)
-                .contentShape(Circle())
-                .liquidGlass(.interactive, in: .circle)
+            // Picked, the button widens to show the photo, outlined, and what
+            // it's for; tapping it again replaces the photo.
+            HStack(spacing: 8) {
+                if let selectedImage {
+                    Image(uiImage: selectedImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 42, height: 42)
+                        .clipShape(.rect(cornerRadius: 10))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(.tint, lineWidth: 2.5)
+                        }
+
+                    Text("Colors will be pulled from this photo")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.85)
+                        .frame(width: 78, alignment: .leading)
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                        .frame(width: 52)
+                        .transition(.opacity)
+                }
+            }
+            .padding(selectedImage == nil ? 0 : 5)
+            .padding(.trailing, selectedImage == nil ? 0 : 5)
+            .frame(minHeight: 52, maxHeight: axis == .horizontal ? .infinity : 52)
+            .contentShape(.rect(cornerRadius: 14))
+            .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
         }
-        .clipShape(Circle())
+        .accessibilityLabel(selectedImage == nil ? "Add photo" : "Replace photo")
+        .overlay(alignment: .topTrailing) {
+            if selectedImage != nil {
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedImage = nil
+                        photosPickerItem = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.body)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .black.opacity(0.6))
+                        // A larger target than the glyph.
+                        .padding(6)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .offset(x: 10, y: -10)
+                .accessibilityLabel("Remove photo")
+                .transition(.pop)
+            }
+        }
+        .animation(.spring(response: 0.3), value: selectedImage != nil)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photosPickerItem, matching: .images)
         .onChange(of: photosPickerItem) { _, newItem in
             Task {
@@ -761,6 +1066,8 @@ private struct GenerateHeaderView: View {
     let colors: [Color]
     let orbNamespace: Namespace.ID
 
+    static let description = "Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette."
+
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             // The orb is part of the scroll content, so it moves with the
@@ -778,7 +1085,7 @@ private struct GenerateHeaderView: View {
             .padding(.top, 8)
             .zIndex(1)
 
-            Text("Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette.")
+            Text(Self.description)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
