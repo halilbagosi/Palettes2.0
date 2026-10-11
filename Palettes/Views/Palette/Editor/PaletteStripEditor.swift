@@ -88,8 +88,12 @@ struct PaletteStripEditor: View {
         return BarSlot(boundary: trailing ? t + 1 : t, trailing: trailing, ink: draft.colors[t].color.legibleInk)
     }
 
+    // A BandDragItem dragged from another editor instance shows a bar from the
+    // local draggingID, but its drop is rejected (dropIndex finds no such band).
     private func beginDrag(_ id: UUID) -> BandDragItem {
         draggingID = id
+        lastSlot = nil
+        barPlaced = false
         return BandDragItem(id: id)
     }
 
@@ -111,13 +115,11 @@ struct PaletteStripEditor: View {
         )
         .sensoryFeedback(.selection, trigger: targetedID) { _, new in new != nil }
         .onChange(of: currentSlot) { _, new in
-            if let new { lastSlot = new }
-        }
-        .onChange(of: lastSlot) { _, new in
-            barPlaced = new != nil
-        }
-        .onChange(of: draggingID) { _, new in
-            if new != nil { lastSlot = nil }
+            if let new {
+                lastSlot = new
+                // Set after this slot's first render, so only later moves slide.
+                barPlaced = true
+            }
         }
     }
 
@@ -134,9 +136,9 @@ struct PaletteStripEditor: View {
                 .fill(slot?.ink ?? .clear)
                 .frame(width: 3, height: geo.size.height)
                 .offset(x: slot.map { CGFloat($0.boundary) * bandWidth - ($0.trailing ? 3 : 0) } ?? 0)
-                .animation(barPlaced && !reduceMotion ? .snappy : nil, value: lastSlot)
-                .opacity(currentSlot == nil ? 0 : 1)
-                .animation(.easeInOut(duration: 0.15), value: currentSlot != nil)
+                .animation(barPlaced && !reduceMotion ? .snappy : nil, value: slot)
+                // Scoped to opacity so the fade can't drag the offset along.
+                .animation(.easeInOut(duration: 0.15)) { $0.opacity(currentSlot == nil ? 0 : 1) }
         }
         .allowsHitTesting(false)
     }
@@ -164,7 +166,8 @@ struct PaletteStripEditor: View {
                     .padding(.bottom, 8)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // minWidth 0: a role capsule can't widen its band past `bandWidth`.
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .background {
             // Overlap neighbors a hairline so antialiasing can't show a seam.
             Rectangle().fill(entry.color).padding(.horizontal, -0.5)
