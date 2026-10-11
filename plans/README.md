@@ -28,6 +28,7 @@ without `xcodebuild` do the file work and report verification as pending.
 | 016 | iPad & iPhone Duo: per-window state, menu-bar commands, share-sheet crash fix, titled toolbar items + system overflow menu, adaptive generating stage, drag out; next: fold-aware grids, arrangement views, inspector editing | P1 | M | — | IN PROGRESS (part 1 done on feature/ipad-duo-optimization; xcodebuild pending) |
 | 017 | Sheet redesign r2: one shared color editor, single-sheet New Palette with push navigation (HIG), Free/Premium plan tag in Settings | P2 | M | — | DONE (feature/sheet-redesign; xcodebuild + device checks pending) |
 | 018 | Sheets redesign r3: inline Spectrum/Grid/RGB picker in a pinned color editor; one strip-based palette editor for New + Edit Palette (start tiles, harmonies, photo pins); ✓ create/save, + add; Add Colors sheet removed | P1 | L | 017 | TODO (plan written; prototype gate first) |
+| 019 | Sheets r4: dev's New Palette layout as base (pinned add panel: Pick · Scan · Library · Harmony), glass cards, no color wash, Scan as a picker mode, plan-018 motion fixes | P1 | L | 018 | IN PROGRESS (feature/sheets-redesign) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
