@@ -44,6 +44,9 @@ struct PaletteEditor: View {
     /// Used when the name is left blank; recomputed as the colors change.
     @State private var suggestedName = ""
     @State private var showDiscardConfirmation = false
+    /// Generate asked to leave with unsaved changes; once they're discarded,
+    /// go on to the Generate tab.
+    @State private var generateAfterDiscard = false
     @FocusState private var nameFocused: Bool
 
     // Photo
@@ -52,8 +55,8 @@ struct PaletteEditor: View {
     @State private var showCamera = false
     @State private var cameraImage: UIImage?
     @State private var didCameraCapture = false
-    @State private var pendingScan: [PaletteColor] = []
-    @State private var showScanChoice = false
+    /// The photo being turned into colors on the From a Photo page.
+    @State private var photoImage: UIImage?
 
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
@@ -71,8 +74,9 @@ struct PaletteEditor: View {
         suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
     }
 
-    /// Generate is a tab, and only some devices have it.
-    private var showsGenerate: Bool { AppleIntelligence.isDeviceSupported }
+    /// Generate is a tab, and only some devices have it. It starts a new
+    /// palette, so it has no place when editing one.
+    private var showsGenerate: Bool { isCreating && AppleIntelligence.isDeviceSupported }
 
     private var appendAnimation: Animation {
         reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
@@ -104,8 +108,15 @@ struct PaletteEditor: View {
                             isPresented: $showDiscardConfirmation,
                             titleVisibility: .visible
                         ) {
-                            Button(isCreating ? "Discard Palette" : "Discard Changes", role: .destructive) { dismiss() }
+                            Button(isCreating ? "Discard Palette" : "Discard Changes", role: .destructive) {
+                                ToastManager.shared.dismissUndo()
+                                if generateAfterDiscard { appData.activeTab = .generate }
+                                dismiss()
+                            }
                             Button("Keep Editing", role: .cancel) {}
+                        }
+                        .onChange(of: showDiscardConfirmation) { _, isShowing in
+                            if !isShowing { generateAfterDiscard = false }
                         }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -116,17 +127,6 @@ struct PaletteEditor: View {
             .navigationDestination(for: PaletteEditorRoute.self) { route in
                 destination(for: route)
             }
-            .confirmationDialog(
-                "Use the colors from this photo?",
-                isPresented: $showScanChoice,
-                titleVisibility: .visible
-            ) {
-                Button("Add \(pendingScan.count) Colors") { applyScan(replacing: false) }
-                Button("Replace Current Colors", role: .destructive) { applyScan(replacing: true) }
-                Button("Cancel", role: .cancel) { pendingScan = [] }
-            } message: {
-                Text("Add them to the colors already in this palette, or start over with just these.")
-            }
             .photosPicker(isPresented: $showPhotoLibrary, selection: $photoItem, matching: .images)
             .onChange(of: photoItem) { _, item in
                 loadPhoto(item)
@@ -134,7 +134,7 @@ struct PaletteEditor: View {
             .fullScreenCover(isPresented: $showCamera, onDismiss: {
                 if let image = cameraImage {
                     cameraImage = nil
-                    useColors(from: image)
+                    showPhotoPins(for: image)
                 }
             }) {
                 CameraPicker(image: $cameraImage, didCapture: $didCameraCapture, isPresented: $showCamera)
@@ -145,6 +145,8 @@ struct PaletteEditor: View {
         // A swipe down mustn't silently throw away changes; Cancel asks first.
         .interactiveDismissDisabled(hasChanges)
         .onAppear { updateSuggestedName() }
+        // A pending Undo mustn't outlive the draft it would act on.
+        .onDisappear { ToastManager.shared.dismissUndo() }
         .onChange(of: draft.colors.map(\.hex)) { _, _ in
             updateSuggestedName()
         }
@@ -318,25 +320,31 @@ struct PaletteEditor: View {
             .navigationTitle("Tag")
             .navigationBarTitleDisplayMode(.inline)
         case .harmony(let base):
-            HarmonyPage(base: base) { colors in
-                var added = 0
-                withAnimation(appendAnimation) {
-                    if draft.colors.isEmpty {
-                        draft.replaceAll(with: colors)
-                        added = draft.colors.count
-                    } else {
-                        // Dedups by hex, so the base is skipped if it's in.
-                        added = draft.append(colors)
-                    }
-                }
-                if added == 0 {
-                    ToastManager.shared.show("Already in this palette", icon: "info.circle")
-                } else if !path.isEmpty {
-                    path.removeLast()
-                }
-            }
+            HarmonyPage(base: base) { colors in accept(colors) }
         case .photo:
-            Text("Coming in Task 13")
+            if let photoImage {
+                PhotoPinsPage(image: photoImage) { colors in accept(colors) }
+            }
+        }
+    }
+
+    /// A page hands back colors: an empty palette takes them as they are, one
+    /// with colors gets them appended (duplicates by hex skipped). Pops the page,
+    /// unless nothing new came of it.
+    private func accept(_ colors: [PaletteColor]) {
+        var added = 0
+        withAnimation(appendAnimation) {
+            if draft.colors.isEmpty {
+                draft.replaceAll(with: colors)
+                added = draft.colors.count
+            } else {
+                added = draft.append(colors)
+            }
+        }
+        if added == 0 {
+            ToastManager.shared.show("Already in this palette", icon: "info.circle")
+        } else if !path.isEmpty {
+            path.removeLast()
         }
     }
 
@@ -349,11 +357,9 @@ struct PaletteEditor: View {
     /// Remove → Undo puts the color back where it was, role included.
     private func removed(_ color: PaletteColor, at index: Int) {
         ToastManager.shared.show("Color removed", icon: "trash.fill") {
-            // Something added since may have taken the hex.
-            guard !draft.contains(hex: color.hex) else { return }
-            withAnimation(appendAnimation) {
-                draft.colors.insert(color, at: min(index, draft.colors.count))
-            }
+            // Something added since may have taken the hex or the role; the
+            // draft sorts both out.
+            withAnimation(appendAnimation) { _ = draft.reinsert(color, at: index) }
         }
     }
 
@@ -366,43 +372,18 @@ struct PaletteEditor: View {
                 ToastManager.shared.show("Couldn't open that photo", icon: "exclamationmark.triangle.fill")
                 return
             }
-            // Let the photo picker finish dismissing before asking anything.
+            showPhotoPins(for: image)
+        }
+    }
+
+    /// Opens From a Photo for the image. Waits for the picker or camera to
+    /// finish dismissing before pushing.
+    private func showPhotoPins(for image: UIImage) {
+        Task {
             try? await Task.sleep(for: .milliseconds(300))
-            useColors(from: image)
+            photoImage = image
+            path.append(.photo)
         }
-    }
-
-    /// Pulls a palette from the photo. An empty draft takes it as is; a draft
-    /// with colors asks whether to add to them or start over.
-    private func useColors(from image: UIImage) {
-        do {
-            let extracted = try ImageColorExtractor.extractColors(from: image, count: 6)
-            let colors = extracted.compactMap { item -> PaletteColor? in
-                guard let color = Color(hex: item.hex) else { return nil }
-                return PaletteColor(color: color, hex: item.hex, name: item.name)
-            }
-            guard !colors.isEmpty else { return }
-            if draft.colors.isEmpty {
-                withAnimation(appendAnimation) { draft.replaceAll(with: colors) }
-            } else {
-                pendingScan = colors
-                showScanChoice = true
-            }
-        } catch {
-            ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
-        }
-    }
-
-    private func applyScan(replacing: Bool) {
-        withAnimation(appendAnimation) {
-            if replacing {
-                selection = nil
-                draft.replaceAll(with: pendingScan)
-            } else {
-                _ = draft.append(pendingScan)
-            }
-        }
-        pendingScan = []
     }
 
     private func updateSuggestedName() {
@@ -422,21 +403,29 @@ struct PaletteEditor: View {
     // MARK: - Actions
 
     private func generate() {
-        // The draft is empty here, so there's nothing to discard.
-        appData.activeTab = .generate
-        dismiss()
+        if hasChanges {
+            // Leaving throws the draft away, so ask like Cancel does.
+            generateAfterDiscard = true
+            showDiscardConfirmation = true
+        } else {
+            appData.activeTab = .generate
+            dismiss()
+        }
     }
 
     private func cancel() {
         if hasChanges {
+            generateAfterDiscard = false
             showDiscardConfirmation = true
         } else {
+            ToastManager.shared.dismissUndo()
             dismiss()
         }
     }
 
     private func confirm() {
         guard draft.canSave else { return }
+        ToastManager.shared.dismissUndo()
         onConfirm(draft, draft.resolvedName(suggestion: suggestedName))
     }
 }
