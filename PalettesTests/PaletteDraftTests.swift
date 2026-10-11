@@ -53,6 +53,35 @@ struct PaletteDraftTests {
         #expect(draft.colors[1].role == "primary")
     }
 
+    @Test func reinsertRestoresPositionAndRole() {
+        var draft = PaletteDraft(colors: [pc("#111111"), pc("#333333")])
+        let restored = draft.reinsert(pc("#222222", role: "Accent"), at: 1)
+        #expect(restored == true)
+        #expect(draft.colors.map(\.hex) == ["#111111", "#222222", "#333333"])
+        #expect(draft.colors[1].role == "Accent")
+    }
+
+    @Test func reinsertDropsRoleAnotherColorNowHolds() {
+        var draft = PaletteDraft(colors: [pc("#111111", role: "accent")])
+        draft.reinsert(pc("#222222", role: "Accent"), at: 0)
+        #expect(draft.colors.map(\.hex) == ["#222222", "#111111"])
+        #expect(draft.colors[0].role == nil)
+        #expect(draft.colors[1].role == "accent")
+    }
+
+    @Test func reinsertSkipsAHexThatIsBackInThePalette() {
+        var draft = PaletteDraft(colors: [pc("#111111")])
+        let restored = draft.reinsert(pc("#111111"), at: 0)
+        #expect(restored == false)
+        #expect(draft.colors.count == 1)
+    }
+
+    @Test func reinsertClampsTheIndex() {
+        var draft = PaletteDraft(colors: [pc("#111111")])
+        draft.reinsert(pc("#222222"), at: 9)
+        #expect(draft.colors.map(\.hex) == ["#111111", "#222222"])
+    }
+
     @Test func resolvedNameFallsBackToSuggestionThenUntitled() {
         #expect(PaletteDraft(name: "  Dusk ").resolvedName(suggestion: "Ocean") == "Dusk")
         #expect(PaletteDraft(name: " ").resolvedName(suggestion: "Ocean") == "Ocean")

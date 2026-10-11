@@ -36,6 +36,17 @@ class ToastManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// Hides a toast that offers Undo and drops its action, for when what it
+    /// would act on is gone. Any other toast is left alone.
+    func dismissUndo() {
+        guard undoAction != nil else { return }
+        undoAction = nil
+        hideWork?.cancel()
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.25)) {
+            isShowing = false
+        }
+    }
+
     func performUndo() {
         let action = undoAction
         undoAction = nil

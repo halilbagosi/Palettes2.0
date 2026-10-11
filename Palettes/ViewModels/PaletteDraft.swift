@@ -52,6 +52,21 @@ struct PaletteDraft: Equatable {
         return (index, colors.remove(at: index))
     }
 
+    /// Undo of a removal: puts `color` back at `index` (clamped). Returns false
+    /// if its hex is back in the palette. If another color has taken its role
+    /// since, it comes back untagged, so a role keeps one holder.
+    @discardableResult
+    mutating func reinsert(_ color: PaletteColor, at index: Int) -> Bool {
+        guard !contains(hex: color.hex) else { return false }
+        var color = color
+        if let role = color.role,
+           colors.contains(where: { $0.role?.caseInsensitiveCompare(role) == .orderedSame }) {
+            color.role = nil
+        }
+        colors.insert(color, at: min(max(index, 0), colors.count))
+        return true
+    }
+
     /// Inserts a copy right after the original. A palette can't hold the same
     /// hex twice, so the copy's blue channel steps until it's unique.
     mutating func duplicate(id: UUID) {
