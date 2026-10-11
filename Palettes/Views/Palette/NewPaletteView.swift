@@ -98,7 +98,7 @@ struct NewPaletteView: View {
                         }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    SheetConfirmButton(title: "Create") { createPalette() }
+                    SheetConfirmButton(kind: .create) { createPalette() }
                         .disabled(!canCreate)
                 }
             }

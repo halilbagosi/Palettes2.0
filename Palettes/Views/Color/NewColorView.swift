@@ -36,7 +36,7 @@ struct NewColorView: View {
                         SheetCancelButton { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        SheetConfirmButton(title: "Add") { create() }
+                        SheetConfirmButton(kind: .create) { create() }
                     }
                 }
                 .alert("Color Already Exists", isPresented: $showDuplicateAlert) {

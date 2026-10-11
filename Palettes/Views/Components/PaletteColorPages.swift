@@ -33,8 +33,7 @@ struct NewPaletteColorPage: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Add") { add() }
-                    .fontWeight(.semibold)
+                SheetConfirmButton(kind: .add()) { add() }
                     .disabled(isDuplicate)
             }
         }
@@ -69,10 +68,6 @@ struct LibraryColorPicker: View {
         return items.filter {
             $0.name.localizedCaseInsensitiveContains(query) || $0.HEX.localizedCaseInsensitiveContains(query)
         }
-    }
-
-    private var addTitle: String {
-        selection.isEmpty ? "Add" : "Add \(selection.count)"
     }
 
     var body: some View {
@@ -111,8 +106,7 @@ struct LibraryColorPicker: View {
         .sensoryFeedback(.selection, trigger: selection)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button(addTitle) { add() }
-                    .fontWeight(.semibold)
+                SheetConfirmButton(kind: .add(count: selection.count)) { add() }
                     .disabled(selection.isEmpty)
             }
         }

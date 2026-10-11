@@ -54,7 +54,7 @@ struct ColorEditView: View {
                         SheetCancelButton { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        SheetConfirmButton(title: "Save") { handleSaveTapped() }
+                        SheetConfirmButton(kind: .save) { handleSaveTapped() }
                     }
                 }
                 .alert("Overwrite or Create New?", isPresented: $showOverwriteAlert) {

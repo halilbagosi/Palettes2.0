@@ -2,10 +2,12 @@
 //  SheetToolbarCompat.swift
 //  Palettes
 //
-//  The cancel and confirm buttons of a creation/edit sheet. iOS 26 uses the
-//  system's glass ✕ and ✓ (as Apple's own sheets do); earlier systems use the
-//  classic "Cancel" and bold "Add"/"Save" text buttons. The glass buttons are
-//  titled `Label`s so they can sit in iPhone Duo's vertical bars (plan 016, A5).
+//  The cancel and confirm buttons of a creation/edit sheet, identical in shape
+//  on every iOS version. The rule: Cancel is an ✕; a sheet that *creates* or
+//  *saves* confirms with a ✓; a button that *adds* something shows "+" (and
+//  "Add N" once a count is known). iOS 26 renders the glass variants; earlier
+//  systems use plain icon buttons. Every item is a titled `Label` so it reads
+//  correctly in iPhone Duo's vertical bars (plan 016, A5) and to VoiceOver.
 //
 
 import SwiftUI
@@ -14,29 +16,63 @@ struct SheetCancelButton: View {
     var action: () -> Void
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            Button(role: .cancel, action: action) {
-                Label("Cancel", systemImage: "xmark")
-            }
-        } else {
-            Button("Cancel", role: .cancel, action: action)
+        Button(role: .cancel, action: action) {
+            Label("Cancel", systemImage: "xmark")
+                .labelStyle(.iconOnly)
         }
     }
 }
 
 struct SheetConfirmButton: View {
-    let title: String
+    enum Kind {
+        case create, save, add(count: Int? = nil)
+    }
+    let kind: Kind
     var action: () -> Void
+
+    private var title: String {
+        switch kind {
+        case .create: "Create"
+        case .save: "Save"
+        case .add(let count?): "Add \(count)"
+        case .add(nil): "Add"
+        }
+    }
+
+    private var symbol: String {
+        if case .add = kind { return "plus" }
+        return "checkmark"
+    }
+
+    /// "+ Add 3" reads as title and icon; everything else is icon-only.
+    private var showsTitle: Bool {
+        if case .add(let count?) = kind { return count >= 1 }
+        return false
+    }
 
     var body: some View {
         if #available(iOS 26.0, *) {
             Button(action: action) {
-                Label(title, systemImage: "checkmark")
+                label
             }
             .buttonStyle(.glassProminent)
         } else {
-            Button(title, action: action)
-                .fontWeight(.semibold)
+            Button(action: action) {
+                label
+                    .fontWeight(.semibold)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if showsTitle {
+            Label(title, systemImage: symbol)
+                .labelStyle(.titleAndIcon)
+        } else {
+            Label(title, systemImage: symbol)
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(title)
         }
     }
 }
