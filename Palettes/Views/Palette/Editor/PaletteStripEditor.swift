@@ -38,6 +38,22 @@ struct PaletteStripEditor: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var targetedID: UUID?
+    /// The band being dragged, recorded when the drag starts so the insertion
+    /// bar can sit on the side where it will land.
+    @State private var draggingID: UUID?
+    /// The bar's last position, kept so it can fade out where it was.
+    @State private var lastSlot: BarSlot?
+    /// False until the bar has a position, so it fades in place instead of
+    /// sliding in from the start.
+    @State private var barPlaced = false
+
+    private struct BarSlot: Equatable {
+        /// Index of the band boundary the bar sits on (0...count).
+        var boundary: Int
+        /// True when it sits on the target's trailing edge.
+        var trailing: Bool
+        var ink: Color
+    }
 
     private let height: CGFloat = 120
     private let cornerRadius: CGFloat = 20
@@ -45,7 +61,8 @@ struct PaletteStripEditor: View {
 
     /// The final index (after removal) when band `id` is dropped on band
     /// `targetID`: `id` takes the target's slot and the target shifts away
-    /// from the side `id` came from. `nil` when nothing should move.
+    /// from the side `id` came from: moving right inserts after T, moving left
+    /// inserts before T. `nil` when nothing should move.
     static func dropIndex(moving id: UUID, onto targetID: UUID, in colors: [PaletteColor]) -> Int? {
         guard id != targetID,
               colors.contains(where: { $0.id == id }),
@@ -53,8 +70,27 @@ struct PaletteStripEditor: View {
         return target
     }
 
+    /// The drop's settle.
     private var settle: Animation {
         reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0.15)
+    }
+
+    /// Duplicate and remove: the same timing without the bounce.
+    private var reshuffle: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
+    }
+
+    private var currentSlot: BarSlot? {
+        guard let target = targetedID, let dragging = draggingID, target != dragging,
+              let t = draft.colors.firstIndex(where: { $0.id == target }),
+              let d = draft.colors.firstIndex(where: { $0.id == dragging }) else { return nil }
+        let trailing = d < t
+        return BarSlot(boundary: trailing ? t + 1 : t, trailing: trailing, ink: draft.colors[t].color.legibleInk)
+    }
+
+    private func beginDrag(_ id: UUID) -> BandDragItem {
+        draggingID = id
+        return BandDragItem(id: id)
     }
 
     var body: some View {
@@ -66,14 +102,43 @@ struct PaletteStripEditor: View {
         }
         .frame(height: height)
         .background(draft.colors.last?.color ?? Color.clear)
+        .overlay { insertionBar }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(Color.primary.opacity(0.1), lineWidth: 1)
                 .allowsHitTesting(false)
         )
-        .animation(settle, value: draft.colors.map(\.id))
-        .sensoryFeedback(.selection, trigger: targetedID)
+        .sensoryFeedback(.selection, trigger: targetedID) { _, new in new != nil }
+        .onChange(of: currentSlot) { _, new in
+            if let new { lastSlot = new }
+        }
+        .onChange(of: lastSlot) { _, new in
+            barPlaced = new != nil
+        }
+        .onChange(of: draggingID) { _, new in
+            if new != nil { lastSlot = nil }
+        }
+    }
+
+    // MARK: Insertion bar
+
+    /// One bar for the whole strip: it slides between slots (fades under
+    /// Reduce Motion) and shows where the dragged band will land.
+    private var insertionBar: some View {
+        GeometryReader { geo in
+            let count = max(draft.colors.count, 1)
+            let bandWidth = (geo.size.width - (draft.colors.isEmpty ? 0 : addTileWidth)) / CGFloat(count)
+            let slot = currentSlot ?? lastSlot
+            Rectangle()
+                .fill(slot?.ink ?? .clear)
+                .frame(width: 3, height: geo.size.height)
+                .offset(x: slot.map { CGFloat($0.boundary) * bandWidth - ($0.trailing ? 3 : 0) } ?? 0)
+                .animation(barPlaced && !reduceMotion ? .snappy : nil, value: lastSlot)
+                .opacity(currentSlot == nil ? 0 : 1)
+                .animation(.easeInOut(duration: 0.15), value: currentSlot != nil)
+        }
+        .allowsHitTesting(false)
     }
 
     // MARK: Band
@@ -109,27 +174,18 @@ struct PaletteStripEditor: View {
                 Rectangle().strokeBorder(ink, lineWidth: 3).allowsHitTesting(false)
             }
         }
-        .overlay(alignment: .leading) {
-            if targetedID == id {
-                Rectangle()
-                    .fill(ink)
-                    .frame(width: 3)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .leading)))
-                    .allowsHitTesting(false)
-            }
-        }
-        .animation(.snappy, value: targetedID)
         .contentShape(Rectangle())
         .onTapGesture {
             selection = id
             onEdit(id)
         }
-        .draggable(BandDragItem(id: id)) {
+        .draggable(beginDrag(id)) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(entry.color)
                 .frame(width: 64, height: height)
         }
         .dropDestination(for: BandDragItem.self) { items, _ in
+            draggingID = nil
             guard let dropped = items.first,
                   let to = Self.dropIndex(moving: dropped.id, onto: id, in: draft.colors) else { return false }
             withAnimation(settle) { draft.move(id: dropped.id, to: to) }
@@ -154,10 +210,10 @@ struct PaletteStripEditor: View {
         .accessibilityAddTraits(selection == id ? [.isButton, .isSelected] : .isButton)
         .accessibilityActions {
             if index > 0 {
-                Button("Move Left") { withAnimation(settle) { draft.move(id: id, to: index - 1) } }
+                Button("Move Left") { draft.move(id: id, to: index - 1) }
             }
             if !isLast {
-                Button("Move Right") { withAnimation(settle) { draft.move(id: id, to: index + 1) } }
+                Button("Move Right") { draft.move(id: id, to: index + 1) }
             }
             Button("Duplicate") { duplicate(id) }
             Button("Tag") { onTag(id) }
@@ -166,12 +222,12 @@ struct PaletteStripEditor: View {
     }
 
     private func duplicate(_ id: UUID) {
-        withAnimation(settle) { draft.duplicate(id: id) }
+        withAnimation(reshuffle) { draft.duplicate(id: id) }
     }
 
     private func remove(_ id: UUID) {
         var removed: (index: Int, color: PaletteColor)?
-        withAnimation(settle) { removed = draft.remove(id: id) }
+        withAnimation(reshuffle) { removed = draft.remove(id: id) }
         guard let removed else { return }
         if selection == id { selection = nil }
         onRemove(removed.index, removed.color)
