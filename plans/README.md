@@ -26,6 +26,7 @@ without `xcodebuild` do the file work and report verification as pending.
 | 013 | Generation redesign: model brief + deterministic OKLCH builder (60/30/10), swatch-checked names and titles, modes with vibe | P1 | L | 012 | DONE (feature/generation-redesign) |
 | 014 | Onboarding: pull-down orb, camera scan in orb, adjust, generate, palette detail coach mark, optional share/Siri cards | P1 | M | — | DONE (device verification pending: camera + rotation, Apple Intelligence path, VoiceOver, landscape, iOS 17/18) |
 | 016 | iPad & iPhone Duo: per-window state, menu-bar commands, share-sheet crash fix, titled toolbar items + system overflow menu, adaptive generating stage, drag out; next: fold-aware grids, arrangement views, inspector editing | P1 | M | — | IN PROGRESS (part 1 done on feature/ipad-duo-optimization; xcodebuild pending) |
+| 017 | Sheet redesign r2: one shared color editor, single-sheet New Palette with push navigation (HIG), Free/Premium plan tag in Settings | P2 | M | — | DONE (feature/sheet-redesign; xcodebuild + device checks pending) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

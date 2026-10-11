@@ -1,9 +1,17 @@
 import SwiftUI
 
+/// Adds colors to a saved palette (from the Edit Palette sheet). The same
+/// pages as New Palette: pick several from the library, or push New Color to
+/// make one in the shared editor. Either add closes the sheet.
 struct AddColorToPaletteSheet: View {
     let paletteID: UUID
-    @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
+    @Environment(\.dismiss) private var dismiss
+    @State private var path: [Route] = []
+
+    private enum Route: Hashable {
+        case newColor
+    }
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == paletteID })
@@ -15,62 +23,51 @@ struct AddColorToPaletteSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                ColorInputView(
-                    sources: [.library, .pick, .scan],
-                    scanExtraction: .dominant,
-                    excludedHexes: existingHexCodes,
-                    addButtonTitle: "Add to Palette",
-                    onAdd: { entry in
-                        add(entry)
-                    }
-                )
-                .environmentObject(appData)
-                .padding(.bottom, 20)
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .softScrollEdge()
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Add Color")
-                        .font(.headline)
+        NavigationStack(path: $path) {
+            LibraryColorPicker(
+                title: "Add Colors",
+                excludedHexes: existingHexCodes,
+                onNewColor: { path.append(.newColor) },
+                onAdd: { picked in
+                    add(picked.map { PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name) })
                 }
+            )
+            .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Label("Close", systemImage: "xmark")
-                            .foregroundStyle(.primary)
-                    }
+                    SheetCancelButton { dismiss() }
+                }
+            }
+            .navigationDestination(for: Route.self) { _ in
+                NewPaletteColorPage(excludedHexes: existingHexCodes) { entry in
+                    add([entry])
+                    dismiss()
                 }
             }
         }
     }
 
-    /// Appends the color to the palette and keeps the sheet open so several
-    /// colors can be added in one visit. Global color list is kept in sync:
-    /// an existing global entry (same hex) is reused rather than duplicated.
-    private func add(_ entry: ColorInputEntry) {
+    /// Appends the colors to the palette. The global color list is kept in
+    /// sync: an existing global entry (same hex) is reused rather than
+    /// duplicated.
+    private func add(_ entries: [PaletteColor]) {
         guard let idx = paletteIndex else { return }
 
-        var name = entry.name
-        if let existing = appData.colors.first(where: { $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame }) {
-            name = existing.name
-        }
-
         withAnimation(.spring(response: 0.3)) {
-            appData.palettes[idx].paletteColors.append(
-                PaletteColor(color: entry.color, hex: entry.hex, name: name)
-            )
+            for entry in entries {
+                guard !appData.palettes[idx].hexCodes.contains(where: {
+                    $0.caseInsensitiveCompare(entry.hex) == .orderedSame
+                }) else { continue }
 
-            let alreadyExists = appData.colors.contains {
-                $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame
-            }
-            if !alreadyExists {
-                appData.colors.append(
-                    ColorViewModel(name: name, color: entry.color, HEX: entry.hex, usedInPalette: true)
-                )
+                var entry = entry
+                if let existing = appData.colors.first(where: { $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame }) {
+                    entry.name = existing.name
+                } else {
+                    appData.colors.append(
+                        ColorViewModel(name: entry.name, color: entry.color, HEX: entry.hex, usedInPalette: true)
+                    )
+                }
+                appData.palettes[idx].paletteColors.append(entry)
             }
         }
-        ToastManager.shared.show("Added \(name)", icon: "checkmark.circle.fill")
     }
 }

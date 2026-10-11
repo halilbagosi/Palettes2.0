@@ -1,5 +1,12 @@
 import SwiftUI
+import PhotosUI
 
+/// "New Palette" sheet. One sheet, no sheets on top of it: the palette and
+/// its name stay pinned at the top, the colors are a standard list below
+/// (tap to edit, swipe to remove, touch and hold to reorder), and adding a
+/// color pushes a page — a new color in the shared editor, or several from the
+/// library — or pulls a whole palette from a photo. Nothing is saved until
+/// Create, and an unsaved palette asks before it's thrown away.
 struct NewPaletteView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
@@ -7,314 +14,374 @@ struct NewPaletteView: View {
     var preselectedColor: ColorViewModel? = nil
 
     @State private var paletteName = ""
-    @State private var paletteColors: [Color] = []
-    @State private var paletteHexCodes: [String] = []
-    @State private var paletteColorNames: [String] = []
+    /// The draft, one entry per color — name, hex and color always together.
+    @State private var draft: [PaletteColor] = []
+    /// Used when the name is left blank; recomputed as the colors change.
+    @State private var suggestedName = ""
+    @State private var didSeedPreselected = false
+    @State private var path: [Route] = []
+    @FocusState private var nameFocused: Bool
 
-    @State private var editColorIndex: Int?
+    private enum Route: Hashable {
+        case newColor
+        case library
+        case edit(UUID)
+    }
 
+    // Photo
+    @State private var showPhotoLibrary = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var cameraImage: UIImage?
+    @State private var didCameraCapture = false
+    @State private var pendingScan: [PaletteColor] = []
+    @State private var showScanChoice = false
+
+    @State private var showDiscardConfirmation = false
     @State private var showDuplicateAlert = false
     @State private var showNameDuplicateAlert = false
     @State private var duplicateOfName = ""
 
-    struct ColorBindingWrapper: Identifiable {
-        let id: Int // Index
-    }
+    private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
-    private var canCreate: Bool {
-        !paletteName.trimmingCharacters(in: .whitespaces).isEmpty && paletteColors.count >= 2
+    private var canCreate: Bool { draft.count >= 2 }
+
+    private var hasChanges: Bool {
+        !draft.isEmpty || !paletteName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var draftHexes: Set<String> {
-        Set(paletteHexCodes.map { $0.uppercased() })
+        Set(draft.map { $0.hex.uppercased() })
+    }
+
+    private var colorsHeader: String {
+        draft.count == 1 ? "1 Color" : "\(draft.count) Colors"
+    }
+
+    private var nameHint: String {
+        suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
+    }
+
+    private var resolvedName: String {
+        let typed = paletteName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return typed }
+        return suggestedName.isEmpty ? "Untitled Palette" : suggestedName
     }
 
     var body: some View {
-        NavigationStack {
-            scrollContent
-                .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
-                    Button("Save Anyway") { performCreate() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("A palette with these colors already exists as \"\(duplicateOfName)\".")
-                }
-                .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
-                    Button("Save Anyway") { performCreate() }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("A palette named \"\(duplicateOfName)\" already exists.")
-                }
-        }
-    }
+        NavigationStack(path: $path) {
+            VStack(spacing: 0) {
+                header
 
-    private var scrollContent: some View {
-            ScrollView {
-                VStack(spacing: 0) {
-                    TextField("Palette Name", text: $paletteName)
-                        .font(.system(size: 18, weight: .medium))
-                        .padding()
-                        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
-                        .padding(.horizontal)
-                        .padding(.top, 16)
-
-                    palettePreview
-
-                    if !paletteColors.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Added Colors")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
-
-                            LazyVStack(spacing: 8) {
-                                ForEach(paletteColors.indices, id: \.self) { index in
-                                    editableColorRow(index: index)
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .padding(.top, 20)
+                List {
+                    if !draft.isEmpty {
+                        colorsSection
                     }
-
-                    ColorInputView(
-                        sources: [.pick, .scan, .library],
-                        initialSource: preselectedColor != nil ? .library : .pick,
-                        scanExtraction: .palette(count: 6),
-                        excludedHexes: draftHexes,
-                        addButtonTitle: "Add Color to Palette",
-                        onAdd: { entry in
-                            appendToDraft(entry)
-                        },
-                        onScanPalette: { entries in
-                            replaceDraft(with: entries)
-                        }
-                    )
-                    .environmentObject(appData)
+                    addSection
                 }
-                .padding(.bottom, 20)
+                .scrollDismissesKeyboard(.interactively)
+                .animation(.spring(duration: 0.35, bounce: 0), value: draft.map(\.id))
             }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle("New Palette")
             .navigationBarTitleDisplayMode(.inline)
-            .softScrollEdge()
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("New Palette")
-                        .font(.headline)
-                }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Label("Cancel", systemImage: "xmark")
-                            .foregroundStyle(.primary)
-                    }
+                    SheetCancelButton { cancel() }
+                        .confirmationDialog(
+                            "Discard this palette?",
+                            isPresented: $showDiscardConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Discard Palette", role: .destructive) { dismiss() }
+                            Button("Keep Editing", role: .cancel) {}
+                        }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { createPalette() }
-                        .glassButton(prominent: true)
-                        .fontWeight(.semibold)
+                    SheetConfirmButton(title: "Create") { createPalette() }
                         .disabled(!canCreate)
                 }
             }
-            .sheet(item: Binding(
-                get: {
-                    if let idx = editColorIndex, idx < paletteColors.count {
-                        return ColorBindingWrapper(id: idx)
-                    }
-                    return nil
-                },
-                set: { newValue in
-                    if newValue == nil {
-                        editColorIndex = nil
-                    }
-                }
-            )) { wrapper in
-                ColorEditView(
-                    colorName: colorNameBinding(for: wrapper.id),
-                    hexCode: hexCodeBinding(for: wrapper.id),
-                    colorValue: colorValueBinding(for: wrapper.id)
-                )
-                .environmentObject(appData)
-                .presentationDetents([.large])
+            .navigationDestination(for: Route.self) { route in
+                destination(for: route)
             }
-            .onAppear {
-                if let color = preselectedColor, !draftHexes.contains(color.HEX.uppercased()) {
-                    appendToDraft(ColorInputEntry(name: color.name, hex: color.HEX, color: color.color))
-                }
+            .confirmationDialog(
+                "Use the colors from this photo?",
+                isPresented: $showScanChoice,
+                titleVisibility: .visible
+            ) {
+                Button("Add \(pendingScan.count) Colors") { applyScan(.append) }
+                Button("Replace Current Colors", role: .destructive) { applyScan(.replace) }
+                Button("Cancel", role: .cancel) { pendingScan = [] }
+            } message: {
+                Text("Add them to the colors already in this palette, or start over with just these.")
             }
+            .alert("Palette Already Exists", isPresented: $showDuplicateAlert) {
+                Button("Save Anyway") { performCreate() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A palette with these colors already exists as \"\(duplicateOfName)\".")
+            }
+            .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
+                Button("Save Anyway") { performCreate() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A palette named \"\(duplicateOfName)\" already exists.")
+            }
+            .photosPicker(isPresented: $showPhotoLibrary, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { _, item in
+                loadPhoto(item)
+            }
+            .fullScreenCover(isPresented: $showCamera, onDismiss: {
+                if let image = cameraImage {
+                    cameraImage = nil
+                    useColors(from: image)
+                }
+            }) {
+                CameraPicker(image: $cameraImage, didCapture: $didCameraCapture, isPresented: $showCamera)
+            }
+        }
+        // Sheets cover the app-root toast overlay, so host one here too.
+        .toastOverlay()
+        // A swipe down mustn't silently throw away colors; Cancel asks first.
+        .interactiveDismissDisabled(hasChanges)
+        .onAppear {
+            guard !didSeedPreselected else { return }
+            didSeedPreselected = true
+            if let color = preselectedColor {
+                draft.append(PaletteColor(color: color.color, hex: color.HEX, name: color.name))
+            }
+        }
+        .onChange(of: draft.map(\.hex)) { _, hexes in
+            updateSuggestedName(for: hexes)
+        }
     }
 
-    // MARK: - Palette Preview
+    // MARK: - Header
 
-    var palettePreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if paletteColors.isEmpty {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 6) {
-                        Image(systemName: "swatchpalette")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                        Text("Add at least 2 colors to build your palette")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+    /// The palette as it will look, and its name. Pinned, so it stays in view
+    /// while the list scrolls.
+    private var header: some View {
+        VStack(spacing: 12) {
+            PaletteStrip(colors: draft.map(\.color), height: 88, cornerRadius: 22)
+                .overlay {
+                    if draft.isEmpty {
+                        Text("Your palette will appear here")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
                 }
-                .frame(height: 70)
-                .liquidGlass(.regular, in: .rect(cornerRadius: 16))
-                .padding(.horizontal)
-                .padding(.top, 12)
-                // Vanish instantly when the first color arrives — a fading
-                // glass rim reads as a stray hairline over the strip.
-                .transition(.asymmetric(insertion: .opacity, removal: .identity))
+                .shadow(color: .black.opacity(draft.isEmpty ? 0 : 0.1), radius: 10, x: 0, y: 5)
+
+            TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $paletteName)
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .submitLabel(.done)
+                .focused($nameFocused)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityLabel("Palette name")
+                .accessibilityHint(nameHint)
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Sections
+
+    private var colorsSection: some View {
+        Section {
+            ForEach(draft) { entry in
+                NavigationLink(value: Route.edit(entry.id)) {
+                    ColorRowLabel(color: entry.color, name: entry.name, hex: entry.hex)
+                }
+            }
+            .onDelete { offsets in
+                draft.remove(atOffsets: offsets)
+            }
+            .onMove { offsets, destination in
+                draft.move(fromOffsets: offsets, toOffset: destination)
+            }
+        } header: {
+            Text(colorsHeader)
+        } footer: {
+            Text("Tap a color to edit it. Touch and hold to reorder, or swipe left to remove.")
+        }
+    }
+
+    private var addSection: some View {
+        Section {
+            NavigationLink(value: Route.newColor) {
+                Label("New Color", systemImage: "plus.circle.fill")
+            }
+
+            if !appData.colors.isEmpty {
+                NavigationLink(value: Route.library) {
+                    Label("From Your Library", systemImage: "square.grid.2x2.fill")
+                }
+            }
+
+            if Self.cameraAvailable {
+                Menu {
+                    Button("Choose Photo", systemImage: "photo.on.rectangle") { showPhotoLibrary = true }
+                    Button("Take Photo", systemImage: "camera") { showCamera = true }
+                } label: {
+                    Label("From a Photo", systemImage: "photo.fill")
+                }
             } else {
-                HStack(spacing: 0) {
-                    ForEach(paletteColors.indices, id: \.self) { index in
-                        Rectangle()
-                            .fill(paletteColors[index])
-                            // Overlap neighbors a hairline so antialiasing
-                            // can't show a background seam mid-animation.
-                            .padding(.horizontal, -0.5)
-                    }
+                Button {
+                    showPhotoLibrary = true
+                } label: {
+                    Label("From a Photo", systemImage: "photo.fill")
                 }
-                .frame(height: 56)
-                // Backdrop inside the clip: the spring bounce briefly leaves
-                // gaps between segments, which show this instead of the
-                // sheet background.
-                .background(paletteColors.last ?? Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .padding(.horizontal)
-                .padding(.top, 12)
-
-                Text("\(paletteColors.count) color\(paletteColors.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
+            }
+        } header: {
+            Text(draft.isEmpty ? "Add Colors" : "Add More")
+        } footer: {
+            switch draft.count {
+            case 0:
+                Text("A palette needs at least two colors. Add them one at a time, or pull a whole palette from a photo.")
+            case 1:
+                Text("Add one more color to create the palette.")
+            default:
+                EmptyView()
             }
         }
     }
 
-    // MARK: - Draft Color Rows
+    // MARK: - Pages
 
     @ViewBuilder
-    private func editableColorRow(index: Int, swatchSize: CGFloat = 40) -> some View {
-        let displayName = index < paletteColorNames.count && !paletteColorNames[index].isEmpty
-            ? paletteColorNames[index]
-            : "Color \(index + 1)"
-
-        HStack(spacing: 12) {
-            Button {
-                editColorIndex = index
-            } label: {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(paletteColors[index].gradient)
-                    .frame(width: swatchSize, height: swatchSize)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
+    private func destination(for route: Route) -> some View {
+        switch route {
+        case .newColor:
+            NewPaletteColorPage(excludedHexes: draftHexes) { entry in
+                append([entry])
             }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
-                    .font(.system(size: 14, weight: .medium))
-
-                if index < paletteHexCodes.count {
-                    HStack(spacing: 6) {
-                        Text(paletteHexCodes[index])
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-
-                        Text(paletteColors[index].rgbString)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    }
-                    .foregroundColor(.secondary)
-                }
-            }
-
-            Spacer()
-
-            Button {
-                withAnimation(.spring(response: 0.3)) {
-                    removeColor(at: index)
-                }
-            } label: {
-                Image(systemName: "minus.circle.fill")
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.red.opacity(0.8))
-            }
-            .accessibilityLabel("Remove color")
+        case .library:
+            LibraryColorPicker(excludedHexes: draftHexes, onAdd: { picked in
+                append(picked.map { PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name) })
+            })
+        case .edit(let id):
+            // Edits apply live; Back is all it takes.
+            ColorComposer(color: colorBinding(for: id), name: nameBinding(for: id))
+                .navigationTitle("Edit Color")
+                .navigationBarTitleDisplayMode(.inline)
         }
-        .padding(10)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 14))
     }
 
-    private func colorNameBinding(for index: Int) -> Binding<String> {
+    /// Edits the color and keeps its hex in step.
+    private func colorBinding(for id: UUID) -> Binding<Color> {
         Binding(
-            get: { index < paletteColorNames.count ? paletteColorNames[index] : "" },
-            set: { newValue in
-                if index < paletteColorNames.count {
-                    paletteColorNames[index] = newValue
-                }
+            get: { draft.first(where: { $0.id == id })?.color ?? .gray },
+            set: { newColor in
+                guard let index = draft.firstIndex(where: { $0.id == id }) else { return }
+                draft[index].color = newColor
+                draft[index].hex = ColorComposer.hexKey(newColor)
             }
         )
     }
 
-    private func hexCodeBinding(for index: Int) -> Binding<String> {
+    private func nameBinding(for id: UUID) -> Binding<String> {
         Binding(
-            get: { index < paletteHexCodes.count ? paletteHexCodes[index] : "" },
-            set: { newValue in
-                if index < paletteHexCodes.count {
-                    paletteHexCodes[index] = newValue
-                }
+            get: { draft.first(where: { $0.id == id })?.name ?? "" },
+            set: { newName in
+                guard let index = draft.firstIndex(where: { $0.id == id }) else { return }
+                draft[index].name = newName
             }
         )
     }
 
-    private func colorValueBinding(for index: Int) -> Binding<Color> {
-        Binding(
-            get: { index < paletteColors.count ? paletteColors[index] : .clear },
-            set: { newValue in
-                if index < paletteColors.count {
-                    paletteColors[index] = newValue
-                }
+    // MARK: - Draft
+
+    private func append(_ colors: [PaletteColor]) {
+        var seen = draftHexes
+        for color in colors where !seen.contains(color.hex.uppercased()) {
+            seen.insert(color.hex.uppercased())
+            draft.append(color)
+        }
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            let data = try? await item.loadTransferable(type: Data.self)
+            photoItem = nil   // so the same photo can be chosen again
+            guard let data, let image = UIImage(data: data) else {
+                ToastManager.shared.show("Couldn't open that photo", icon: "exclamationmark.triangle.fill")
+                return
             }
+            // Let the photo picker finish dismissing before asking anything.
+            try? await Task.sleep(for: .milliseconds(300))
+            useColors(from: image)
+        }
+    }
+
+    /// Pulls a palette from the photo. An empty draft takes it as is; a draft
+    /// with colors asks whether to add to them or start over.
+    private func useColors(from image: UIImage) {
+        do {
+            let extracted = try ImageColorExtractor.extractColors(from: image, count: 6)
+            let colors = extracted.compactMap { item -> PaletteColor? in
+                guard let color = Color(hex: item.hex) else { return nil }
+                return PaletteColor(color: color, hex: item.hex, name: item.name)
+            }
+            guard !colors.isEmpty else { return }
+            if draft.isEmpty {
+                draft = colors
+            } else {
+                pendingScan = colors
+                showScanChoice = true
+            }
+        } catch {
+            ToastManager.shared.show(error.localizedDescription, icon: "exclamationmark.triangle.fill")
+        }
+    }
+
+    private enum ScanMergeMode {
+        case replace, append
+    }
+
+    private func applyScan(_ mode: ScanMergeMode) {
+        switch mode {
+        case .replace: draft = pendingScan
+        case .append: append(pendingScan)
+        }
+        pendingScan = []
+    }
+
+    private func updateSuggestedName(for hexes: [String]) {
+        guard hexes.count >= 2 else {
+            suggestedName = ""
+            return
+        }
+        suggestedName = PaletteNamer.descriptiveName(
+            forHexes: hexes,
+            existingNames: appData.palettes.map(\.name)
         )
     }
 
-    // MARK: - Actions
-
-    private func appendToDraft(_ entry: ColorInputEntry) {
-        withAnimation(.spring(response: 0.3)) {
-            paletteColors.append(entry.color)
-            paletteHexCodes.append(entry.hex)
-            paletteColorNames.append(entry.name)
+    private func cancel() {
+        if hasChanges {
+            showDiscardConfirmation = true
+        } else {
+            dismiss()
         }
     }
 
-    private func replaceDraft(with entries: [ColorInputEntry]) {
-        withAnimation(.spring(response: 0.3)) {
-            paletteColors = entries.map { $0.color }
-            paletteHexCodes = entries.map { $0.hex }
-            paletteColorNames = entries.map { $0.name }
-        }
-    }
-
-    private func removeColor(at index: Int) {
-        guard index < paletteColors.count else { return }
-        paletteColors.remove(at: index)
-        if index < paletteHexCodes.count { paletteHexCodes.remove(at: index) }
-        if index < paletteColorNames.count { paletteColorNames.remove(at: index) }
-    }
+    // MARK: - Create
 
     private func createPalette() {
-        let name = paletteName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, !paletteColors.isEmpty else { return }
+        guard canCreate else { return }
 
-        if let existing = appData.existingPalette(matching: paletteHexCodes) {
+        if let existing = appData.existingPalette(matching: draft.map(\.hex)) {
             duplicateOfName = existing.name
             showDuplicateAlert = true
             return
         }
-        if let existing = appData.existingPalette(named: name) {
+        if let existing = appData.existingPalette(named: resolvedName) {
             duplicateOfName = existing.name
             showNameDuplicateAlert = true
             return
@@ -323,31 +390,27 @@ struct NewPaletteView: View {
     }
 
     private func performCreate() {
-        let name = paletteName.trimmingCharacters(in: .whitespaces)
-        let newPalette = PaletteViewModel(
-            name: name,
-            colors: paletteColors,
-            hexCodes: paletteHexCodes,
-            colorNames: paletteColorNames
-        )
+        let colors = draft.map { entry -> PaletteColor in
+            var entry = entry
+            let trimmed = entry.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            entry.name = trimmed.isEmpty ? ColorNamer.name(forHex: entry.hex) : trimmed
+            return entry
+        }
+        let newPalette = PaletteViewModel(name: resolvedName, paletteColors: colors)
         withAnimation {
             appData.palettes.append(newPalette)
 
-            for i in paletteColors.indices {
-                let hex = i < paletteHexCodes.count ? paletteHexCodes[i] : ""
-                let colorName = i < paletteColorNames.count ? paletteColorNames[i] : "Untitled"
-                guard !hex.isEmpty else { continue }
+            for entry in colors where !entry.hex.isEmpty {
                 let alreadyExists = appData.colors.contains {
-                    $0.HEX.caseInsensitiveCompare(hex) == .orderedSame
+                    $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame
                 }
                 if !alreadyExists {
-                    let newColor = ColorViewModel(
-                        name: colorName,
-                        color: paletteColors[i],
-                        HEX: hex,
+                    appData.colors.append(ColorViewModel(
+                        name: entry.name,
+                        color: entry.color,
+                        HEX: entry.hex,
                         usedInPalette: true
-                    )
-                    appData.colors.append(newColor)
+                    ))
                 }
             }
         }
@@ -355,9 +418,38 @@ struct NewPaletteView: View {
     }
 }
 
+/// A color in a list: rounded swatch, name, and hex.
+struct ColorRowLabel: View {
+    let color: Color
+    let name: String
+    let hex: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(color.gradient)
+                .frame(width: 36, height: 36)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name.isEmpty ? "Untitled" : name)
+                    .lineLimit(1)
+                Text(hex)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
     NewPaletteView()
-        .environmentObject(AppData())
+        .environmentObject(AppData(inMemory: true))
 }
