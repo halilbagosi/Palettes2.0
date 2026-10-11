@@ -12,6 +12,11 @@ struct SpectrumPad: View {
     @State private var saturation: Double = 1
     @State private var brightness: Double = 1
     @State private var lastHex = ""
+    /// True while a finger is on the field / the saturation track; the thumb
+    /// grows under it so it isn't hidden by the fingertip.
+    @GestureState private var fieldTouched = false
+    @GestureState private var saturationTouched = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let minBrightness = 0.15
 
@@ -29,10 +34,12 @@ struct SpectrumPad: View {
                         LinearGradient(colors: [.clear, .black.opacity(1 - Self.minBrightness)], startPoint: .top, endPoint: .bottom)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    thumb.position(x: hue * geo.size.width, y: (1 - (brightness - Self.minBrightness) / (1 - Self.minBrightness)) * geo.size.height)
+                    thumb(touched: fieldTouched).position(x: hue * geo.size.width, y: (1 - (brightness - Self.minBrightness) / (1 - Self.minBrightness)) * geo.size.height)
                 }
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                .gesture(DragGesture(minimumDistance: 0)
+                    .updating($fieldTouched) { _, touched, _ in touched = true }
+                    .onChanged { value in
                     let x = min(max(value.location.x / geo.size.width, 0), 1)
                     let y = min(max(value.location.y / geo.size.height, 0), 1)
                     // The field is drawn vivid for grays; adopt that saturation so
@@ -55,10 +62,12 @@ struct SpectrumPad: View {
                     Capsule().fill(LinearGradient(
                         colors: [Color(hue: hue, saturation: 0, brightness: brightness), Color(hue: hue, saturation: 1, brightness: brightness)],
                         startPoint: .leading, endPoint: .trailing))
-                    thumb.position(x: saturation * geo.size.width, y: geo.size.height / 2)
+                    thumb(touched: saturationTouched).position(x: saturation * geo.size.width, y: geo.size.height / 2)
                 }
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                .gesture(DragGesture(minimumDistance: 0)
+                    .updating($saturationTouched) { _, touched, _ in touched = true }
+                    .onChanged { value in
                     saturation = min(max(value.location.x / geo.size.width, 0), 1)
                     commit()
                 })
@@ -82,11 +91,16 @@ struct SpectrumPad: View {
     /// into a gray slab; touching the field adopts that saturation. Pastels stay exact.
     private var fieldSaturation: Double { saturation < 0.05 ? 0.5 : saturation }
 
-    private var thumb: some View {
-        Circle()
+    /// 24 pt at rest, 32 pt under a finger (no size change with Reduce Motion).
+    /// Only the size animates; the position is set outside this view and
+    /// follows the finger 1:1.
+    private func thumb(touched: Bool) -> some View {
+        let size: CGFloat = touched && !reduceMotion ? 32 : 24
+        return Circle()
             .strokeBorder(.white, lineWidth: 2)
             .background(Circle().fill(Color(hue: hue, saturation: saturation, brightness: brightness)))
-            .frame(width: 24, height: 24)
+            .frame(width: size, height: size)
+            .animation(.spring(duration: 0.2, bounce: 0), value: size)
             .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
             .allowsHitTesting(false)
     }

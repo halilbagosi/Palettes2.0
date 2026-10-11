@@ -3,42 +3,10 @@
 //  Palettes
 //
 //  Building blocks shared by the create/edit sheets so they read as one family
-//  with the detail pages: the color wash, the palette strip, and a legible ink.
+//  with the detail pages: the palette strip and a legible ink.
 //
 
 import SwiftUI
-
-/// The backdrop of `ColorDetailView` and `ColorEditView`: the color at the top,
-/// fading into a near-neutral tint of it. The system background while there is
-/// no color yet.
-struct ColorWashBackground: View {
-    var color: Color?
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Group {
-            if let color {
-                LinearGradient(
-                    colors: [color.opacity(0.8), end(for: color)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            } else {
-                Color(.systemBackground)
-            }
-        }
-        .ignoresSafeArea()
-    }
-
-    private func end(for color: Color) -> Color {
-        let (h, s, _) = color.hsbComponents
-        if colorScheme == .dark {
-            return Color(hue: h, saturation: s, brightness: 0.08)
-        } else {
-            return Color(hue: h, saturation: s * 0.08, brightness: 0.97)
-        }
-    }
-}
 
 /// A palette as one rounded strip of equal segments (the detail page's hero
 /// strip, shorter). A dashed outline while the palette is empty.
