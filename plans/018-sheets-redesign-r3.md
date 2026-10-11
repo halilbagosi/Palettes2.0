@@ -273,11 +273,14 @@ struct PaletteDraftTests {
         #expect(draft.finalizedColors()[0].name == ColorNamer.name(forHex: "#FF0000"))
     }
 
-    @Test func initFromPaletteRoundTripsEquality() {
-        let palette = PaletteViewModel(name: "P", paletteColors: [pc("#111111"), pc("#222222")])
+    @Test func initFromPaletteCopiesNameAndColors() {
+        let palette = PaletteViewModel(name: "P", paletteColors: [pc("#111111", role: "Primary"), pc("#222222")])
         let draft = PaletteDraft(palette: palette)
-        #expect(draft == PaletteDraft(palette: palette))
         #expect(draft.name == "P")
+        #expect(draft.colors == palette.paletteColors)
+        var edited = draft
+        edited.name = "Q"
+        #expect(edited != draft)   // drives Cancel's "Discard changes?" check
     }
 }
 ```
