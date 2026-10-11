@@ -15,21 +15,20 @@ struct HarmonyPage: View {
     let base: String?
     let onChoose: ([PaletteColor]) -> Void
 
-    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
-    @State private var color: Color
+    /// Placeholder until `onAppear` seeds it, so a random starter is picked
+    /// once rather than on every init.
+    @State private var color: Color = .blue
+    @State private var seeded = false
+    /// Spoken names for the strips' hexes; hexes are read until they resolve.
+    @State private var names: [String: String] = [:]
 
     init(base: String?, onChoose: @escaping ([PaletteColor]) -> Void) {
         self.base = base
         self.onChoose = onChoose
-        let hex = base ?? ColorPickerModel.randomStarter()
-        _color = State(initialValue: Color(hex: hex) ?? .blue)
     }
 
     private var hex: String { ColorComposer.hexKey(color) }
     private var title: String { base == nil ? "From One Color" : "Colors That Go With…" }
-
-    /// A gray has no hue to rotate, so its harmonies barely differ.
-    private var isNearGray: Bool { color.hsbComponents.s < 0.05 }
 
     var body: some View {
         let harmonies = ColorPickerModel.harmonies(for: hex)
@@ -52,10 +51,6 @@ struct HarmonyPage: View {
                     }
                 } header: {
                     Text("Harmonies")
-                } footer: {
-                    if isNearGray {
-                        Text("Pick a color with some hue to see more harmonies.")
-                    }
                 }
             }
             .listStyle(.insetGrouped)
@@ -65,6 +60,12 @@ struct HarmonyPage: View {
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            guard !seeded else { return }
+            seeded = true
+            color = Color(hex: base ?? ColorPickerModel.randomStarter()) ?? .blue
+        }
+        .task(id: hex) { await resolveNames() }
     }
 
     private var swatch: some View {
@@ -109,11 +110,23 @@ struct HarmonyPage: View {
         .accessibilityHint("Adds these colors to the palette")
     }
 
-    /// Naming 25 colors per drag step is wasted work unless someone is
-    /// listening.
     private func spokenColors(_ hexes: [String]) -> String {
-        guard voiceOverEnabled else { return hexes.joined(separator: ", ") }
-        return hexes.map { ColorNamer.name(forHex: $0) }.joined(separator: ", ")
+        hexes.map { names[$0] ?? $0 }.joined(separator: ", ")
+    }
+
+    /// Names the current strips once the color settles; a drag restarts the
+    /// task, so nothing is named mid-drag.
+    private func resolveNames() async {
+        try? await Task.sleep(for: .milliseconds(150))
+        var resolved: [String: String] = [:]
+        for harmony in ColorPickerModel.harmonies(for: hex) {
+            for hex in harmony.hexes where resolved[hex] == nil {
+                if Task.isCancelled { return }
+                resolved[hex] = ColorNamer.name(forHex: hex)
+            }
+            await Task.yield()
+        }
+        if !Task.isCancelled { names = resolved }
     }
 
     private func choose(_ hexes: [String]) {
