@@ -10,5 +10,18 @@
     <array>
         <string>remote-notification</string>
     </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.halilbagosi.palettes.band</string>
+            <key>UTTypeDescription</key>
+            <string>Palette Color Band</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
