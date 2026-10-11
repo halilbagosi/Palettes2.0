@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// The one color editor, shared by New Color, Edit Color and adding a color to
 /// a palette. The color and its name stay pinned at the top as a compact swatch,
@@ -31,12 +32,15 @@ struct ColorComposer: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ScaledMetric(relativeTo: .title3) private var swatchHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .title3) private var shrunkSwatchHeight: CGFloat = 64
+    @ScaledMetric(relativeTo: .subheadline) private var hexLabelWidth: CGFloat = 40
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Field: Hashable {
         case name, hex, red, green, blue
     }
     @FocusState private var focusedField: Field?
+    /// Scan's photo lives here: the picker is removed while a value field has the keyboard.
+    @StateObject private var scanSession = ScanSession()
 
     // Tuning sliders: offsets from `base*` (0…1, 0.5 neutral). Any other
     // change makes the new color the base and centers them again.
@@ -213,6 +217,8 @@ struct ColorComposer: View {
                 ColorPickerPanel(
                     color: $color,
                     compact: !isRegular,
+                    allowsScan: true,
+                    scanSession: scanSession,
                     onPick: { apply($0, from: .outside) }
                 )
                 .padding(.horizontal, 16)
@@ -316,15 +322,15 @@ struct ColorComposer: View {
 
             HStack {
                 Text("HEX")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 40, alignment: .leading)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: hexLabelWidth, alignment: .leading)
                     .accessibilityHidden(true)
                 Text("#")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .font(.body.monospaced().bold())
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 TextField("FF5D00", text: hexBinding)
-                    .font(.system(size: 16, design: .monospaced))
+                    .font(.body.monospaced())
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
@@ -354,11 +360,11 @@ struct ColorComposer: View {
     private func channelField(_ label: String, text: Binding<String>, field: Field, spoken: String) -> some View {
         HStack(spacing: 6) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             TextField("0", text: channelBinding(text))
-                .font(.system(size: 16, design: .monospaced))
+                .font(.body.monospaced())
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
                 .focused($focusedField, equals: field)

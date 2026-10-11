@@ -92,15 +92,14 @@ struct SpectrumPad: View {
     private var fieldSaturation: Double { saturation < 0.05 ? 0.5 : saturation }
 
     /// 24 pt at rest, 32 pt under a finger (no size change with Reduce Motion).
-    /// Only the size animates; the position is set outside this view and
+    /// Only the frame animates (color and position never do); the position is set outside this view and
     /// follows the finger 1:1.
     private func thumb(touched: Bool) -> some View {
         let size: CGFloat = touched && !reduceMotion ? 32 : 24
         return Circle()
             .strokeBorder(.white, lineWidth: 2)
             .background(Circle().fill(Color(hue: hue, saturation: saturation, brightness: brightness)))
-            .frame(width: size, height: size)
-            .animation(.spring(duration: 0.2, bounce: 0), value: size)
+            .animation(.spring(duration: 0.2, bounce: 0)) { $0.frame(width: size, height: size) }
             .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
             .allowsHitTesting(false)
     }
