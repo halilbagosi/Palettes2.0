@@ -24,12 +24,12 @@ struct ColorPickerPanel: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Picker("Picker", selection: $modeRaw) {
+            Picker("Picker mode", selection: $modeRaw) {
                 ForEach(ColorPickerMode.allCases) { Text($0.title).tag($0.rawValue) }
             }
             .pickerStyle(.segmented)
 
-            Group {
+            ZStack(alignment: .top) {
                 switch mode {
                 case .spectrum: SpectrumPad(color: $color, height: compact ? 180 : 220, onPick: onPick)
                 case .grid: SwatchGridPicker(color: $color, onPick: onPick)

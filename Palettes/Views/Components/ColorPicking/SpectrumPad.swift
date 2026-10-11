@@ -19,14 +19,18 @@ struct SpectrumPad: View {
         VStack(spacing: 12) {
             GeometryReader { geo in
                 ZStack(alignment: .topLeading) {
-                    LinearGradient(
-                        colors: stride(from: 0.0, through: 1.0, by: 1.0 / 12).map { Color(hue: $0, saturation: saturation, brightness: 1) },
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                    LinearGradient(colors: [.clear, .black.opacity(1 - Self.minBrightness)], startPoint: .top, endPoint: .bottom)
+                    // Only the gradients are clipped; the thumb overlays unclipped
+                    // so it isn't cut off at the field's edges.
+                    ZStack {
+                        LinearGradient(
+                            colors: stride(from: 0.0, through: 1.0, by: 1.0 / 12).map { Color(hue: $0, saturation: fieldSaturation, brightness: 1) },
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        LinearGradient(colors: [.clear, .black.opacity(1 - Self.minBrightness)], startPoint: .top, endPoint: .bottom)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     thumb.position(x: hue * geo.size.width, y: (1 - (brightness - Self.minBrightness) / (1 - Self.minBrightness)) * geo.size.height)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                     let x = min(max(value.location.x / geo.size.width, 0), 1)
@@ -70,6 +74,10 @@ struct SpectrumPad: View {
             if hex != lastHex { read(color) }
         }
     }
+
+    /// The field is drawn at a vivid saturation even when the color is gray,
+    /// so it never turns into a gray slab. Picked colors use the real saturation.
+    private var fieldSaturation: Double { max(saturation, 0.5) }
 
     private var thumb: some View {
         Circle()

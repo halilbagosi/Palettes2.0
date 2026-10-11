@@ -28,7 +28,7 @@ struct RGBSliders: View {
 
     var body: some View {
         let rgb = color.rgbComponents
-        let values = [rgb.r.rounded(), rgb.g.rounded(), rgb.b.rounded()]
+        let values = [rgb.r, rgb.g, rgb.b].map { min(max($0.rounded(), 0), 255) }
         VStack(spacing: 14) {
             ForEach(Channel.allCases, id: \.rawValue) { channel in
                 row(channel, values: values)
@@ -38,6 +38,8 @@ struct RGBSliders: View {
 
     private func row(_ channel: Channel, values: [Double]) -> some View {
         let value = values[channel.rawValue]
+        let lo = low(channel, values)
+        let hi = high(channel, values)
         return HStack(spacing: 12) {
             Text(channel.letter)
                 .font(.subheadline.weight(.semibold))
@@ -46,8 +48,8 @@ struct RGBSliders: View {
             ZStack {
                 Capsule()
                     .fill(LinearGradient(
-                        colors: [ColorAdjustment.color(r: low(channel, values).0, g: low(channel, values).1, b: low(channel, values).2),
-                                 ColorAdjustment.color(r: high(channel, values).0, g: high(channel, values).1, b: high(channel, values).2)],
+                        colors: [ColorAdjustment.color(r: lo.0, g: lo.1, b: lo.2),
+                                 ColorAdjustment.color(r: hi.0, g: hi.1, b: hi.2)],
                         startPoint: .leading, endPoint: .trailing))
                     .frame(height: 8)
                 Slider(
@@ -59,6 +61,7 @@ struct RGBSliders: View {
                 )
                 .tint(.clear)
                 .accessibilityLabel(channel.name)
+                .accessibilityValue("\(Int(value))")
             }
             Text("\(Int(value))")
                 .font(.body.monospacedDigit())

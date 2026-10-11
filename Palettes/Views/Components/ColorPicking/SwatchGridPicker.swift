@@ -7,12 +7,13 @@ struct SwatchGridPicker: View {
     var onPick: (Color) -> Void
 
     @EnvironmentObject private var appData: AppData
+    /// Bumped only when the user picks, so outside color changes stay silent.
+    @State private var pickCount = 0
 
     /// Built once — `gridHexes()` makes 96 colors per call.
     private static let grid: [[(hex: String, color: Color)]] = ColorPickerModel.gridHexes().map { row in
         row.map { (hex: $0, color: Color(hex: $0) ?? .clear) }
     }
-    private static let spacing: CGFloat = 2
 
     private var selectedHex: String { ColorComposer.hexKey(color) }
 
@@ -37,7 +38,7 @@ struct SwatchGridPicker: View {
             }
             swatchGrid
         }
-        .sensoryFeedback(.selection, trigger: selectedHex)
+        .sensoryFeedback(.selection, trigger: pickCount)
     }
 
     private func recentCircle(_ item: ColorViewModel) -> some View {
@@ -62,25 +63,28 @@ struct SwatchGridPicker: View {
         let columns = ColorPickerModel.gridColumns
         let rows = ColorPickerModel.gridRows
         return GeometryReader { geo in
-            let cell = (geo.size.width - Self.spacing * CGFloat(columns - 1)) / CGFloat(columns)
-            Grid(horizontalSpacing: Self.spacing, verticalSpacing: Self.spacing) {
+            let cell = geo.size.width / CGFloat(columns)
+            Grid(horizontalSpacing: 0, verticalSpacing: 0) {
                 ForEach(0..<rows, id: \.self) { r in
                     GridRow {
                         ForEach(0..<columns, id: \.self) { c in
                             let (hex, swatch) = Self.grid[r][c]
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            Rectangle()
                                 .fill(swatch)
                                 .frame(width: cell, height: cell)
                                 .overlay {
                                     if hex == selectedHex {
-                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        // Inset so the ring survives the grid's rounded clip.
+                                        Rectangle()
                                             .strokeBorder(.white, lineWidth: 2)
                                             .shadow(color: .black.opacity(0.4), radius: 1.5)
+                                            .padding(2)
                                     }
                                 }
                                 .accessibilityElement()
                                 .accessibilityLabel(hex)
-                                .accessibilityAddTraits(hex == selectedHex ? .isSelected : [])
+                                .accessibilityAddTraits(hex == selectedHex ? [.isButton, .isSelected] : .isButton)
+                                .accessibilityAction { pick(swatch) }
                         }
                     }
                 }
@@ -99,6 +103,7 @@ struct SwatchGridPicker: View {
     }
 
     private func pick(_ new: Color) {
+        pickCount += 1
         var t = Transaction()
         t.disablesAnimations = true
         withTransaction(t) { onPick(new) }
