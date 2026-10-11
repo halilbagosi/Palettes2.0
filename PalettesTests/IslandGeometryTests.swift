@@ -7,25 +7,39 @@ final class IslandGeometryTests: XCTestCase {
     func testDynamicIslandAtInset62() {
         let g = IslandGeometry.make(topInset: 62, screenSize: portrait)
         XCTAssertEqual(g.kind, .dynamicIsland)
-        XCTAssertEqual(g.width, 125)
-        XCTAssertEqual(g.height, 37)
-        XCTAssertEqual(g.top, 14)
+        XCTAssertEqual(g.width, 84)
+        XCTAssertEqual(g.height, 34)
+        XCTAssertEqual(g.top, 17)
         XCTAssertEqual(g.bottom, 51)
     }
 
-    func testDynamicIslandAtInset59UsesHigherPlacement() {
-        let g = IslandGeometry.make(topInset: 59, screenSize: CGSize(width: 393, height: 852))
-        XCTAssertEqual(g.kind, .dynamicIsland)
-        XCTAssertEqual(g.top, 11)
+    func testIslandBottomFollowsTheInset() {
+        // 14 Pro to 16 Plus (59), 16 Pro to 18 Pro Max (62), and the Air's lower island (68).
+        for inset in [59.0, 62, 68] {
+            let g = IslandGeometry.make(topInset: inset, screenSize: CGSize(width: 420, height: 912))
+            XCTAssertEqual(g.kind, .dynamicIsland, "inset \(inset)")
+            XCTAssertEqual(g.bottom, inset - 11, "inset \(inset)")
+        }
     }
 
     func testNotchBetween44And58() {
-        for inset in [44.0, 47, 50, 58] {
+        for inset in [44.0, 47, 48, 50] {
             let g = IslandGeometry.make(topInset: inset, screenSize: CGSize(width: 390, height: 844))
             XCTAssertEqual(g.kind, .notch, "inset \(inset)")
-            XCTAssertEqual(g.width, 160)
-            XCTAssertEqual(g.height, 31)
+            XCTAssertEqual(g.width, 84)
             XCTAssertEqual(g.top, 0)
+            XCTAssertEqual(g.bottom, inset - 14, "inset \(inset)")
+        }
+    }
+
+    func testEveryCutoutIsDrawnAtTheSmallestCutoutsWidth() {
+        for size in IslandGeometry.centeredCutoutSizes {
+            let screen = CGSize(width: size.width, height: size.height)
+            for inset in [47.0, 62] {
+                let rect = IslandGeometry.make(topInset: inset, screenSize: screen).drawnRect(screenWidth: screen.width)
+                XCTAssertEqual(rect.width, 82, "\(size) inset \(inset)")
+                XCTAssertEqual(rect.midX, screen.width / 2, "\(size) inset \(inset)")
+            }
         }
     }
 
@@ -79,7 +93,7 @@ final class IslandGeometryTests: XCTestCase {
     func testDrawnIslandIsOnePointSmallerOnEverySide() {
         let g = IslandGeometry.make(topInset: 62, screenSize: portrait)
         let rect = g.drawnRect(screenWidth: 402)
-        let hardware = CGRect(x: (402.0 - 125) / 2, y: 14, width: 125, height: 37)
+        let hardware = CGRect(x: (402.0 - 84) / 2, y: 17, width: 84, height: 34)
         XCTAssertEqual(rect.minX, hardware.minX + 1)
         XCTAssertEqual(rect.maxX, hardware.maxX - 1)
         XCTAssertEqual(rect.minY, hardware.minY + 1)
@@ -92,9 +106,67 @@ final class IslandGeometryTests: XCTestCase {
         let g = IslandGeometry.make(topInset: 47, screenSize: CGSize(width: 390, height: 844))
         let rect = g.drawnRect(screenWidth: 390)
         XCTAssertEqual(rect.minY, -10)
-        XCTAssertEqual(rect.maxY, 30)
+        XCTAssertEqual(rect.maxY, 32)
         XCTAssertEqual(rect.midX, 195)
-        XCTAssertEqual(rect.width, 158)
+        XCTAssertEqual(rect.width, 82)
+    }
+
+    func testIslandAndNotchShareTheirFlatBottom() {
+        let island = IslandGeometry.make(topInset: 62, screenSize: portrait)
+        let notch = IslandGeometry.make(topInset: 47, screenSize: CGSize(width: 390, height: 844))
+        XCTAssertEqual(island.drawnFlatHalfWidth, 25)
+        XCTAssertEqual(notch.drawnFlatHalfWidth, 25)
+        XCTAssertEqual(IslandGeometry.bezel.drawnFlatHalfWidth, 0)
+    }
+
+    private func neck(depth: CGFloat, diameter: CGFloat, waist: CGFloat = 34) -> IslandGooCanvas.NeckOutline? {
+        IslandGooCanvas.neckOutline(
+            centerX: 100, junction: 50, tuckTop: 36,
+            blob: .init(center: CGPoint(x: 100, y: 50 + depth), diameter: diameter),
+            waist: waist, reach: 27)
+    }
+
+    @MainActor
+    func testNeckMeetsTheCutoutWithinItsReach() {
+        // From a drop tucked into the cutout to one hanging far below it.
+        for depth in stride(from: -10.0, through: 120, by: 5) {
+            for waist in [34.0, 20, 6] {
+                guard let outline = neck(depth: depth, diameter: 47, waist: waist) else { continue }
+                let bounds = outline.path.boundingRect
+                XCTAssertLessThanOrEqual(bounds.maxX, 127 + 1e-6, "depth \(depth) waist \(waist)")
+                XCTAssertGreaterThanOrEqual(bounds.minX, 73 - 1e-6, "depth \(depth) waist \(waist)")
+                XCTAssertGreaterThanOrEqual(outline.filletRadius, 0)
+                XCTAssertLessThanOrEqual(outline.filletRadius, IslandGooCanvas.maxFilletRadius)
+            }
+        }
+    }
+
+    @MainActor
+    func testNeckRunsIntoTheDropsOutline() {
+        // Long neck: a rod with fillets, ending on the drop's circle.
+        let outline = try! XCTUnwrap(neck(depth: 90, diameter: 60))
+        let bounds = outline.path.boundingRect
+        XCTAssertLessThanOrEqual(bounds.maxY, 140 + 1e-6)
+        XCTAssertEqual(bounds.minY, 36, accuracy: 1e-6)
+        // The rod's middle is the waist.
+        XCTAssertTrue(outline.path.contains(CGPoint(x: 100 + 16.5, y: 85)))
+        XCTAssertFalse(outline.path.contains(CGPoint(x: 100 + 17.5, y: 85)))
+    }
+
+    @MainActor
+    func testNeckVanishesAsItPinchesOff() {
+        XCTAssertNil(neck(depth: 60, diameter: 47, waist: 0))
+        let thread = try! XCTUnwrap(neck(depth: 60, diameter: 47, waist: 1))
+        XCTAssertLessThan(thread.filletRadius, 0.5)
+    }
+
+    @MainActor
+    func testFadeIsSolidThenEasedToClear() {
+        let stops = IslandGooCanvas.fadeStops(from: 0.2, to: 0.6)
+        XCTAssertEqual(stops.first?.location, 0)
+        XCTAssertEqual(stops.last?.location, 1)
+        let locations = stops.map(\.location)
+        XCTAssertEqual(locations, locations.sorted())
     }
 
     func testNoneHasEmptyShape() {
@@ -114,6 +186,13 @@ final class IslandMorphBezelTests: XCTestCase {
         let c = controller(island: .make(topInset: 62, screenSize: CGSize(width: 402, height: 874)), width: 402)
         XCTAssertEqual(c.neckBase, IslandMorphController.neckWidth)
         XCTAssertEqual(IslandMorphController.snapGap(), 52 * (1 - 12.0 / 34), accuracy: 1e-9)
+    }
+
+    func testCutoutNeckSnapsSoonAfterTheDropClearsIt() {
+        let c = controller(island: .make(topInset: 59, screenSize: CGSize(width: 393, height: 852)), width: 393)
+        XCTAssertEqual(c.currentNeckReach, IslandMorphController.cutoutNeckReach)
+        XCTAssertLessThan(IslandMorphController.snapGap(reach: c.currentNeckReach), IslandMorphController.snapGap())
+        XCTAssertEqual(controller(island: .bezel).currentNeckReach, IslandMorphController.neckReach)
     }
 
     func testBezelDropStartsUnderTheFingerAndFollowsIt() {

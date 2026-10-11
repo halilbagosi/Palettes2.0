@@ -56,12 +56,20 @@ final class IslandMorphController: ObservableObject {
     // Tunables (points).
     static let pullRadiusEnd: CGFloat = 34
     static let pullRadiusRamp: CGFloat = 140
+    /// The drop's radius as it starts out of an island or notch.
+    static let cutoutStartRadius: CGFloat = 14
     static let pullTravelRatio: CGFloat = 0.85
     /// Width of the neck rod when the blob touches the island, and the width below
     /// which the blurred rod falls under the alpha threshold: the neck has snapped.
     static let neckWidth: CGFloat = 34
     static let neckBreakWidth: CGFloat = 12
     static let neckReach: CGFloat = 52
+    /// An island's or notch's neck is short: it snaps soon after the drop
+    /// clears the cutout, rather than stretching into a long thread.
+    static let cutoutNeckReach: CGFloat = 22
+    /// Dark stage: how far past the snap the held drop has to be pulled to
+    /// have turned all the way into glass.
+    static let darkRevealSpan: CGFloat = 24
     /// The bezel's neck is this fraction of the drop's width (capped at its pull
     /// size), so the edge dips as a U rather than a thin stem.
     static let bezelNeckRatio: CGFloat = 0.9
@@ -73,6 +81,11 @@ final class IslandMorphController: ObservableObject {
     /// display's rounded corners.
     static let bezelSideMargin: CGFloat = 90
     static let blur: CGFloat = 9
+    /// An island's or notch's goo is blurred less: its neck snaps while the
+    /// drop is still close, and a wider blur would bridge the gap on its own,
+    /// so the neck would look full until it vanished in a frame. With this
+    /// one the neck's own thinning shows and the pinch plays out gradually.
+    static let cutoutBlur: CGFloat = 6
     /// Release velocity handed to the detach spring, in travels per second. Capped so a
     /// hard flick gives a lively overshoot rather than a fly-past.
     static let maxHandoffVelocity: Double = 2.4
@@ -99,6 +112,8 @@ final class IslandMorphController: ObservableObject {
     private var isSnapped = false
     /// Detach progress at the moment the drop snapped free of the island; nil before.
     private(set) var separatedAt: Double?
+    /// How far the drop had turned to glass when it was let go.
+    private var revealAtRelease: Double = 0
     private let rigid = UIImpactFeedbackGenerator(style: .rigid)
     private let soft = UIImpactFeedbackGenerator(style: .soft)
 
@@ -114,8 +129,17 @@ final class IslandMorphController: ObservableObject {
     /// The blob while pulling. `d` is the pull in points.
     func pullFrame(_ d: Double) -> Frame {
         let island = placement.island
-        let r = Easing.lerp(island.drawnHeight / 2, Self.pullRadiusEnd,
-                            Easing.clamp01(d / Self.pullRadiusRamp))
+        let progress = Easing.clamp01(d / Self.pullRadiusRamp)
+        let r: CGFloat
+        if island.kind == .bezel {
+            r = Easing.lerp(island.drawnHeight / 2, Self.pullRadiusEnd, progress)
+        } else {
+            // Narrow while it leaves the cutout and swelling as it moves away,
+            // so the neck's fillets have room on the smallest island's flat
+            // bottom while the drop is still against it.
+            r = Easing.lerp(min(island.drawnHeight / 2, Self.cutoutStartRadius), Self.pullRadiusEnd,
+                            pow(progress, 1.5))
+        }
         return Frame(
             center: CGPoint(x: pullX,
                             y: island.drawnBottom - r + d * Self.pullTravelRatio),
@@ -168,18 +192,27 @@ final class IslandMorphController: ObservableObject {
     }
 
     /// Width of the rod bridging island and blob right now.
-    var neckRodWidth: CGFloat { Self.neckRodWidth(gap: neckGap, base: neckBase) }
+    var neckRodWidth: CGFloat { Self.neckRodWidth(gap: neckGap, base: neckBase, reach: currentNeckReach) }
+
+    /// How far the neck stretches before it has thinned away.
+    var currentNeckReach: CGFloat {
+        placement.island.kind == .bezel ? Self.neckReach : Self.cutoutNeckReach
+    }
 
     /// Width of the rod bridging island and blob: full while they touch,
     /// thinning as they part.
-    static func neckRodWidth(gap: CGFloat, base: CGFloat = neckWidth) -> CGFloat {
+    static func neckRodWidth(gap: CGFloat, base: CGFloat = neckWidth, reach: CGFloat = neckReach) -> CGFloat {
         guard gap > 0 else { return base }
-        return max(0, base * (1 - gap / neckReach))
+        let snap = snapGap(base: base, reach: reach)
+        if gap <= snap { return base * (1 - gap / reach) }
+        // Past the snap, the drip and the peak it leaves recoil over the same
+        // stretch however short the neck was, so they read as liquid letting go.
+        return max(0, neckBreakWidth * (1 - (gap - snap) / (neckReach * neckBreakWidth / base)))
     }
 
     /// The gap at which the blurred rod drops under the threshold and snaps.
-    static func snapGap(base: CGFloat = neckWidth) -> CGFloat {
-        neckReach * (1 - neckBreakWidth / base)
+    static func snapGap(base: CGFloat = neckWidth, reach: CGFloat = neckReach) -> CGFloat {
+        reach * (1 - neckBreakWidth / base)
     }
 
     /// Opacity of the orb: it forms out of the island over the first few points of the pull.
@@ -197,7 +230,7 @@ final class IslandMorphController: ObservableObject {
     /// it has snapped.
     var neckConnected: Double {
         let base = neckBase
-        let rod = Self.neckRodWidth(gap: neckGap, base: base)
+        let rod = Self.neckRodWidth(gap: neckGap, base: base, reach: currentNeckReach)
         return Easing.clamp01(Double((rod - Self.neckBreakWidth) / (base - Self.neckBreakWidth)))
     }
 
@@ -223,12 +256,28 @@ final class IslandMorphController: ObservableObject {
     /// Dark stage only: how far the island-black drop has turned into clear
     /// glass. It stays black while joined (the glass rim would read as a
     /// circle against the black neck) and from the moment it separates eases
-    /// into glass over most of the remaining travel, so the change is one
-    /// long, even dissolve rather than a swap.
+    /// into glass: while still held, over the next stretch of the pull, and
+    /// after release from wherever that left it over most of the remaining
+    /// travel, so the change is one long, even dissolve rather than a swap.
     var darkGlassReveal: Double {
-        guard mode == .morph, placement.island.kind != .none, phase != .landed else { return 1 }
-        guard phase == .detaching, neckConnected <= 0.001, let start = separatedAt else { return 0 }
-        return Easing.smoothstep(start, max(start + 0.2, min(start + 0.7, 0.98)), Easing.clamp01(detach.value))
+        guard mode == .morph, placement.island.kind != .none else { return 1 }
+        switch phase {
+        case .idle, .dragging:
+            return pullGlassReveal
+        case .detaching:
+            guard neckConnected <= 0.001, let start = separatedAt else { return 0 }
+            let t = Easing.smoothstep(start, max(start + 0.2, min(start + 0.7, 0.98)), Easing.clamp01(detach.value))
+            return Easing.lerp(revealAtRelease, 1, t)
+        case .landed:
+            return 1
+        }
+    }
+
+    /// Before release: clear from the snap over `darkRevealSpan` of pull, and
+    /// back to black if the drop is pushed back into the island.
+    private var pullGlassReveal: Double {
+        let snap = Self.snapGap(base: neckBase, reach: currentNeckReach)
+        return Easing.smoothstep(Double(snap), Double(snap + Self.darkRevealSpan), Double(neckGap))
     }
 
     /// Whether the island goo is on screen. It exists only while pulling and detaching.
@@ -277,6 +326,7 @@ final class IslandMorphController: ObservableObject {
 
     private func commit(velocity: Double) {
         let from = pullFrame(pull.value)
+        revealAtRelease = pullGlassReveal
         release = from
         let travel = placement.restCenter.y - from.center.y
         let normalised = travel > 1 ? min(max(velocity * Self.pullTravelRatio / travel, 0), Self.maxHandoffVelocity) : 0
@@ -324,7 +374,7 @@ final class IslandMorphController: ObservableObject {
     private func evaluateNeck() {
         guard mode == .morph else { return }
         let gap = neckGap
-        let snapGap = Self.snapGap(base: neckBase)
+        let snapGap = Self.snapGap(base: neckBase, reach: currentNeckReach)
         if !isSnapped, gap >= snapGap {
             isSnapped = true
             if phase == .detaching, separatedAt == nil { separatedAt = detach.value }
@@ -404,8 +454,10 @@ struct IslandMorphStage<Orb: View>: View {
 
 // MARK: - Goo
 
-/// Island + neck + blob as a metaball, faded from black at the island to clear
-/// at the blob so the orb never reads as black.
+/// Island + neck + blob as a metaball (blur and threshold), faded from black at
+/// the island to clear at the blob so the orb never reads as black. An island's
+/// or notch's neck is a smooth hourglass going in, and the drop is drawn crisp
+/// on top so the black meets the orb's edge exactly.
 struct IslandGooCanvas: View {
     let controller: IslandMorphController
     let frame: IslandMorphController.Frame
@@ -414,102 +466,196 @@ struct IslandGooCanvas: View {
     /// Room above the screen so the blur and the notch overhang are not cut off.
     private static let topMargin: CGFloat = 60
 
-    /// The neck's fillet radius where it meets the island at full width. It
-    /// shrinks with the neck as it thins, and on a small island it's capped so
-    /// the flare stays under the island's flat bottom (give or take a point of
-    /// its curve, which the junction's tuck hides).
+    /// The neck's fillet radius at full width. It shrinks with the neck as it
+    /// thins, so the neck pinches off to nothing.
     static let maxFilletRadius: CGFloat = 14
+    /// How far past the cutout's flat bottom, onto its rounded corner, the
+    /// fillets may reach: there the edge has risen by a tenth of a point.
+    static let filletCurveAllowance: CGFloat = 2
 
-    static func filletRadius(island: IslandGeometry, rodWidth: CGFloat) -> CGFloat {
-        let scaled = maxFilletRadius * min(1, rodWidth / IslandMorphController.neckWidth)
-        guard island.kind == .dynamicIsland else { return scaled }
-        let drawnWidth = island.width - 2 * IslandGeometry.drawInset
-        let room = (drawnWidth - rodWidth) / 2 - 6
-        return max(0, min(scaled, room))
+    /// The neck's outline and the fillet radius it was drawn with.
+    struct NeckOutline {
+        var path: Path
+        var filletRadius: CGFloat
     }
 
-    /// A rod `width` wide from `junction` down to `bottom`, its top corners
-    /// flared out by quarter circles of `radius` so it meets the island's
-    /// bottom edge tangentially, plus a block up to `tuckTop` that fuses it
-    /// into the island.
-    static func filletedNeck(centerX: CGFloat, junction: CGFloat, tuckTop: CGFloat,
-                             bottom: CGFloat, width: CGFloat, radius: CGFloat) -> Path {
-        let left = centerX - width / 2
-        let right = centerX + width / 2
-        let flare = radius + 1
+    /// The neck between the cutout's bottom edge (`junction`) and the drop,
+    /// with exact edges: its sides leave the junction along quarter circles
+    /// tangent to it and run into the drop along circles tangent to its
+    /// outline, so there's no corner anywhere and the black meets the orb's
+    /// edge exactly. A long neck is a rod `waist` wide with a fillet at each
+    /// end; a short one is a single fillet from the edge into the drop. Each
+    /// side meets the junction no more than `reach` from the center, and a
+    /// block up to `tuckTop` fuses it into the cutout. Nil once the neck has
+    /// pinched off.
+    static func neckOutline(centerX cx: CGFloat, junction: CGFloat, tuckTop: CGFloat,
+                            blob: IslandMorphController.Frame, waist: CGFloat,
+                            reach: CGFloat) -> NeckOutline? {
+        let radius = blob.diameter / 2
+        let center = blob.center
+        // How far the drop's center is below the junction.
+        let depth = center.y - junction
+        // How far the drop pokes out of the cutout. Tucked inside, there is no neck.
+        let protrusion = depth + radius
+        guard waist > 0.01, radius > 0, protrusion > 0.01 else { return nil }
+        let halfWaist = min(waist / 2, radius * 0.9)
+        // The fillets grow from nothing as the drop comes out, so the neck
+        // never hangs below the cutout's edge ahead of the drop.
+        let emerged = min(1, protrusion / radius)
+        var fillet = max(0, min(maxFilletRadius * min(1, waist / IslandMorphController.neckWidth) * emerged,
+                                reach - halfWaist))
+        // Horizontal offset of a fillet circle tangent to the junction and to
+        // the drop, if one exists.
+        func tangentOffset(_ r: CGFloat) -> CGFloat? {
+            let s = (radius + r) * (radius + r) - (depth - r) * (depth - r)
+            return s >= 0 ? s.squareRoot() : nil
+        }
+        // A drop close to the edge spreads the fillet wider: keep it on the cutout.
+        if let offset = tangentOffset(fillet), offset > reach {
+            fillet = max(0, (reach * reach + depth * depth - radius * radius) / (2 * (radius + depth)))
+        }
+        let offset = tangentOffset(fillet)
+
+        func arc(_ c: CGPoint, _ r: CGFloat, from a0: Double, to a1: Double) -> [CGPoint] {
+            let steps = 16
+            return (0...steps).map { i in
+                let a = a0 + (a1 - a0) * Double(i) / Double(steps)
+                return CGPoint(x: c.x + r * cos(a), y: c.y + r * sin(a))
+            }
+        }
+        func pointOnDrop(toward p: CGPoint) -> CGPoint {
+            let d = max(hypot(p.x - center.x, p.y - center.y), 0.001)
+            return CGPoint(x: center.x + radius * (p.x - center.x) / d,
+                           y: center.y + radius * (p.y - center.y) / d)
+        }
+        func angle(_ from: CGPoint, _ to: CGPoint) -> Double { atan2(to.y - from.y, to.x - from.x) }
+
+        // The right side, from the junction down into the drop.
+        var side: [CGPoint]
+        let usesRod = depth >= fillet && (offset.map { $0 <= halfWaist + fillet } ?? true)
+        if usesRod {
+            let top = CGPoint(x: cx + halfWaist + fillet, y: junction + fillet)
+            side = arc(top, fillet, from: -.pi / 2, to: -.pi)
+            let rise = ((radius + fillet) * (radius + fillet) - (halfWaist + fillet) * (halfWaist + fillet))
+                .squareRoot()
+            let bottom = CGPoint(x: top.x, y: max(center.y - rise, top.y))
+            side += arc(bottom, fillet, from: .pi, to: angle(bottom, pointOnDrop(toward: bottom)))
+        } else if let offset {
+            let c = CGPoint(x: cx + offset, y: junction + fillet)
+            var end = angle(c, pointOnDrop(toward: c))
+            if end > -.pi / 2 { end -= 2 * .pi }
+            side = arc(c, fillet, from: -.pi / 2, to: end)
+        } else {
+            return nil
+        }
+
+        let left = side.reversed().map { CGPoint(x: 2 * cx - $0.x, y: $0.y) }
+        let tuck = min(tuckTop, junction)
+        // One closed outline: `addLines` would start a new subpath at each side.
+        let outline = [CGPoint(x: side[0].x, y: tuck)] + side
+            + [CGPoint(x: cx, y: max(center.y, side[side.count - 1].y))]
+            + left + [CGPoint(x: left[left.count - 1].x, y: tuck)]
         var path = Path()
-        path.move(to: CGPoint(x: right + flare, y: junction))
-        path.addArc(tangent1End: CGPoint(x: right, y: junction),
-                    tangent2End: CGPoint(x: right, y: bottom), radius: radius)
-        path.addLine(to: CGPoint(x: right, y: bottom))
-        path.addLine(to: CGPoint(x: left, y: bottom))
-        path.addArc(tangent1End: CGPoint(x: left, y: junction),
-                    tangent2End: CGPoint(x: left - flare, y: junction), radius: radius)
-        path.addLine(to: CGPoint(x: left - flare, y: junction))
-        path.addLine(to: CGPoint(x: left - flare, y: min(tuckTop, junction)))
-        path.addLine(to: CGPoint(x: right + flare, y: min(tuckTop, junction)))
+        path.move(to: outline[0])
+        for point in outline.dropFirst() { path.addLine(to: point) }
         path.closeSubpath()
-        return path
+        return NeckOutline(path: path, filletRadius: fillet)
     }
 
     var body: some View {
         let placement = controller.placement
         let island = placement.island
         let margin = Self.topMargin
+        let isBezel = island.kind == .bezel
         let rodWidth = controller.neckRodWidth
         let blobTop = frame.center.y - frame.diameter / 2
+        let connected = controller.neckConnected
+        // Island and notch: a smooth hourglass from the cutout into the drop.
+        // It thins with the rod, and once its waist is narrower than the blur
+        // can hold the threshold parts it, leaving a drip on the cutout and a
+        // peak on the drop that recoil as the neck keeps thinning.
+        // Past the snap: how far the drip and the peak have recoiled, 0...1.
+        let snapGap = IslandMorphController.snapGap(base: controller.neckBase, reach: controller.currentNeckReach)
+        let recoil: Double? = isBezel || controller.neckGap <= snapGap ? nil : Easing.clamp01(Double(
+            (controller.neckGap - snapGap)
+                / (IslandMorphController.neckReach * IslandMorphController.neckBreakWidth / controller.neckBase)))
+        // Past the snap the neck keeps thinning, so the threshold parts it over
+        // several frames rather than all at once; it goes a little faster
+        // than the rod so its ends don't linger as needle points, and the
+        // round nubs take over the remnants.
+        let neckWaist = recoil.map { rodWidth * CGFloat(1 - Easing.smoothstep(0, 0.5, $0)) } ?? rodWidth
+        let neck = isBezel ? nil : Self.neckOutline(
+            centerX: frame.center.x,
+            // Tangent to the drawn bottom edge, a point inside the hardware.
+            junction: island.drawnBottom,
+            tuckTop: island.drawnBottom - 14,
+            blob: frame,
+            waist: neckWaist,
+            reach: island.drawnFlatHalfWidth + Self.filletCurveAllowance
+        )
         // Solid black through the neck's fillets before the fade begins, so
         // the join reads as one shape with the cutout; a point or two of
         // mismatch with the hardware then shows as more neck, not as grey.
-        let solidDepth = island.kind == .bezel
-            ? 0 : Self.filletRadius(island: island, rodWidth: rodWidth) + 4
+        // Follows the rod (continuous through the snap) and how far the drop
+        // is out of the cutout, never the drawn outline, which hands over to
+        // the remnants at the snap: the fade's top must not jump with it.
+        let protrusion = frame.center.y + frame.diameter / 2 - island.drawnBottom
+        let solidDepth = isBezel ? 0
+            : (Self.maxFilletRadius * min(1, rodWidth / IslandMorphController.neckWidth) + 4)
+                * min(1, max(0, protrusion) / max(frame.diameter / 2, 1))
         let fadeStart = island.drawnBottom + solidDepth
-        // Clear by the blob's upper third while the neck holds; as it thins and snaps the
-        // fade pulls up to the blob's top so no gray wedge of blob is left on the orb.
-        let connected = controller.neckConnected
+        // Clear by the blob's upper third while the neck holds, over a stretch
+        // long enough to read as a melt; as the neck thins and snaps the fade
+        // pulls up to the blob's top so no gray wedge of blob is left on the orb.
         // Dark stage: the whole drop is island-black (the stage cross-fades it
         // into the glass as the neck thins).
         let fadeEnd = colorScheme == .dark
             ? blobTop + frame.diameter * 3
-            : max(blobTop + frame.diameter / 3 * CGFloat(connected), fadeStart + 10)
+            : max(blobTop + frame.diameter / 3 * CGFloat(connected),
+                  fadeStart + max(14, frame.diameter * 0.35))
 
         GeometryReader { geo in
             let height = geo.size.height + margin
             Canvas { ctx, size in
                 ctx.translateBy(x: 0, y: margin)
+                let blob = CGRect(x: frame.center.x - frame.diameter / 2,
+                                  y: blobTop, width: frame.diameter, height: frame.diameter)
+                ctx.drawLayer { goo in
                 // Later filters run first: blur, then threshold. The threshold
                 // gives the metaball its hard silhouette.
-                ctx.addFilter(.alphaThreshold(min: 0.5, color: .black))
-                ctx.addFilter(.blur(radius: IslandMorphController.blur))
-                ctx.drawLayer { layer in
+                goo.addFilter(.alphaThreshold(min: 0.5, color: .black))
+                goo.addFilter(.blur(radius: isBezel ? IslandMorphController.blur : IslandMorphController.cutoutBlur))
+                goo.drawLayer { layer in
                     layer.fill(island.path(screenWidth: placement.screenWidth), with: .color(.black))
-                    if rodWidth > 0.5 {
+                    if isBezel, rodWidth > 0.5 {
+                        // A straight-sided U down to the drop's middle, where
+                        // the drop's own curve rounds it off.
                         let top = island.drawnBottom - 14
-                        if island.kind == .bezel {
-                            // A straight-sided U down to the drop's middle, where
-                            // the drop's own curve rounds it off.
-                            let bottom = max(frame.center.y, top + 1)
-                            let rod = CGRect(x: frame.center.x - rodWidth / 2, y: top,
-                                             width: rodWidth, height: bottom - top)
-                            layer.fill(Rectangle().path(in: rod), with: .color(.black))
-                        } else {
-                            // Flared into the island with circular fillets, so the
-                            // neck meets the cutout in round corners on every
-                            // island and notch, rather than the tight, angular
-                            // ones the blur alone would leave.
-                            let bottom = max(frame.center.y, island.drawnBottom + 1)
-                            let path = Self.filletedNeck(
-                                centerX: frame.center.x,
-                                junction: island.drawnBottom - 1,
-                                tuckTop: top,
-                                bottom: bottom,
-                                width: rodWidth,
-                                radius: Self.filletRadius(island: island, rodWidth: rodWidth)
-                            )
-                            layer.fill(path, with: .color(.black))
-                        }
+                        let bottom = max(frame.center.y, top + 1)
+                        let rod = CGRect(x: frame.center.x - rodWidth / 2, y: top,
+                                         width: rodWidth, height: bottom - top)
+                        layer.fill(Rectangle().path(in: rod), with: .color(.black))
                     }
-                    if island.kind == .bezel {
+                    if let neck {
+                        layer.fill(neck.path, with: .color(.black))
+                    }
+                    if let recoil, recoil < 1 {
+                        // Round nubs under the thinning neck, so its ends recoil
+                        // as a rounded drip under the cutout and a rounded peak
+                        // on the drop rather than needle points.
+                        let r = Self.remnantRadius
+                        // They start just far enough apart for the threshold to
+                        // part them, so the split shows at the snap itself.
+                        let start = min(Self.remnantHeight, max(0, (snapGap - Self.remnantParting) / 2))
+                        let height = start * CGFloat(1 - Easing.smoothstep(0, 1, recoil))
+                        let drip = CGRect(x: frame.center.x - r, y: island.drawnBottom + height - 2 * r,
+                                          width: 2 * r, height: 2 * r)
+                        let peak = CGRect(x: frame.center.x - r, y: blobTop - height,
+                                          width: 2 * r, height: 2 * r)
+                        layer.fill(Circle().path(in: drip), with: .color(.black))
+                        layer.fill(Circle().path(in: peak), with: .color(.black))
+                    }
+                    if isBezel {
                         // The flared shoulders: a shallow ellipse on the edge that
                         // the blur melts into the neck. It grows as the drop pokes
                         // into the screen and recoils as the neck thins.
@@ -524,20 +670,25 @@ struct IslandGooCanvas: View {
                             layer.fill(Ellipse().path(in: shoulders), with: .color(.black))
                         }
                     }
-                    let blob = CGRect(x: frame.center.x - frame.diameter / 2,
-                                      y: blobTop, width: frame.diameter, height: frame.diameter)
-                    layer.fill(Circle().path(in: blob), with: .color(.black))
+                    // The threshold pulls a blurred circle in by about blur² / 2r:
+                    // drawn that much larger, the drop comes out at its own size.
+                    // Only once it leaves the cutout: tucked inside, the larger
+                    // drop would bulge under the island's bottom edge.
+                    let emerged = Easing.clamp01(Double(
+                        (frame.center.y + frame.diameter / 2 - island.drawnBottom) / max(frame.diameter / 2, 1)))
+                    let grow = isBezel ? 0 : Self.thresholdShrink(radius: frame.diameter / 2) * CGFloat(emerged)
+                    layer.fill(Circle().path(in: blob.insetBy(dx: -grow, dy: -grow)), with: .color(.black))
+                }
+                }
+                if !isBezel {
+                    // The drop itself, crisp, so the black meets the orb's edge exactly.
+                    ctx.fill(Circle().path(in: blob), with: .color(.black))
                 }
             }
             .frame(width: geo.size.width, height: height)
             .mask(
                 LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: Double((fadeStart + margin) / height)),
-                        .init(color: .clear, location: Double((fadeEnd + margin) / height)),
-                        .init(color: .clear, location: 1),
-                    ],
+                    stops: Self.fadeStops(from: (fadeStart + margin) / height, to: (fadeEnd + margin) / height),
                     startPoint: .top, endPoint: .bottom
                 )
             )
@@ -545,5 +696,35 @@ struct IslandGooCanvas: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// The nubs the neck leaves when it snaps: their radius, and how far they
+    /// stand out from the cutout and the drop at first.
+    static let remnantRadius: CGFloat = 9
+    static let remnantHeight: CGFloat = 9
+    /// The gap between two such nubs at which the blur no longer joins them
+    /// (about 1.35 blur radii).
+    static let remnantParting: CGFloat = 8
+
+    /// How far blur and threshold pull in the edge of a circle of `radius`,
+    /// capped for small drops where the approximation runs away.
+    static func thresholdShrink(radius: CGFloat) -> CGFloat {
+        let blur = IslandMorphController.cutoutBlur
+        return min(blur * blur / (2 * max(radius, 1)), blur / 2)
+    }
+
+    /// Solid to `start`, clear from `end`, eased in between (smoothstep) so the
+    /// black melts away without the hard bands a linear ramp shows at its ends.
+    static func fadeStops(from start: CGFloat, to end: CGFloat) -> [Gradient.Stop] {
+        let start = Double(start), end = max(Double(end), Double(start) + 0.0001)
+        let steps = 8
+        var stops: [Gradient.Stop] = [.init(color: .black, location: 0)]
+        for i in 0...steps {
+            let t = Double(i) / Double(steps)
+            stops.append(.init(color: .black.opacity(1 - Easing.smoothstep(0, 1, t)),
+                               location: start + (end - start) * t))
+        }
+        stops.append(.init(color: .clear, location: max(1, end)))
+        return stops
     }
 }

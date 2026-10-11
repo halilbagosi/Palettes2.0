@@ -38,11 +38,6 @@ struct PaletteTabView: View {
             : !UserDefaults.standard.bool(forKey: OnboardingKeys.didComplete)
     }
 
-    init() {
-        // First launch: the cover is up from the first frame, no flash of the tabs.
-        _isOnboardingPresented = State(initialValue: OnboardingDebug.isLaunchArgument
-            || !UserDefaults.standard.bool(forKey: OnboardingKeys.didComplete))
-    }
 
     var body: some View {
         Group {
@@ -59,6 +54,10 @@ struct PaletteTabView: View {
         .focusedSceneValue(\.sceneCommands, sceneCommands)
         .onReceive(appData.$activeTab.dropFirst()) { selectedTab = $0 }
         .onAppear {
+            // First launch: present on the first appearance, without animation
+            // (a cover that starts out shown slides up, carrying the island's
+            // black pill with it); it fades its content in instead.
+            if onboardingWanted { presentOnboarding(after: .zero) }
             // A window restored onto Generate after Apple Intelligence went away.
             if selectedTab == .generate, !AppleIntelligence.isDeviceSupported {
                 selectedTab = .palettes
@@ -94,6 +93,10 @@ struct PaletteTabView: View {
             }
             .environmentObject(appData)
             .toastOverlay()
+            // Faded in over the tabs rather than slid up: the slide would carry
+            // the island's black pill up the screen with it.
+            .modifier(FadeInOnAppear())
+            .presentationBackground(.clear)
         }
         // Belt and braces for the replay: re-check whenever defaults change.
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
@@ -117,7 +120,10 @@ struct PaletteTabView: View {
         presentTask = Task {
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, onboardingWanted else { return }
-            isOnboardingPresented = true
+            // No slide-up: the cover fades its content in instead.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { isOnboardingPresented = true }
         }
     }
 
@@ -206,4 +212,16 @@ extension View {
 
 #Preview {
     PaletteTabView()
+}
+
+/// Fades its content in once it appears. Onboarding's cover is presented
+/// without animation and uses this instead of the slide-up.
+private struct FadeInOnAppear: ViewModifier {
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .onAppear { withAnimation(.easeOut(duration: 0.35)) { shown = true } }
+    }
 }

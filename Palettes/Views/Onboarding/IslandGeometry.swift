@@ -6,9 +6,12 @@
 //  whose cutout sits centered at the top, and the top bezel everywhere else
 //  (iPad, iPhone Duo, landscape). There is no public API for the cutout's
 //  frame, so a centered cutout is recognised by the iPhone's screen size and
-//  the inset (and, for the smaller iPhone 18 Pro island, the model) is
-//  mapped to the hardware's known sizes. Any other device,
-//  including one with an off-center cutout, pulls from the bezel.
+//  placed from the top safe-area inset: each cutout's bottom edge sits a fixed
+//  distance above it, which also follows the iPhone Air's lower island. Every
+//  cutout is drawn at the size of the smallest one (the iPhone 18 Pro's
+//  island), so the drawn shape hides behind the real one on every device and
+//  the neck meets it the same way everywhere. Any other device, including one
+//  with an off-center cutout, pulls from the bezel.
 //
 
 import SwiftUI
@@ -32,7 +35,13 @@ nonisolated struct IslandGeometry: Equatable {
     static let drawInset: CGFloat = 1
     /// The notch is drawn this far above the screen edge so it fuses with the bezel.
     static let notchOverhang: CGFloat = 10
-    static let notchBottomRadius: CGFloat = 20
+    /// Hardware size of the smallest cutout, the iPhone 18 Pro's island. Every
+    /// island and notch is drawn this wide, and islands this tall.
+    static let cutoutWidth: CGFloat = 84
+    static let cutoutHeight: CGFloat = 34
+    /// How far above the top safe-area inset the cutout's bottom edge sits.
+    static let islandGap: CGFloat = 11
+    static let notchGap: CGFloat = 14
     /// The bezel is drawn as a band this deep above the screen edge, and this
     /// far past either side, so the blur never thins it where it meets the drop.
     static let bezelDepth: CGFloat = 40
@@ -56,53 +65,21 @@ nonisolated struct IslandGeometry: Equatable {
     static func make(topInset: CGFloat, screenSize: CGSize) -> IslandGeometry {
         if screenSize.height > screenSize.width,
            centeredCutoutSizes.contains(Size(screenSize.width, screenSize.height)) {
-            // The cutout's bottom edge sits a fixed distance above the safe
-            // area on each kind of hardware, so it's placed from the inset:
-            // the neck must leave from exactly that edge to read as one black
-            // shape with the real cutout.
+            // The neck must leave from exactly the cutout's bottom edge to read
+            // as one black shape with it, so the edge is placed from the inset
+            // (an island's bottom is 11 pt above it: 48 at a 59 pt inset, 51 at
+            // 62, 57 on the Air's 68).
             if topInset >= 59 {
-                if hasCompactIsland {
-                    // iPhone 18 Pro: 84 x 34, its bottom 15 pt above the safe area.
-                    let height: CGFloat = 34
-                    return IslandGeometry(kind: .dynamicIsland, width: 84, height: height,
-                                          top: topInset - 15 - height)
-                }
-                // 125 x 37, its bottom 11 pt above the safe area (top 14 at a
-                // 62 pt inset, 11 at 59).
-                let height: CGFloat = 37
-                return IslandGeometry(kind: .dynamicIsland, width: 125, height: height,
-                                      top: topInset - 11 - height)
+                return IslandGeometry(kind: .dynamicIsland, width: cutoutWidth, height: cutoutHeight,
+                                      top: topInset - islandGap - cutoutHeight)
             }
             if topInset >= 44 {
                 // The notch runs from the top edge to 14 pt above the safe area
-                // (30 pt deep at a 44 pt inset, 33 at 47).
-                let height = min(max(topInset - 14, 28), 36)
-                return IslandGeometry(kind: .notch, width: 160, height: height, top: 0)
+                // (30 pt deep at a 44 pt inset, 33 at 47, 36 at 50).
+                return IslandGeometry(kind: .notch, width: cutoutWidth, height: topInset - notchGap, top: 0)
             }
         }
         return .bezel
-    }
-
-    /// iPhone 18 Pro and Pro Max keep the 17 Pro's screen sizes and insets but
-    /// have a smaller Dynamic Island, so they're told apart by model: the
-    /// iPhone 18 family's identifiers start at iPhone19,x, and later models
-    /// are assumed to keep the smaller island.
-    static let hasCompactIsland: Bool = {
-        guard let identifier = modelIdentifier, identifier.hasPrefix("iPhone") else { return false }
-        let major = identifier.dropFirst("iPhone".count).prefix { $0.isNumber }
-        return (Int(major) ?? 0) >= 19
-    }()
-
-    /// The hardware model, e.g. "iPhone18,1"; the simulated one in Simulator.
-    private static var modelIdentifier: String? {
-        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
-            return simulated
-        }
-        var info = utsname()
-        uname(&info)
-        return withUnsafePointer(to: &info.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
-        }
     }
 
     /// A screen size rounded to whole points, so it can be looked up.
@@ -125,6 +102,17 @@ nonisolated struct IslandGeometry: Equatable {
 
     /// Height of the visible part of the drawn shape (the notch's overhang excluded).
     var drawnHeight: CGFloat { height - 2 * Self.drawInset }
+
+    /// Radius of the drawn shape's bottom corners: the island's round ends, and
+    /// the same on the notch, so the neck meets both alike.
+    static let drawnCornerRadius: CGFloat = cutoutHeight / 2 - drawInset
+
+    /// Half the length of the drawn shape's flat bottom edge, where the neck's
+    /// fillets can meet it tangentially.
+    var drawnFlatHalfWidth: CGFloat {
+        guard kind == .dynamicIsland || kind == .notch else { return 0 }
+        return max(0, width / 2 - Self.drawInset - Self.drawnCornerRadius)
+    }
 
     /// The drawn shape's rect in screen coordinates.
     func drawnRect(screenWidth: CGFloat) -> CGRect {
@@ -163,7 +151,7 @@ nonisolated struct IslandGeometry: Equatable {
         case .dynamicIsland:
             return Capsule(style: .continuous).path(in: rect)
         case .notch:
-            let r = Self.notchBottomRadius - Self.drawInset
+            let r = Self.drawnCornerRadius
             return UnevenRoundedRectangle(
                 cornerRadii: .init(topLeading: 0, bottomLeading: r, bottomTrailing: r, topTrailing: 0),
                 style: .continuous
