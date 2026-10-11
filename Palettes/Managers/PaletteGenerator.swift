@@ -2,35 +2,117 @@
 //  PaletteGenerator.swift
 //  Palettes
 //
+//  Generation in three steps:
+//   1. Brief — the on-device model reads the vibe into a main color word,
+//      a tone and a harmony (`GeneratedBrief`). It never picks color values.
+//   2. Build — `PaletteBuilder` makes every color, deterministically.
+//   3. Names — the model names each color from a plain description that
+//      code writes from the swatch (`ColorVocabulary.describe`). Names are
+//      matched back by list number and must pass
+//      `ColorVocabulary.isPlausible`; the color dictionary fills any gap.
+//  A model failure falls back (heuristic brief, dictionary names), so only
+//  cancellation or an unavailable model stops a generation.
+//
 
 import Foundation
 import SwiftUI
-import UIKit
 import FoundationModels
+import os
 
-// MARK: - Guided generation output types
+// MARK: - Guided generation types
 
+@available(iOS 26.0, *)
 @Generable
-struct GeneratedColor {
-    @Guide(description: "A 6-digit RGB hex color code with a leading #, for example #4A90D9")
-    var hex: String
+enum BriefLightness {
+    case light, balanced, dark
+}
 
-    @Guide(description: "A short, evocative name for this color, like 'Electric Blue'")
+@available(iOS 26.0, *)
+@Generable
+enum BriefSaturation {
+    case muted, balanced, vivid
+}
+
+@available(iOS 26.0, *)
+@Generable
+enum BriefHarmony {
+    case analogous, complementary, splitComplementary, triadic, monochromatic
+}
+
+@available(iOS 26.0, *)
+@Generable
+struct GeneratedBrief {
+    @Guide(description: "One plain color word for the vibe's main color, such as terracotta, navy, sage, mustard or plum")
+    var mainColor: String
+
+    @Guide(description: "How light or dark the palette should feel overall")
+    var lightness: BriefLightness
+
+    @Guide(description: "How muted or vivid the palette's colors should be")
+    var saturation: BriefSaturation
+
+    @Guide(description: "The color harmony that best suits the vibe")
+    var harmony: BriefHarmony
+}
+
+@available(iOS 26.0, *)
+@Generable
+struct GeneratedColorName {
+    @Guide(description: "The number of the color in the list")
+    var number: Int
+
+    @Guide(description: "A short, evocative name of one to three words that fits the color's description")
     var name: String
 }
 
+@available(iOS 26.0, *)
 @Generable
-struct GeneratedPalette {
-    @Guide(description: "A short, evocative two or three word name for the palette")
-    var name: String
+struct GeneratedNames {
+    @Guide(description: "A specific two or three word title for this palette, drawn from its colors or mood, for example 'Harbor Dusk' or 'Terracotta Bloom'. Never generic: do not use the words palette, colors, scheme, theme, custom, generated, whisper, horizon, harmony, dream, or serene.")
+    var title: String
 
-    @Guide(description: "The colors that make up the palette")
-    var colors: [GeneratedColor]
+    @Guide(description: "One name for every color in the list")
+    var colors: [GeneratedColorName]
+}
+
+@available(iOS 26.0, *)
+extension PaletteBrief {
+    /// The model's brief in builder terms. A main color word that neither
+    /// the vocabulary nor the dictionary knows keeps the vibe's own reading.
+    init(model: GeneratedBrief, vibe: String) {
+        let lightness: PaletteTone.Lightness
+        switch model.lightness {
+        case .light: lightness = .light
+        case .balanced: lightness = .balanced
+        case .dark: lightness = .dark
+        }
+        let chroma: PaletteTone.Chroma
+        switch model.saturation {
+        case .muted: chroma = .muted
+        case .balanced: chroma = .balanced
+        case .vivid: chroma = .vivid
+        }
+        let scheme: HarmonyScheme
+        switch model.harmony {
+        case .analogous: scheme = .analogous
+        case .complementary: scheme = .complementary
+        case .splitComplementary: scheme = .splitComplementary
+        case .triadic: scheme = .triadic
+        case .monochromatic: scheme = .monochromatic
+        }
+        self.init(
+            hue: PaletteBrief.hue(forColorWord: model.mainColor) ?? PaletteBrief.heuristic(from: vibe).hue,
+            tone: PaletteTone(lightness: lightness, chroma: chroma),
+            scheme: scheme
+        )
+    }
 }
 
 // MARK: - Generator
 
-/// Generates complementary color palettes on-device using Foundation Models.
+/// Generates palettes on device. The model reads the vibe and names the
+/// colors; `PaletteBuilder` makes them.
+@available(iOS 26.0, *)
 enum PaletteGenerator {
 
     struct BaseColor {
@@ -38,228 +120,214 @@ enum PaletteGenerator {
         let name: String
     }
 
-    /// Generates a palette, streaming each color to `onPartialColors` as the
-    /// model produces it (used to feed the generation orb in real time).
+    /// Generates a palette, streaming its colors to `onPartialColors` one at
+    /// a time for the generation orb. The streamed colors are the final
+    /// ones: the builder knows them before the model names them.
+    /// - Parameter existingNames: names already in the user's library, so
+    ///   the generated palette's title stays distinct from them.
     static func generate(
         baseColors: [BaseColor],
         size: Int,
         vibe: String?,
+        scheme: HarmonyScheme = .auto,
+        existingNames: [String] = [],
         onPartialColors: (@MainActor ([Color]) -> Void)? = nil
     ) async throws -> PaletteViewModel {
-        #if targetEnvironment(simulator)
-        // The simulator can't run Apple Intelligence — stream a fixed palette
-        // so the generation experience can be exercised during development.
-        return try await mockGenerate(baseColors: baseColors, size: size, onPartialColors: onPartialColors)
-        #else
+        #if !targetEnvironment(simulator)
         guard case .available = SystemLanguageModel.default.availability else {
             throw AppError.aiUnavailable
         }
+        #endif
 
-        let instructions = """
-        You are an expert color designer creating harmonious color palettes. \
-        Every palette you produce must feel cohesive: complementary hues, \
-        balanced lightness, and good contrast between neighboring colors.
-        """
-
-        // The user's chosen colors are locked: they must appear in the final
-        // palette exactly as given. The model only supplies the rest.
+        // The user's chosen colors are locked: they ship verbatim, in order.
         let locked = lockedEntries(from: baseColors)
         let targetCount = max(size, locked.count)
-        let remaining = max(0, size - locked.count)
+        guard targetCount >= 2 else { throw AppError.generationFailed }
+        let trimmedVibe = vibe?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        var prompt: String
-        if locked.isEmpty {
-            prompt = "Create a color palette of exactly \(size) colors. Every color must be visually distinct — never repeat or nearly repeat a hex value."
-        } else {
-            let list = locked.map { "\($0.hex) (\($0.name))" }.joined(separator: ", ")
-            if remaining > 0 {
-                prompt = "These exact colors are already chosen and must stay in the palette unchanged: \(list). Do not modify, replace, or restate them. Generate exactly \(remaining) additional color\(remaining == 1 ? "" : "s") that complement and harmonize with them. Every added color must be visually distinct and must not repeat any hex value already listed."
-            } else {
-                prompt = "Suggest an evocative name for a palette built from these colors: \(list)."
-            }
-        }
-        if let vibe = vibe?.trimmingCharacters(in: .whitespacesAndNewlines), !vibe.isEmpty {
-            prompt += " The palette should capture this vibe: \(vibe)."
+        // 1. Brief.
+        let brief = trimmedVibe.isEmpty ? PaletteBrief.neutral : await makeBrief(vibe: trimmedVibe)
+        try Task.checkCancellation()
+
+        // The user's mode always wins. Auto follows the brief's harmony,
+        // unless two or more chosen colors already imply one.
+        var resolvedScheme = scheme
+        if scheme == .auto, locked.count < 2, let suggested = brief.scheme {
+            resolvedScheme = suggested
         }
 
-        let session = LanguageModelSession(instructions: instructions)
+        // 2. Build.
+        let built = PaletteBuilder.build(PaletteBuildRequest(
+            anchors: locked.map(\.hex),
+            size: targetCount,
+            scheme: resolvedScheme,
+            tone: brief.tone,
+            hue: brief.hue,
+            seed: UInt64.random(in: .min ... .max)
+        ))
+        let hexCodes = built.hexes
+        let colors = hexCodes.compactMap { Color(hex: $0) }
+        guard colors.count == hexCodes.count, colors.count >= 2 else { throw AppError.generationFailed }
 
-        let generated: GeneratedPalette
-        do {
-            let stream = session.streamResponse(to: prompt, generating: GeneratedPalette.self)
-            for try await snapshot in stream {
-                guard let onPartialColors else { continue }
-                // Locked colors always lead; complementary colors stream in after.
-                var shownSeen = Set(locked.map { $0.hex })
-                var shown = locked.map { $0.color }
-                for item in (snapshot.content.colors ?? []) {
-                    guard shown.count < targetCount, var hex = item.hex else { continue }
-                    hex = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                    if !hex.hasPrefix("#") { hex = "#" + hex }
-                    guard shownSeen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
-                    shown.append(color)
-                }
-                let snapshotColors = shown
-                await MainActor.run { onPartialColors(snapshotColors) }
-            }
-            generated = try await stream.collect().content
-        } catch {
-            throw AppError.generationFailed
+        // 3. Names, requested while the orb shows the colors arriving. The
+        //    user's own names are kept; the rest come from the model.
+        let userNames = Dictionary(locked.map { ($0.hex, $0.name) }, uniquingKeysWith: { first, _ in first })
+        var preferred: [String?] = hexCodes.map { hex in
+            guard let name = userNames[hex], !name.isEmpty else { return nil }
+            return name
         }
+        let unnamed = hexCodes.indices.filter { preferred[$0] == nil }
+        async let naming = modelNames(hexes: hexCodes, unnamed: unnamed, vibe: trimmedVibe.isEmpty ? nil : trimmedVibe)
 
-        // Locked colors first (verbatim), then the model's complementary colors.
-        var colors = locked.map { $0.color }
-        var hexCodes = locked.map { $0.hex }
-        var colorNames = locked.map { $0.name }
-        var seenHexes = Set(hexCodes)
-
-        for item in generated.colors {
-            guard colors.count < targetCount else { break }
-            var hex = item.hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            if !hex.hasPrefix("#") { hex = "#" + hex }
-            guard seenHexes.insert(hex).inserted else { continue }
-            guard let color = Color(hex: hex) else { continue }
-            colors.append(color)
-            hexCodes.append(hex)
-            let trimmed = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            colorNames.append(trimmed.isEmpty ? ColorNamer.name(forHex: hex) : trimmed)
-        }
-
-        // The on-device model can return fewer colors than requested; guarantee
-        // the palette reaches the selected size with distinct complementary colors.
-        fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seenHexes, target: targetCount)
-
-        guard colors.count >= 2 else { throw AppError.generationFailed }
-
-        // Reflect the final, complete palette in the orb before the reveal.
         if let onPartialColors {
-            let finalColors = colors
-            await MainActor.run { onPartialColors(finalColors) }
+            let firstGenerated = min(locked.count, colors.count)
+            if firstGenerated == colors.count {
+                // Nothing to reveal one by one (e.g. a photo palette): show it whole.
+                await MainActor.run { onPartialColors(colors) }
+            }
+            for index in firstGenerated..<colors.count {
+                try await Task.sleep(for: .milliseconds(700))
+                let preview = Array(colors.prefix(index + 1))
+                await MainActor.run { onPartialColors(preview) }
+            }
         }
 
-        let paletteName = generated.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let names = await naming
+        try Task.checkCancellation()
+        for (index, name) in names.colorNames {
+            preferred[index] = name
+        }
+
         return PaletteViewModel(
-            name: paletteName.isEmpty ? "Generated Palette" : paletteName,
+            // The model's title is kept only when it's specific, names only
+            // colors the palette has, and is unused; otherwise a descriptive
+            // title is derived from the palette's main color.
+            name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames),
             colors: colors,
             hexCodes: hexCodes,
-            colorNames: colorNames
+            colorNames: ColorNamer.uniqueNames(forHexes: hexCodes, preferred: preferred),
+            colorRoles: built.roles
         )
-        #endif
     }
 
     // MARK: - Locked base colors
 
     private struct LockedColor {
-        let color: Color
         let hex: String   // normalized "#RRGGBB"
         let name: String
     }
 
-    /// Normalizes and de-duplicates the user's chosen colors, preserving order.
+    /// Normalizes and de-duplicates the user's chosen colors, preserving
+    /// order. `name` stays the user's own text (or empty); the final
+    /// `ColorNamer.uniqueNames` pass fills in any empty name.
     private static func lockedEntries(from baseColors: [BaseColor]) -> [LockedColor] {
         var result: [LockedColor] = []
         var seen = Set<String>()
         for base in baseColors {
             var hex = base.hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             if !hex.hasPrefix("#") { hex = "#" + hex }
-            guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
+            guard OKLCH(hex: hex) != nil, seen.insert(hex).inserted else { continue }
             let name = base.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            result.append(LockedColor(color: color, hex: hex, name: name.isEmpty ? ColorNamer.name(forHex: hex) : name))
+            result.append(LockedColor(hex: hex, name: name))
         }
         return result
     }
 
-    // MARK: - Count guarantee
+    // MARK: - Model steps
 
-    /// Ensures the palette reaches `target` colors. When the model returns too
-    /// few, synthesizes distinct colors by rotating the hue of existing ones
-    /// (golden-ratio spacing) with slight brightness variation, so the final
-    /// count always matches the selected size.
-    private static func fillToTarget(
-        colors: inout [Color],
-        hexCodes: inout [String],
-        colorNames: inout [String],
-        seen: inout Set<String>,
-        target: Int
-    ) {
-        guard target > colors.count, !colors.isEmpty else { return }
-        let seeds = colors
-        var step = 1
-        var safety = 0
-        while colors.count < target && safety < target * 24 {
-            for seed in seeds where colors.count < target {
-                safety += 1
-                let ui = UIColor(seed)
-                var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-                guard ui.getHue(&h, saturation: &s, brightness: &b, alpha: &a) else { continue }
-                var newHue = (h + CGFloat(0.381966 * Double(step))).truncatingRemainder(dividingBy: 1)
-                if newHue < 0 { newHue += 1 }
-                let newBright = min(0.95, max(0.2, b + CGFloat((step % 3) - 1) * 0.1))
-                let newSat = min(1.0, max(0.25, s))
-                let ui2 = UIColor(hue: newHue, saturation: newSat, brightness: newBright, alpha: 1)
-                var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, al: CGFloat = 0
-                ui2.getRed(&r, green: &g, blue: &bl, alpha: &al)
-                let hex = String(format: "#%02X%02X%02X", Int(round(r * 255)), Int(round(g * 255)), Int(round(bl * 255)))
-                guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
-                colors.append(color)
-                hexCodes.append(hex)
-                colorNames.append(ColorNamer.name(forHex: hex))
-            }
-            step += 1
+    private static let logger = Logger(subsystem: "com.halilbagosi.Palettes", category: "generation")
+
+    /// Reads the vibe into a brief. On the Simulator, or when the model
+    /// fails, the vibe's own words are read instead.
+    private static func makeBrief(vibe: String) async -> PaletteBrief {
+        #if targetEnvironment(simulator)
+        return PaletteBrief.heuristic(from: vibe)
+        #else
+        do {
+            let session = LanguageModelSession(instructions: """
+                You are a color designer. Read the mood or theme someone describes and \
+                decide what its color palette should be like. Answer only with the fields asked for.
+                """)
+            let response = try await session.respond(
+                to: "Describe the palette for this vibe: \(vibe)",
+                generating: GeneratedBrief.self
+            )
+            return PaletteBrief(model: response.content, vibe: vibe)
+        } catch is CancellationError {
+            return PaletteBrief.heuristic(from: vibe)
+        } catch {
+            logFailure(error, step: "brief")
+            return PaletteBrief.heuristic(from: vibe)
         }
+        #endif
     }
 
-    #if targetEnvironment(simulator)
-    private static func mockGenerate(
-        baseColors: [BaseColor],
-        size: Int,
-        onPartialColors: (@MainActor ([Color]) -> Void)?
-    ) async throws -> PaletteViewModel {
-        let pool: [(String, String)] = [
-            ("#5B7F8A", "Harbor"), ("#D9A566", "Amber"), ("#8A5B6E", "Mulberry"),
-            ("#E8D5B7", "Sand"), ("#3E4E50", "Slate"), ("#C97B63", "Terracotta"),
-            ("#7FA98A", "Sage"), ("#4B3B66", "Plum"), ("#E2B8B3", "Rose Dust"),
-            ("#2F5D62", "Deep Teal"), ("#F0E2C8", "Cream"), ("#A44A3F", "Rust")
-        ]
-
-        // Locked colors preserved verbatim, then complementary colors fill in.
-        let locked = lockedEntries(from: baseColors)
-        let targetCount = max(2, max(size, locked.count))
-
-        var colors = locked.map { $0.color }
-        var hexCodes = locked.map { $0.hex }
-        var colorNames = locked.map { $0.name }
-        var seen = Set(hexCodes)
-
-        for (hex, name) in pool {
-            guard colors.count < targetCount else { break }
-            guard seen.insert(hex).inserted, let color = Color(hex: hex) else { continue }
-            colors.append(color)
-            hexCodes.append(hex)
-            colorNames.append(name)
-        }
-
-        // Guarantee the palette reaches the target size.
-        fillToTarget(colors: &colors, hexCodes: &hexCodes, colorNames: &colorNames, seen: &seen, target: targetCount)
-
-        // Stream: locked colors appear immediately, then each new one plops in.
-        if let onPartialColors {
-            var shown = locked.map { $0.color }
-            await MainActor.run { onPartialColors(shown) }
-            for index in locked.count..<colors.count {
-                try await Task.sleep(for: .milliseconds(700))
-                shown.append(colors[index])
-                let snapshot = shown
-                await MainActor.run { onPartialColors(snapshot) }
-            }
-        }
-
-        return PaletteViewModel(
-            name: "Simulator Palette",
-            colors: colors,
-            hexCodes: hexCodes,
-            colorNames: colorNames
-        )
+    private struct Naming {
+        var title: String?
+        var colorNames: [Int: String]
     }
-    #endif
+
+    /// Asks the model for a title and for names of the colors at `unnamed`.
+    /// Every color is described in words, so the model never names from a
+    /// hex code; its answers are matched back by number, not position.
+    private static func modelNames(hexes: [String], unnamed: [Int], vibe: String?) async -> Naming {
+        #if targetEnvironment(simulator)
+        return Naming(title: nil, colorNames: [:])
+        #else
+        let list = hexes.indices
+            .map { "\($0 + 1). \(ColorVocabulary.describe(hex: hexes[$0]))" }
+            .joined(separator: "\n")
+        let theme = vibe.map { " inspired by \"\($0)\"" } ?? ""
+        let prompt = """
+            Name each color in this palette\(theme), and give the palette a title. \
+            Each name must fit its description: never call a light color dark, a grey \
+            colorful, or one hue by another hue's name.
+            \(list)
+            """
+        do {
+            let session = LanguageModelSession(instructions: """
+                You name colors for a design app. Use concrete, evocative names drawn from \
+                materials, places, food and nature, one to three words each. Never repeat a \
+                name, and never use the words color, shade, tone or palette in a name.
+                """)
+            let response = try await session.respond(to: prompt, generating: GeneratedNames.self)
+            let proposals = response.content.colors.map { (number: $0.number, name: $0.name) }
+            return Naming(
+                title: response.content.title,
+                colorNames: acceptedNames(proposals, hexes: hexes, unnamed: unnamed)
+            )
+        } catch is CancellationError {
+            return Naming(title: nil, colorNames: [:])
+        } catch {
+            logFailure(error, step: "names")
+            return Naming(title: nil, colorNames: [:])
+        }
+        #endif
+    }
+
+    /// The model's names that can ship: matched to colors by list number
+    /// (1-based), only for colors that still need a name, and only when the
+    /// name fits its swatch and doesn't repeat one already accepted.
+    /// Outside the Simulator gate so tests can exercise it.
+    static func acceptedNames(_ proposals: [(number: Int, name: String)], hexes: [String], unnamed: [Int]) -> [Int: String] {
+        let needed = Set(unnamed)
+        var accepted: [Int: String] = [:]
+        var used = Set<String>()
+        for proposal in proposals {
+            let index = proposal.number - 1
+            let name = proposal.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard needed.contains(index),
+                  accepted[index] == nil,
+                  ColorVocabulary.isPlausible(name: name, forHex: hexes[index]),
+                  used.insert(name.lowercased()).inserted else { continue }
+            accepted[index] = name
+        }
+        return accepted
+    }
+
+    /// Type name only: an error's description can echo prompt or model
+    /// content, which must never reach device logs.
+    private static func logFailure(_ error: Error, step: String) {
+        logger.error("Palette \(step, privacy: .public) failed: \(String(describing: type(of: error)), privacy: .public)")
+    }
 }

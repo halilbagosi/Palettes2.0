@@ -6,7 +6,18 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		503F22D633354CEBB325BB83 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C169F77E2FFD40B100366ED6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C169F7852FFD40B100366ED6;
+			remoteInfo = Palettes;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		C0948DA932314999A7A4CF38 /* PalettesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PalettesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C169F7862FFD40B100366ED6 /* Palettes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Palettes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -21,6 +32,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		812AFFCFF8254D4E9891FBD3 /* PalettesTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PalettesTests;
+			sourceTree = "<group>";
+		};
 		C169F7882FFD40B100366ED6 /* Palettes */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -32,6 +48,11 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		30B0E9FDFD9D4BCF9EAE7B13 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		C169F7832FFD40B100366ED6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -44,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				C169F7882FFD40B100366ED6 /* Palettes */,
+				812AFFCFF8254D4E9891FBD3 /* PalettesTests */,
 				C169F7872FFD40B100366ED6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -52,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				C169F7862FFD40B100366ED6 /* Palettes.app */,
+				C0948DA932314999A7A4CF38 /* PalettesTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,6 +82,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		4F92C7437D2E46078ACA52ED /* PalettesTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 750DBCFF91BE4EF5A145B9E6 /* Build configuration list for PBXNativeTarget "PalettesTests" */;
+			buildPhases = (
+				5A4C2387C9A0407FA804EF16 /* Sources */,
+				30B0E9FDFD9D4BCF9EAE7B13 /* Frameworks */,
+				7721D3BA1B5342309394C732 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6DC0ED6406B3412C9F44FFD8 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				812AFFCFF8254D4E9891FBD3 /* PalettesTests */,
+			);
+			name = PalettesTests;
+			productName = PalettesTests;
+			productReference = C0948DA932314999A7A4CF38 /* PalettesTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		C169F7852FFD40B100366ED6 /* Palettes */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C169F7942FFD40B300366ED6 /* Build configuration list for PBXNativeTarget "Palettes" */;
@@ -87,6 +131,10 @@
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					4F92C7437D2E46078ACA52ED = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = C169F7852FFD40B100366ED6;
+					};
 					C169F7852FFD40B100366ED6 = {
 						CreatedOnToolsVersion = 27.0;
 					};
@@ -107,11 +155,17 @@
 			projectRoot = "";
 			targets = (
 				C169F7852FFD40B100366ED6 /* Palettes */,
+				4F92C7437D2E46078ACA52ED /* PalettesTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		7721D3BA1B5342309394C732 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		C169F7842FFD40B100366ED6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -120,6 +174,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5A4C2387C9A0407FA804EF16 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		C169F7822FFD40B100366ED6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -127,12 +186,21 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		6DC0ED6406B3412C9F44FFD8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C169F7852FFD40B100366ED6 /* Palettes */;
+			targetProxy = 503F22D633354CEBB325BB83 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		C169F7952FFD40B300366ED6 /* Debug configuration for PBXNativeTarget "Palettes" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Palettes/Palettes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KCH5545G6F;
@@ -152,7 +220,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
@@ -178,6 +246,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Palettes/Palettes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KCH5545G6F;
@@ -197,7 +266,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
@@ -334,9 +403,57 @@
 			};
 			name = Release;
 		};
+		E9861E55AA5249E88AE9933E /* Release configuration for PBXNativeTarget "PalettesTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KCH5545G6F;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halilbagosi.PalettesTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Palettes.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Palettes";
+			};
+			name = Release;
+		};
+		EE6AA600B6B64D09B3243C44 /* Debug configuration for PBXNativeTarget "PalettesTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KCH5545G6F;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halilbagosi.PalettesTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Palettes.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Palettes";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		750DBCFF91BE4EF5A145B9E6 /* Build configuration list for PBXNativeTarget "PalettesTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE6AA600B6B64D09B3243C44 /* Debug configuration for PBXNativeTarget "PalettesTests" */,
+				E9861E55AA5249E88AE9933E /* Release configuration for PBXNativeTarget "PalettesTests" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		C169F7812FFD40B100366ED6 /* Build configuration list for PBXProject "Palettes" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

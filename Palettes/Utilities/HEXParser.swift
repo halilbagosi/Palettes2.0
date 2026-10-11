@@ -11,16 +11,28 @@ extension Color {
     init?(hex: String) {
         var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("#") { cleaned.removeFirst() }
-        
-        guard cleaned.count == 6,
-              let number = UInt64(cleaned, radix: 16) else {
+
+        switch cleaned.count {
+        case 3, 4:
+            cleaned = cleaned.map { "\($0)\($0)" }.joined()
+        case 6, 8:
+            break
+        default:
             return nil
         }
-        
-        let r = Double((number >> 16) & 0xFF) / 255.0
-        let g = Double((number >> 8) & 0xFF) / 255.0
-        let b = Double(number & 0xFF) / 255.0
-        
+
+        guard let number = UInt64(cleaned, radix: 16) else {
+            return nil
+        }
+
+        // For 8-digit (RRGGBBAA) input, shift past the discarded alpha byte.
+        let shift: UInt64 = cleaned.count == 8 ? 8 : 0
+        let shifted = number >> shift
+
+        let r = Double((shifted >> 16) & 0xFF) / 255.0
+        let g = Double((shifted >> 8) & 0xFF) / 255.0
+        let b = Double(shifted & 0xFF) / 255.0
+
         self.init(red: r, green: g, blue: b)
     }
 }
@@ -425,7 +437,57 @@ enum ColorNamer {
         ("Hot Magenta",        255,  29, 206),
     ]
 
+    private static let namedColorsLab: [(name: String, lab: (L: Double, a: Double, b: Double))] =
+        namedColors.map { ($0.name, sRGBtoLab(r: $0.r / 255.0, g: $0.g / 255.0, b: $0.b / 255.0)) }
+
+    private static let namedColorsOKLCH: [OKLCH] =
+        namedColors.map { OKLCH(r: $0.r / 255.0, g: $0.g / 255.0, b: $0.b / 255.0) }
+
+    /// Words that already modify an entry name ("Dark Orange", "Pale Gold");
+    /// such an entry never gets a second modifier.
+    private static let modifierWords: Set<String> = [
+        "dark", "deep", "light", "pale", "medium", "vivid", "rich", "muted", "soft",
+        "bright", "hot", "neon", "electric", "dim", "dusty", "pastel",
+    ]
+
+    /// Whether a dictionary entry belongs to the same broad color as `color`:
+    /// greys only for greys, never a grey for a clearly colored swatch, a
+    /// hue family at most one step away, and an entry name that doesn't
+    /// itself contradict the color ("Dark Turquoise" on a light teal).
+    private static func entryFits(_ index: Int, color: OKLCH) -> Bool {
+        let entry = namedColorsOKLCH[index]
+        if color.C < 0.03 {
+            guard entry.C < 0.05 else { return false }
+        } else if color.C >= 0.045 && entry.C < 0.025 {
+            return false
+        } else if color.C >= 0.04 && entry.C >= 0.04 {
+            let a = ColorVocabulary.family(forHue: color.h)
+            let b = ColorVocabulary.family(forHue: entry.h)
+            guard ColorVocabulary.ringDistance(a, b) <= 1 else { return false }
+        }
+        return ColorVocabulary.isPlausible(name: namedColors[index].name, for: color)
+    }
+
+    /// Whether a modifier is true of the color itself, not just of its
+    /// difference from the dictionary entry.
+    private static func modifierFits(_ word: String, color: OKLCH) -> Bool {
+        switch word {
+        case "Pale", "Light": return color.L >= 0.62
+        case "Dark", "Deep": return color.L <= 0.6
+        case "Vivid": return color.C >= 0.12
+        case "Rich": return color.C >= 0.08
+        default: return true
+        }
+    }
+
     // ── Public API ──
+
+    /// The dictionary color named `name` (any casing), as "#RRGGBB".
+    static func hex(forName name: String) -> String? {
+        let target = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let entry = namedColors.first(where: { $0.name.lowercased() == target }) else { return nil }
+        return String(format: "#%02X%02X%02X", Int(entry.r), Int(entry.g), Int(entry.b))
+    }
 
     static func name(forHex hex: String) -> String {
         var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -444,9 +506,8 @@ enum ColorNamer {
         var bestName = "Unknown"
         var bestDelta = Double.greatestFiniteMagnitude
 
-        for entry in namedColors {
-            let entryLab = sRGBtoLab(r: entry.r / 255.0, g: entry.g / 255.0, b: entry.b / 255.0)
-            let delta = ciede2000(lab, entryLab)
+        for entry in namedColorsLab {
+            let delta = ciede2000(lab, entry.lab)
             if delta < bestDelta {
                 bestDelta = delta
                 bestName = entry.name
@@ -454,6 +515,150 @@ enum ColorNamer {
         }
 
         return bestName
+    }
+
+    /// Names an entire palette at once, guaranteeing every returned name is
+    /// unique within the call. Preferred (AI-supplied) names are honored
+    /// verbatim when present and not already claimed by an earlier index;
+    /// everything else gets a descriptive name built from the nearest
+    /// dictionary entry that fits the color (same hue family, greys for
+    /// greys, an entry name that doesn't contradict the swatch), plus a
+    /// modifier only when it is true of the color itself (lightness →
+    /// Deep/Dark/Pale/Light, chroma → Muted/Soft/Vivid/Rich). Colors very
+    /// close to their nearest entry get the plain entry name, no modifier.
+    ///
+    /// If a name is still claimed once names are considered in order (a
+    /// duplicate preferred name, or two colors that would otherwise
+    /// synthesize the same descriptive name), later indices fall through to
+    /// alternate modifiers on the same entry, then to the next-nearest
+    /// dictionary entries, deterministically — never a numeric suffix.
+    ///
+    /// Deterministic: identical input (`hexes`, `preferred`) always produces
+    /// identical output.
+    static func uniqueNames(forHexes hexes: [String], preferred: [String?] = []) -> [String] {
+        let n = hexes.count
+        guard n > 0 else { return [] }
+
+        // Modifier threshold: below this CIEDE2000 delta from the nearest
+        // entry, the color reads as "basically that color" — no modifier
+        // needed. Chosen well under the palette builder's distinctness floor (12) so a
+        // color that's still clearly distinguishable from a sibling color
+        // can nonetheless read as an unmodified match to its own entry.
+        let modifierThreshold: Double = 8
+
+        // Precompute Lab + every dictionary entry ranked by ascending
+        // CIEDE2000 distance, once per input color.
+        let labs: [(L: Double, a: Double, b: Double)?] = hexes.map { hex in
+            guard let c = parseHexComponents(hex) else { return nil }
+            return sRGBtoLab(r: c.r, g: c.g, b: c.b)
+        }
+        let oklch: [OKLCH?] = hexes.map { OKLCH(hex: $0) }
+        let ranked: [[(index: Int, delta: Double)]] = hexes.indices.map { i in
+            guard let lab = labs[i] else { return [] }
+            let byDistance = namedColorsLab.enumerated()
+                .map { (index: $0.offset, delta: ciede2000(lab, $0.element.lab)) }
+                .sorted { $0.delta < $1.delta }
+            // Entries in the color's own hue family (and greys for greys)
+            // come first, even when a wrong-family entry is a little nearer
+            // in Lab — that nearness is what named a deep teal "Charcoal".
+            guard let color = oklch[i] else { return byDistance }
+            let fits = byDistance.map { entryFits($0.index, color: color) }
+            let fitting = byDistance.indices.filter { fits[$0] }.map { byDistance[$0] }
+            let others = byDistance.indices.filter { !fits[$0] }.map { byDistance[$0] }
+            return fitting + others
+        }
+
+        enum Axis { case lightness, chroma }
+        func modifierWord(dL: Double, dC: Double, axis: Axis) -> String {
+            switch axis {
+            case .lightness:
+                return dL < 0 ? (dC > 0 ? "Deep" : "Dark") : (dC < 0 ? "Pale" : "Light")
+            case .chroma:
+                return dC > 0 ? (dL < 0 ? "Rich" : "Vivid") : (dL < 0 ? "Muted" : "Soft")
+            }
+        }
+
+        // Every candidate name for a given color at a given rank into its
+        // ranked-entries list: the plain entry name if it's a close match,
+        // otherwise the dominant-axis modifier first, then the secondary
+        // axis's modifier, keeping only modifiers that are true of the
+        // color itself (never "Pale" on a dark color, "Vivid" on a grey, or
+        // a second modifier on an entry that already has one).
+        func candidates(colorIndex: Int, rank: Int) -> [String] {
+            guard let lab = labs[colorIndex], rank < ranked[colorIndex].count else { return [] }
+            let entry = ranked[colorIndex][rank]
+            let entryName = namedColorsLab[entry.index].name
+            guard entry.delta >= modifierThreshold else { return [entryName] }
+            guard let color = oklch[colorIndex],
+                  !ColorVocabulary.tokens(entryName).contains(where: modifierWords.contains) else { return [entryName] }
+
+            let entryLab = namedColorsLab[entry.index].lab
+            let entryIsGrey = namedColorsOKLCH[entry.index].C < 0.03
+            let dL = lab.L - entryLab.L
+            let dC = labChroma(lab) - labChroma(entryLab)
+            let dominant: Axis = abs(dL) >= abs(dC) ? .lightness : .chroma
+            let secondary: Axis = dominant == .lightness ? .chroma : .lightness
+
+            var names: [String] = []
+            for axis in [dominant, secondary] where !(axis == .chroma && entryIsGrey) {
+                let word = modifierWord(dL: dL, dC: dC, axis: axis)
+                guard modifierFits(word, color: color) else { continue }
+                let name = "\(word) \(entryName)"
+                if !names.contains(name) { names.append(name) }
+            }
+            return names.isEmpty ? [entryName] : names
+        }
+
+        var result = Array(repeating: "", count: n)
+        var used = Set<String>()
+
+        for i in 0..<n {
+            // 1. AI-supplied / user-supplied preferred name, if present,
+            // non-empty, and not already claimed by an earlier index.
+            if i < preferred.count, let raw = preferred[i] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, !used.contains(trimmed) {
+                    result[i] = trimmed
+                    used.insert(trimmed)
+                    continue
+                }
+            }
+
+            // 2. Invalid hex: deterministic, always-unique placeholder.
+            guard labs[i] != nil, !ranked[i].isEmpty else {
+                let fallback = used.contains("Unknown") ? "Unknown (\(hexes[i]))" : "Unknown"
+                result[i] = fallback
+                used.insert(fallback)
+                continue
+            }
+
+            // 3. Descriptive name: nearest entry first, then progressively
+            // further entries (each with its own modifier variants), until
+            // an unclaimed name is found. Guaranteed to terminate — there
+            // are ~460 entries and palettes are always far smaller.
+            var chosen: String?
+            searchEntries: for rank in 0..<ranked[i].count {
+                for candidate in candidates(colorIndex: i, rank: rank) {
+                    if !used.contains(candidate) {
+                        chosen = candidate
+                        break searchEntries
+                    }
+                }
+            }
+            let final = chosen ?? "\(ranked[i].first.map { namedColorsLab[$0.index].name } ?? "Unknown") (\(hexes[i]))"
+            result[i] = final
+            used.insert(final)
+        }
+
+        return result
+    }
+
+    /// Shared hex → sRGB component parser for the naming/distance helpers.
+    private static func parseHexComponents(_ hex: String) -> (r: Double, g: Double, b: Double)? {
+        var c = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if c.hasPrefix("#") { c.removeFirst() }
+        guard c.count == 6, let n = UInt64(c, radix: 16) else { return nil }
+        return (Double((n >> 16) & 0xFF) / 255.0, Double((n >> 8) & 0xFF) / 255.0, Double(n & 0xFF) / 255.0)
     }
 
     // Also expose a distance function for external consumers
@@ -472,7 +677,7 @@ enum ColorNamer {
 
     // ── sRGB → XYZ → CIELAB conversion ────────────────────────────────
 
-    private static func sRGBtoLab(r: Double, g: Double, b: Double) -> (L: Double, a: Double, b: Double) {
+    static func sRGBtoLab(r: Double, g: Double, b: Double) -> (L: Double, a: Double, b: Double) {
         // Linearize sRGB
         func linearize(_ c: Double) -> Double {
             c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
@@ -498,6 +703,40 @@ enum ColorNamer {
         let a = 500.0 * (fx - fy)
         let bVal = 200.0 * (fy - fz)
         return (L, a, bVal)
+    }
+
+    /// Chroma magnitude in CIELAB: sqrt(a² + b²).
+    static func labChroma(_ lab: (L: Double, a: Double, b: Double)) -> Double {
+        (lab.a * lab.a + lab.b * lab.b).squareRoot()
+    }
+
+    /// Inverse of `sRGBtoLab`: CIELAB → XYZ → linear sRGB → sRGB (D65), clamped to 0...1.
+    static func labToSRGB(_ lab: (L: Double, a: Double, b: Double)) -> (r: Double, g: Double, b: Double) {
+        let fy = (lab.L + 16.0) / 116.0
+        let fx = fy + lab.a / 500.0
+        let fz = fy - lab.b / 200.0
+
+        func fInv(_ t: Double) -> Double {
+            let t3 = t * t * t
+            return t3 > 0.008856 ? t3 : (116.0 * t - 16.0) / 903.3
+        }
+
+        // XYZ (D65 illuminant)
+        let x = fInv(fx) * 0.95047
+        let y = lab.L > 903.3 * 0.008856 ? fy * fy * fy : lab.L / 903.3
+        let z = fInv(fz) * 1.08883
+
+        let rLin = x * 3.2404542 + y * -1.5371385 + z * -0.4985314
+        let gLin = x * -0.9692660 + y * 1.8760108 + z * 0.0415560
+        let bLin = x * 0.0556434 + y * -0.2040259 + z * 1.0572252
+
+        func gammaEncode(_ c: Double) -> Double {
+            let clamped = max(0.0, c)
+            let v = clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * pow(clamped, 1.0 / 2.4) - 0.055
+            return min(1.0, max(0.0, v))
+        }
+
+        return (gammaEncode(rLin), gammaEncode(gLin), gammaEncode(bLin))
     }
 
     // ── CIEDE2000 ΔE implementation ───────────────────────────────────

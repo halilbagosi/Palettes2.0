@@ -5,13 +5,12 @@
 
 import SwiftUI
 
-/// Editable result stage shown inline after generation: rename the palette,
-/// edit or remove individual colors, regenerate, or save.
+/// Editable result stage shown inline after generation: the name in the
+/// generated gradient over one tall swatch card, a band per color. Tap a band
+/// to edit it, remove it from its trailing button, regenerate, or save.
 struct GenerationResultView: View {
     @Binding var name: String
-    @Binding var colors: [Color]
-    @Binding var hexCodes: [String]
-    @Binding var colorNames: [String]
+    @Binding var paletteColors: [PaletteColor]
     var onBack: () -> Void
     var onRegenerate: () -> Void
     var onDescribeChange: (String) -> Void
@@ -24,15 +23,22 @@ struct GenerationResultView: View {
     @State private var changeText = ""
     @FocusState private var changeFocused: Bool
     @FocusState private var nameFocused: Bool
+    /// Bands slide in one after another when the result appears.
+    @State private var revealed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                nameField
-                    .padding(.top, 8)
+            VStack(spacing: 24) {
+                VStack(spacing: 6) {
+                    nameField
+                    Text("\(paletteColors.count) colors · Tap a color to edit")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
 
-                swatchStrip
-                colorList
+                swatchCard
             }
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
@@ -61,6 +67,11 @@ struct GenerationResultView: View {
             }
         }
         .animation(.spring(response: 0.3), value: nameFocused)
+        .onAppear {
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.5, dampingFraction: 0.85)) {
+                revealed = true
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { onBack() } label: {
@@ -70,139 +81,152 @@ struct GenerationResultView: View {
             }
         }
         .sheet(item: $editTarget) { target in
-            if target.id < colors.count, target.id < hexCodes.count, target.id < colorNames.count {
+            if target.id < paletteColors.count {
                 ColorEditView(
-                    colorName: $colorNames[target.id],
-                    hexCode: $hexCodes[target.id],
-                    colorValue: $colors[target.id]
+                    colorName: $paletteColors[target.id].name,
+                    hexCode: $paletteColors[target.id].hex,
+                    colorValue: $paletteColors[target.id].color
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])
-                .presentationSizing(.form)
+                .formPresentationSizing()
             }
         }
-        // The generator can return mismatched array lengths; keep names and
-        // hex codes in lockstep with the colors so index access is safe.
-        .onAppear(perform: normalizeArrays)
-        .onChange(of: colors.count) { _, _ in normalizeArrays() }
-    }
-
-    /// Pads or trims `hexCodes`/`colorNames` to match `colors` exactly.
-    private func normalizeArrays() {
-        while hexCodes.count < colors.count { hexCodes.append("") }
-        while colorNames.count < colors.count { colorNames.append("Color \(colorNames.count + 1)") }
-        if hexCodes.count > colors.count { hexCodes.removeLast(hexCodes.count - colors.count) }
-        if colorNames.count > colors.count { colorNames.removeLast(colorNames.count - colors.count) }
     }
 
     // MARK: - Name
 
+    /// The generated name in the generated gradient. Editing swaps it for a field
+    /// laid out identically, so nothing moves: the display text keeps its place
+    /// (hidden) and the field sits exactly over it.
     private var nameField: some View {
-        TextField("Palette Name", text: $name)
-            .font(.system(.title, design: .rounded).weight(.bold))
-            .multilineTextAlignment(.center)
-            .focused($nameFocused)
-            .submitLabel(.done)
-            .onSubmit {
-                name = name.trimmingCharacters(in: .whitespaces)
-            }
+        let shown = name.isEmpty ? "Untitled Palette" : name
+        return OnboardingPaletteName(name: shown, usesGradient: true, trailingSymbol: "pencil")
+            .lineLimit(3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 44)
-            .overlay(alignment: .trailing) {
-                if !nameFocused {
-                    Button {
-                        nameFocused = true
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .contentShape(Circle())
+            .opacity(nameFocused ? 0 : 1)
+            .overlay {
+                TextField("Palette Name", text: $name, axis: .vertical)
+                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1...3)
+                    .focused($nameFocused)
+                    .submitLabel(.done)
+                    .onSubmit { name = name.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .onChange(of: name) { _, new in
+                        // Return ends editing rather than adding a line.
+                        if new.contains("\n") { name = new.replacingOccurrences(of: "\n", with: ""); nameFocused = false }
                     }
-                    .accessibilityLabel("Edit palette name")
-                }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .opacity(nameFocused ? 1 : 0)
+                    .allowsHitTesting(nameFocused)
+                    .accessibilityHidden(!nameFocused)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { nameFocused = true }
+            .animation(.easeInOut(duration: 0.18), value: nameFocused)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Palette name, \(shown)")
+            .accessibilityHint("Renames the palette")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { nameFocused = true }
     }
 
     // MARK: - Swatches
 
-    private var swatchStrip: some View {
-        HStack(spacing: 0) {
-            ForEach(colors.indices, id: \.self) { i in
-                Rectangle().fill(colors[i])
+    /// One card, a full-width band per color with its name and hex in an ink
+    /// that reads on it.
+    private var swatchCard: some View {
+        VStack(spacing: 0) {
+            ForEach(paletteColors.indices, id: \.self) { i in
+                band(at: i)
+                    .opacity(revealed ? 1 : 0)
+                    .offset(y: revealed || reduceMotion ? 0 : 18)
+                    .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.85).delay(Double(i) * 0.06), value: revealed)
             }
         }
-        .frame(height: 140)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(.white.opacity(0.25), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: colors.count)
+        .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: paletteColors.count)
     }
 
-    // MARK: - Color Rows
-
-    private var colorList: some View {
-        VStack(spacing: 10) {
-            ForEach(colors.indices, id: \.self) { i in
-                colorRow(at: i)
-            }
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: colors.count)
-    }
-
-    private func colorRow(at index: Int) -> some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(colors[index].gradient)
-                .frame(width: 50, height: 50)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(.white.opacity(0.2), lineWidth: 1)
-                )
-
+    private func band(at index: Int) -> some View {
+        let color = paletteColors[index]
+        let ink = Self.ink(on: color.color)
+        return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(index < colorNames.count ? colorNames[index] : "Color \(index + 1)")
-                    .font(.system(size: 15, weight: .semibold))
-                Text(index < hexCodes.count ? hexCodes[index] : "")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundColor(.secondary)
+                Text(color.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(color.hex)
+                    .font(.system(.caption, design: .monospaced).weight(.medium))
+                    .opacity(0.7)
             }
-
-            Spacer()
-
-            Button {
-                editTarget = EditTarget(id: index)
-            } label: {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            if paletteColors.count > 2 {
+                Button {
+                    removeColor(at: index)
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.footnote.weight(.bold))
+                        .frame(width: 30, height: 30)
+                        .background(ink.opacity(0.14), in: Circle())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(color.name)")
             }
-            .accessibilityLabel("Edit color")
-
-            Button {
-                removeColor(at: index)
-            } label: {
-                Image(systemName: "minus.circle.fill")
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(colors.count > 2 ? Color.red.opacity(0.8) : Color.secondary.opacity(0.4))
-            }
-            .disabled(colors.count <= 2)
-            .accessibilityLabel("Remove color")
         }
-        .padding(10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .foregroundStyle(ink)
+        .padding(.leading, 20)
+        .padding(.trailing, 10)
+        .frame(height: paletteColors.count <= 4 ? 88 : (paletteColors.count <= 6 ? 72 : 60))
+        .frame(maxWidth: .infinity)
+        .background(color.color)
+        .contentShape(Rectangle())
+        .onTapGesture { editTarget = EditTarget(id: index) }
+        .contextMenu {
+            Button("Edit Color", systemImage: "pencil") { editTarget = EditTarget(id: index) }
+            if paletteColors.count > 2 {
+                Button("Remove", systemImage: "minus.circle", role: .destructive) { removeColor(at: index) }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Edits the color")
+        .accessibilityAction { editTarget = EditTarget(id: index) }
+    }
+
+    /// Black or white, whichever contrasts more with `color`.
+    /// Black or white, whichever reads on `color`.
+    static func ink(on color: Color) -> Color {
+        let rgb = color.rgbComponents
+        let linear = [rgb.r, rgb.g, rgb.b].map { value -> Double in
+            let c = value / 255
+            return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+        return luminance > 0.18 ? .black : .white
     }
 
     private func removeColor(at index: Int) {
-        guard colors.count > 2, index < colors.count else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            colors.remove(at: index)
-            if index < hexCodes.count { hexCodes.remove(at: index) }
-            if index < colorNames.count { colorNames.remove(at: index) }
+        guard paletteColors.count > 2, index < paletteColors.count else { return }
+        let removed = paletteColors[index]
+        _ = withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            paletteColors.remove(at: index)
+        }
+        ToastManager.shared.show("Color removed", icon: "trash.fill") {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                paletteColors.insert(removed, at: min(index, paletteColors.count))
+            }
         }
     }
 
@@ -234,7 +258,7 @@ struct GenerationResultView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .liquidGlass(.interactive, in: .capsule)
         .animation(.spring(response: 0.3), value: changeText.isEmpty)
         .animation(.spring(response: 0.3), value: changeFocused)
     }
@@ -250,7 +274,7 @@ struct GenerationResultView: View {
     // MARK: - Actions
 
     private var actionBar: some View {
-        GlassEffectContainer(spacing: 16) {
+        GlassContainer(spacing: 16) {
             HStack(spacing: 16) {
                 Button {
                     onRegenerate()
@@ -260,7 +284,7 @@ struct GenerationResultView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.glass)
+                .glassButton()
 
                 Button {
                     onSave()
@@ -270,7 +294,7 @@ struct GenerationResultView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.glassProminent)
+                .glassButton(prominent: true)
             }
         }
     }
@@ -278,13 +302,16 @@ struct GenerationResultView: View {
 
 #Preview {
     @Previewable @State var name = "Warm Autumn Forest"
-    @Previewable @State var colors: [Color] = [Color(hex: "A95F4D")!, Color(hex: "D98A6C")!, Color(hex: "F5C79A")!, Color(hex: "E29C88")!]
-    @Previewable @State var hexes = ["#A95F4D", "#D98A6C", "#F5C79A", "#E29C88"]
-    @Previewable @State var names = ["Amber", "Maple", "Goldenrod", "Moss"]
+    @Previewable @State var paletteColors: [PaletteColor] = [
+        PaletteColor(color: Color(hex: "A95F4D")!, hex: "#A95F4D", name: "Amber"),
+        PaletteColor(color: Color(hex: "D98A6C")!, hex: "#D98A6C", name: "Maple"),
+        PaletteColor(color: Color(hex: "F5C79A")!, hex: "#F5C79A", name: "Goldenrod"),
+        PaletteColor(color: Color(hex: "E29C88")!, hex: "#E29C88", name: "Moss"),
+    ]
 
     NavigationStack {
         GenerationResultView(
-            name: $name, colors: $colors, hexCodes: $hexes, colorNames: $names,
+            name: $name, paletteColors: $paletteColors,
             onBack: {}, onRegenerate: {}, onDescribeChange: { _ in }, onSave: {}
         )
     }

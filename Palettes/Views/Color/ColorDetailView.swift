@@ -84,7 +84,11 @@ struct ColorDetailView: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 560), spacing: 14)], spacing: 14) {
                             ForEach(containingPalettes) { palette in
                                 NavigationLink(value: palette) {
-                                    PaletteCellSearch(paletteName: palette.name, colors: palette.colors)
+                                    PaletteCellSearch(
+                                        paletteName: palette.name,
+                                        colors: palette.colors,
+                                        isGenerated: palette.isGenerated
+                                    )
                                 }
                                 .buttonStyle(.plain)
                                 .hoverEffect(.lift)
@@ -164,14 +168,14 @@ struct ColorDetailView: View {
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])
-                .presentationSizing(.form)
+                .formPresentationSizing()
             }
         }
         .sheet(isPresented: $isCreatingPalette) {
             NewPaletteView(preselectedColor: liveColor)
                 .environmentObject(appData)
                 .presentationDetents([.large])
-                .presentationSizing(.form)
+                .formPresentationSizing()
         }
         .alert("Delete Color", isPresented: $showDeleteAlert) {
             Button("Delete", role: .destructive) {
@@ -212,7 +216,7 @@ struct ColorDetailView: View {
             .accessibilityLabel("Copy \(label)")
         }
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
     }
 
     private var emptyPalettesSection: some View {
@@ -232,20 +236,22 @@ struct ColorDetailView: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
+                .liquidGlass(.interactive, in: .capsule)
 
-                Button {
-                    appData.pendingGenerateColorID = liveColor.id
-                    appData.activeTab = .generate
-                } label: {
-                    Label("Generate Palette", systemImage: "sparkles")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .contentShape(Capsule())
+                if AppleIntelligence.isDeviceSupported {
+                    Button {
+                        appData.pendingGenerateColorID = liveColor.id
+                        appData.activeTab = .generate
+                    } label: {
+                        Label("Generate Palette", systemImage: "sparkles")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlass(.interactive, in: .capsule)
                 }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .capsule)
             }
         }
         .frame(maxWidth: .infinity)
@@ -274,15 +280,13 @@ struct ColorDetailView: View {
         let color = liveColor
         withAnimation(.spring()) {
             for i in appData.palettes.indices {
-                if let colorIndex = appData.palettes[i].hexCodes.firstIndex(where: {
-                    $0.caseInsensitiveCompare(color.HEX) == .orderedSame
+                if let colorIndex = appData.palettes[i].paletteColors.firstIndex(where: {
+                    $0.hex.caseInsensitiveCompare(color.HEX) == .orderedSame
                 }) {
-                    appData.palettes[i].colors.remove(at: colorIndex)
-                    appData.palettes[i].hexCodes.remove(at: colorIndex)
-                    appData.palettes[i].colorNames.remove(at: colorIndex)
+                    appData.palettes[i].paletteColors.remove(at: colorIndex)
                 }
             }
-            appData.palettes.removeAll { $0.colors.isEmpty }
+            appData.palettes.removeAll { $0.paletteColors.isEmpty }
             appData.colors.removeAll { $0.id == color.id }
         }
         dismiss()

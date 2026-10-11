@@ -30,6 +30,7 @@ struct AddColorToPaletteSheet: View {
                 .padding(.bottom, 20)
             }
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Add Color")
@@ -40,6 +41,7 @@ struct AddColorToPaletteSheet: View {
                         Image(systemName: "xmark")
                             .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Close")
                 }
             }
         }
@@ -57,9 +59,9 @@ struct AddColorToPaletteSheet: View {
         }
 
         withAnimation(.spring(response: 0.3)) {
-            appData.palettes[idx].colors.append(entry.color)
-            appData.palettes[idx].hexCodes.append(entry.hex)
-            appData.palettes[idx].colorNames.append(name)
+            appData.palettes[idx].paletteColors.append(
+                PaletteColor(color: entry.color, hex: entry.hex, name: name)
+            )
 
             let alreadyExists = appData.colors.contains {
                 $0.HEX.caseInsensitiveCompare(entry.hex) == .orderedSame
