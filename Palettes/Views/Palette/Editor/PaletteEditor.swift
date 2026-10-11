@@ -317,8 +317,18 @@ struct PaletteEditor: View {
             )
             .navigationTitle("Tag")
             .navigationBarTitleDisplayMode(.inline)
-        case .harmony:
-            Text("Coming in Task 12")
+        case .harmony(let base):
+            HarmonyPage(base: base) { colors in
+                withAnimation(appendAnimation) {
+                    if draft.colors.isEmpty {
+                        draft.replaceAll(with: colors)
+                    } else {
+                        // Dedups by hex, so the base is skipped if it's in.
+                        _ = draft.append(colors)
+                    }
+                }
+                if !path.isEmpty { path.removeLast() }
+            }
         case .photo:
             Text("Coming in Task 13")
         }
