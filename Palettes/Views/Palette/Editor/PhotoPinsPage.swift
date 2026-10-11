@@ -55,9 +55,9 @@ struct PhotoPinsPage: View {
     @State private var pins: [Pin] = []
     @State private var sampler: ImageColorExtractor.PixelSampler?
     @State private var isLoading = true
-    @State private var draggingID: Int?
-    /// Where the dragged pin was when the finger went down.
-    @State private var dragOrigin: CGPoint?
+    /// Pins being dragged, each with where it was when its finger went down.
+    /// Keyed per pin so two fingers on two pins don't share state.
+    @State private var dragOrigins: [Int: CGPoint] = [:]
 
     private static let pinSize: CGFloat = 30
     private static let space = "photoPins"
@@ -117,7 +117,7 @@ struct PhotoPinsPage: View {
     // MARK: - Pin
 
     private func pinView(_ pin: Pin, number: Int, rect: CGRect) -> some View {
-        let lifted = draggingID == pin.id
+        let lifted = dragOrigins[pin.id] != nil
         let color = Color(hex: pin.hex) ?? .gray
         return Circle()
             .fill(color)
@@ -157,11 +157,10 @@ struct PhotoPinsPage: View {
     private func drag(_ id: Int, in rect: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
             .onChanged { value in
-                if draggingID != id {
-                    draggingID = id
-                    dragOrigin = pins.first { $0.id == id }?.point
+                if dragOrigins[id] == nil, let start = pins.first(where: { $0.id == id })?.point {
+                    dragOrigins[id] = start
                 }
-                guard let origin = dragOrigin else { return }
+                guard let origin = dragOrigins[id] else { return }
                 // The pin tracks the finger 1:1, so nothing here animates.
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
@@ -170,8 +169,7 @@ struct PhotoPinsPage: View {
                 }
             }
             .onEnded { _ in
-                draggingID = nil
-                dragOrigin = nil
+                dragOrigins[id] = nil
                 refreshName(of: id)
             }
     }
@@ -209,6 +207,8 @@ struct PhotoPinsPage: View {
     /// push first so the transition isn't stalled by the work.
     private func load() async {
         try? await Task.sleep(for: .milliseconds(300))
+        // `try?` swallows cancellation; don't extract or dismiss after Back.
+        guard !Task.isCancelled else { return }
         guard let sampler = ImageColorExtractor.PixelSampler(image: image) else {
             fail(AppError.imageProcessingFailed.localizedDescription)
             return

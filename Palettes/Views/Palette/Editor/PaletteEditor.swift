@@ -115,9 +115,6 @@ struct PaletteEditor: View {
                             }
                             Button("Keep Editing", role: .cancel) {}
                         }
-                        .onChange(of: showDiscardConfirmation) { _, isShowing in
-                            if !isShowing { generateAfterDiscard = false }
-                        }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     SheetConfirmButton(kind: isCreating ? .create : .save) { confirm() }
@@ -381,8 +378,23 @@ struct PaletteEditor: View {
     private func showPhotoPins(for image: UIImage) {
         Task {
             try? await Task.sleep(for: .milliseconds(300))
-            photoImage = image
+            photoImage = Self.downsampled(image, longSide: 2048)
             path.append(.photo)
+        }
+    }
+
+    /// A phone photo is far bigger than anything shown or sampled here; one
+    /// small copy serves display, sampling and extraction.
+    private static func downsampled(_ image: UIImage, longSide: CGFloat) -> UIImage {
+        let size = image.size
+        let longest = max(size.width, size.height)
+        guard longest > longSide else { return image }
+        let scale = longSide / longest
+        let target = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
         }
     }
 
