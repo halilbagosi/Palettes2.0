@@ -330,7 +330,7 @@ struct PaletteEditor: View {
                     }
                 }
                 if added == 0 {
-                    ToastManager.shared.show("Already in this palette", icon: "checkmark.circle")
+                    ToastManager.shared.show("Already in this palette", icon: "info.circle")
                 } else if !path.isEmpty {
                     path.removeLast()
                 }

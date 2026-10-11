@@ -15,16 +15,14 @@ struct HarmonyPage: View {
     let base: String?
     let onChoose: ([PaletteColor]) -> Void
 
-    /// Placeholder until `onAppear` seeds it, so a random starter is picked
-    /// once rather than on every init.
-    @State private var color: Color = .blue
-    @State private var seeded = false
+    @State private var color: Color
     /// Spoken names for the strips' hexes; hexes are read until they resolve.
     @State private var names: [String: String] = [:]
 
     init(base: String?, onChoose: @escaping ([PaletteColor]) -> Void) {
         self.base = base
         self.onChoose = onChoose
+        _color = State(initialValue: Color(hex: base ?? ColorPickerModel.randomStarter()) ?? .blue)
     }
 
     private var hex: String { ColorComposer.hexKey(color) }
@@ -60,11 +58,6 @@ struct HarmonyPage: View {
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            guard !seeded else { return }
-            seeded = true
-            color = Color(hex: base ?? ColorPickerModel.randomStarter()) ?? .blue
-        }
         .task(id: hex) { await resolveNames() }
     }
 
@@ -120,9 +113,9 @@ struct HarmonyPage: View {
         try? await Task.sleep(for: .milliseconds(150))
         var resolved: [String: String] = [:]
         for harmony in ColorPickerModel.harmonies(for: hex) {
-            for hex in harmony.hexes where resolved[hex] == nil {
+            for stripHex in harmony.hexes where resolved[stripHex] == nil {
                 if Task.isCancelled { return }
-                resolved[hex] = ColorNamer.name(forHex: hex)
+                resolved[stripHex] = ColorNamer.name(forHex: stripHex)
             }
             await Task.yield()
         }
