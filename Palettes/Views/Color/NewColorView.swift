@@ -7,7 +7,7 @@ struct NewColorView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
 
-    @State private var color = Color(hue: Double.random(in: 0..<1), saturation: 0.65, brightness: 0.88)
+    @State private var color = Color(hex: ColorPickerModel.randomStarter()) ?? .orange
     @State private var name = ""
 
     @State private var duplicateExistingName = ""

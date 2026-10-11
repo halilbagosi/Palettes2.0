@@ -136,24 +136,13 @@ struct PaletteEditSheet: View {
                         colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
                         hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
                         colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
-                        promptOnNameMatch: true,
-                        onSaveWithAction: { isOverwrite in
-                            let updatedHex = appData.palettes[paletteIdx].paletteColors[wrapper.id].hex
-                            let updatedName = appData.palettes[paletteIdx].paletteColors[wrapper.id].name
-                            let updatedColor = appData.palettes[paletteIdx].paletteColors[wrapper.id].color
-                            
-                            if isOverwrite {
-                                if let existingIndex = appData.colors.firstIndex(where: { $0.name == updatedName }) {
-                                    appData.colors[existingIndex].HEX = updatedHex
-                                    appData.colors[existingIndex].color = updatedColor
-                                }
-                            } else {
-                                if let existingIndex = appData.colors.firstIndex(where: { $0.HEX.caseInsensitiveCompare(updatedHex) == .orderedSame }) {
-                                    appData.colors[existingIndex].name = updatedName
-                                    appData.colors[existingIndex].color = updatedColor
-                                } else {
-                                    appData.colors.append(ColorViewModel(name: updatedName, color: updatedColor, HEX: updatedHex, usedInPalette: true))
-                                }
+                        onSave: {
+                            // Q17: only this palette's color changes; its hex joins
+                            // the library if absent, library colors are never altered.
+                            let edited = appData.palettes[paletteIdx].paletteColors[wrapper.id]
+                            let known = appData.colors.contains { $0.HEX.caseInsensitiveCompare(edited.hex) == .orderedSame }
+                            if !known {
+                                appData.colors.append(ColorViewModel(name: edited.name, color: edited.color, HEX: edited.hex, usedInPalette: true))
                             }
                         }
                     )

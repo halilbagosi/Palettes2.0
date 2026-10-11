@@ -178,10 +178,7 @@ struct PaletteDetailView: View {
                         colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
                         hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
                         colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
-                        promptOnNameMatch: true,
-                        onSaveWithAction: { isOverwrite in
-                            syncEditedPaletteColor(at: wrapper.id, isOverwrite: isOverwrite)
-                        }
+                        onSave: { syncEditedPaletteColor(at: wrapper.id) }
                     )
                     .environmentObject(appData)
                     .presentationDetents([.large])
@@ -433,31 +430,15 @@ struct PaletteDetailView: View {
         taggingColorIndex = index
     }
 
-    private func syncEditedPaletteColor(at index: Int, isOverwrite: Bool) {
+    /// A color edited from a palette changes only that palette. If its new hex
+    /// isn't in the library yet, it joins it; library colors are never altered.
+    private func syncEditedPaletteColor(at index: Int) {
         guard let paletteIdx = paletteIndex,
               index < appData.palettes[paletteIdx].paletteColors.count else { return }
-
-        let updatedColor = appData.palettes[paletteIdx].paletteColors[index]
-
-        if isOverwrite {
-            if let existingIndex = appData.colors.firstIndex(where: { $0.name == updatedColor.name }) {
-                appData.colors[existingIndex].HEX = updatedColor.hex
-                appData.colors[existingIndex].color = updatedColor.color
-            }
-        } else if let existingIndex = appData.colors.firstIndex(where: {
-            $0.HEX.caseInsensitiveCompare(updatedColor.hex) == .orderedSame
-        }) {
-            appData.colors[existingIndex].name = updatedColor.name
-            appData.colors[existingIndex].color = updatedColor.color
-        } else {
-            appData.colors.append(
-                ColorViewModel(
-                    name: updatedColor.name,
-                    color: updatedColor.color,
-                    HEX: updatedColor.hex,
-                    usedInPalette: true
-                )
-            )
+        let edited = appData.palettes[paletteIdx].paletteColors[index]
+        let known = appData.colors.contains { $0.HEX.caseInsensitiveCompare(edited.hex) == .orderedSame }
+        if !known {
+            appData.colors.append(ColorViewModel(name: edited.name, color: edited.color, HEX: edited.hex, usedInPalette: true))
         }
     }
 
