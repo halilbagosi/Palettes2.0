@@ -18,7 +18,7 @@
 - Every new file imports every module whose members it uses (`SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES`): `@Published`/`ObservableObject` need `import Combine`.
 - `AppData` is the single source of truth; editors work on drafts and write back through `appData.palettes` / `appData.colors` only on confirm.
 - **Toolbar button rule (all iOS versions):** adding something → **+** symbol, title "Add" (or "Add N"); creating or saving → **✓** symbol, title "Create"/"Save". Cancel → ✕, title "Cancel". Every toolbar item is a titled `Label` (plan 016, A5).
-- **Motion spec:** layout = `.spring(duration: 0.35, bounce: 0)`; small hops `.snappy`; reorder lift `scaleEffect(1.03)` + settle `.spring(duration: 0.35, bounce: 0.15)`; drags (spectrum, sliders, pins, reorder) track 1:1 with **no** animation; `.sensoryFeedback(.selection, …)` on grid-cell snap and band reorder slot change; Reduce Motion → `.opacity` transitions only, no scale/offset; nothing animates on keyboard-initiated actions.
+- **Motion spec:** layout = `.spring(duration: 0.35, bounce: 0)`; small hops `.snappy`; reorder = system drag lift (Task 1 finding), insertion bar moves `.snappy`, drop settles `.spring(duration: 0.35, bounce: 0.15)`; drags (spectrum, sliders, pins, reorder) track 1:1 with **no** animation; `.sensoryFeedback(.selection, …)` on grid-cell snap and band reorder slot change; Reduce Motion → `.opacity` transitions only, no scale/offset; nothing animates on keyboard-initiated actions.
 - Settings is out of scope and must not change.
 - Copy: sentence-level plain language, no jargon; buttons are verbs.
 - Test command (use a throwaway sim — the shared sim `208E09D6` is used by other sessions):
@@ -95,7 +95,7 @@ Carried over unchanged from 017: 2-color minimum; inline duplicate notices; blan
 
 ---
 
-### Task 1: Prototype gate — Spectrum pad in a pinned header, and strip reorder
+### Task 1: Prototype gate — Spectrum pad in a pinned header, and strip reorder — DONE (see Prototype findings)
 
 Throwaway. Answers two risks before real code: (a) does a drag surface in the pinned region (not inside the `Form`) track cleanly with no scroll conflict on iOS 17 and 26; (b) does long-press-drag reorder on a horizontal strip feel right and coexist with tap and context menu.
 
@@ -1003,7 +1003,7 @@ private func syncEditedPaletteColor(at index: Int) {
 - Create: `Palettes/Views/Palette/Editor/PaletteStripEditor.swift`
 
 **Interfaces:**
-- Consumes: `PaletteDraft` (Task 2), Task 1 findings.
+- Consumes: `PaletteDraft` (Task 2), Task 1 findings (variant C).
 - Produces:
   ```swift
   struct PaletteStripEditor: View {
@@ -1020,9 +1020,9 @@ Behavior:
 - Height 120 (one column, all widths). Bands share width equally; the **+** sits as a 44 pt-wide trailing tile inside the strip's rounded shape (dashed outline, `plus` symbol, `Menu { addMenu }`, `accessibilityLabel("Add Color")`).
 - Tap a band → `selection = id` then `onEdit(id)`. The selected band shows a 3 pt inner ring in `legibleInk`.
 - Context menu per band: Edit (`pencil`), Duplicate (`plus.square.on.square`), Tag… (`tag`), Remove (`trash`, destructive). Remove calls `draft.remove(id:)` then `onRemove`.
-- Reorder per Task 1 findings: lifted band `scaleEffect(1.03)`, `zIndex(1)`, shadow; follows the finger 1:1 (no animation); neighbors slide with `.spring(duration: 0.35, bounce: 0)` as the target slot changes; drop settles with `.spring(duration: 0.35, bounce: 0.15)`; `.sensoryFeedback(.selection, trigger: targetSlot)`. Commit with `draft.move(id:to:)`.
+- Reorder per Task 1 findings (variant C): each band is `.draggable(BandDragItem(id:))` with a band-shaped preview, plus `.dropDestination(for: BandDragItem.self) { … } isTargeted: { … }`, plus `.contextMenu`. `BandDragItem: Codable, Transferable` uses `CodableRepresentation(contentType: .paletteBand)`, where `extension UTType { static let paletteBand = UTType(exportedAs: "com.halilbagosi.palettes.band") }` is declared in this file and declared under `UTExportedTypeDeclarations` in `Palettes/AppInfo.plist` (the target's plist; conforms to `public.data`). Edit the plist file, never `project.pbxproj`. While a band is targeted, show a 3 pt `legibleInk` insertion bar on its leading edge, moving with `.snappy`, with `.sensoryFeedback(.selection, trigger: targetedID)`. On drop, commit with `draft.move(id:to:)` inside `.spring(duration: 0.35, bounce: 0.15)`. Before building, re-run the Task 1 C checks on iOS 17.
 - Each band: `accessibilityElement`, label "\(name), \(hex)", `accessibilityHint("Double-tap to edit")`, custom actions Move Left / Move Right / Duplicate / Tag / Remove.
-- Reduce Motion: no scale/offset; reorder via the accessibility actions and an opacity cross-fade on drop.
+- Reduce Motion: the drop uses `.easeInOut(duration: 0.2)` with no spring, and the insertion bar fades instead of moving.
 - Band with a role shows a small capsule with the role name at the bottom, in `legibleInk` on `ink.opacity(0.15)`.
 
 - [ ] **Step 1: Implement** per above, reusing the Task 1 gesture setup.
@@ -1141,7 +1141,27 @@ Behavior:
 
 ## Prototype findings
 
-_(Filled in by Task 1.)_
+Run 2026-10-11 on an iPhone 17 Pro sim (iOS 27.0) with the prototype in a `.large` sheet. The code is on branch **`prototype/018-gestures`** (`aa6057d`, launch with `-proto018`). It isn't merged anywhere.
+
+**Q1: Spectrum pad above a Form, inside a sheet. Pass.** A `DragGesture(minimumDistance: 0)` on a field in the pinned area tracked 1:1, from the top edge of the field to the bottom. It never scrolled the Form and never pulled the sheet down. Keep the picker outside the Form, as planned.
+
+**Q2: Reordering on the strip alongside tap and the context menu.**
+
+| Variant | Tap | Still hold | Hold ~0.45 s, then move | Hold ~0.85 s, then move | Quick swipe |
+|---|---|---|---|---|---|
+| A: `LongPressGesture(0.3).sequenced(before: DragGesture())` + `.contextMenu` | tap ✅ | menu ✅ | reorders ✅ | **menu wins, no reorder** ❌ | nothing ✅ |
+| B: `.onLongPressGesture` + `.simultaneousGesture(DragGesture(10))` + `.contextMenu` | tap ✅ | menu ✅ | reorders ✅ | reorders ✅ | **reorders by accident** ❌ |
+| B with the drag gated on the hold | — | — | **nothing** ❌ (the hold's `perform` never fired alongside the drag) | — | nothing |
+| **C: system `.draggable` + `.dropDestination` + `.contextMenu`** | tap ✅ | menu ✅ | — | **lifts, then reorders** ✅ | nothing ✅ |
+
+- B also once left a context menu that taps couldn't close. It didn't happen with C, where picking a menu item fires its action and the menu closes.
+- **Verdict: use C.** It's the iOS-standard pattern, the same as Photos and the Home Screen: hold to lift, keep still for the menu, move to drag. It needs no gesture race of our own.
+- **What C changes in Task 10:**
+  - The lift and drag preview are the system's. Our `scaleEffect(1.03)` lift isn't used.
+  - Neighbors can't slide 1:1 under a system drag. Show the target slot from `isTargeted` instead: a 3 pt `legibleInk` insertion bar on the targeted band's leading edge, which moves with `.snappy`. Settle on drop with `.spring(duration: 0.35, bounce: 0.15)`.
+  - The drag payload should be a private `Transferable` (a `CodableRepresentation` with a custom `UTType` exported as `com.halilbagosi.palettes.band`), so bands can't be dropped into other apps as text.
+- **Also seen:** with the bands keyed by index (`ForEach(indices, id: \.self)`), a move cross-fades colors instead of sliding. Key the bands by `PaletteColor.id`, as the plan already does.
+- **iOS 17.5 (iPhone 15 Pro sim):** the prototype builds and renders correctly. **The touch checks there are still pending**, because simulator input access for that device wasn't granted during the run. Re-run the Q2 C row on iOS 17 at the start of Task 10.
 
 ## Follow-ups
 
