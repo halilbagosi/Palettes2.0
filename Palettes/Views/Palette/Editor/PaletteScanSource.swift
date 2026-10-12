@@ -62,7 +62,7 @@ struct PaletteScanSource: View {
         .alert("Turn Off True Tone", isPresented: $showTrueToneAlert) {
             Button("Got It") { didAcknowledgeTrueToneWarning = true }
         } message: {
-            Text(ScanPicker.trueToneMessage)
+            Text(ScanSession.trueToneMessage)
         }
         .photosPicker(isPresented: $showLibrary, selection: $photosPickerItem, matching: .images)
         .fullScreenCover(isPresented: $showCamera) {

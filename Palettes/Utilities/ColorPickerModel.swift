@@ -2,33 +2,13 @@
 //  ColorPickerModel.swift
 //  Palettes
 //
-//  The numbers behind the color picker: the swatch grid, the vivid colors a
-//  new color starts on, and the harmony previews for "From One Color".
+//  The vivid colors a new color starts on, and the harmony previews for
+//  the palette editor's Harmony source.
 //
 
 import SwiftUI
 
 enum ColorPickerModel {
-    static let gridColumns = 12
-    static let gridRows = 8
-
-    /// Hue columns × lightness rows, lightest first; the last row is grays.
-    static func gridHexes() -> [[String]] {
-        let brightness: [Double] = [1.0, 1.0, 1.0, 0.92, 0.75, 0.58, 0.4]
-        let saturation: [Double] = [0.25, 0.5, 0.8, 1.0, 1.0, 1.0, 1.0]
-        var rows: [[String]] = []
-        for r in 0..<(gridRows - 1) {
-            rows.append((0..<gridColumns).map { c in
-                hex(Color(hue: Double(c) / Double(gridColumns), saturation: saturation[r], brightness: brightness[r]))
-            })
-        }
-        rows.append((0..<gridColumns).map { c in
-            let v = 1 - Double(c) / Double(gridColumns - 1)
-            return hex(Color(white: v))
-        })
-        return rows
-    }
-
     static let vividStarters: [String] = [
         "#FF5D00", "#FF2D55", "#FF9F0A", "#FFD60A", "#34C759", "#00C7BE",
         "#30B0C7", "#0A84FF", "#5E5CE6", "#BF5AF2", "#FF375F", "#AC8E68",
@@ -70,11 +50,4 @@ enum ColorPickerModel {
             return (scheme, built.hexes)
         }
     }
-
-    /// Library colors are appended as they're saved, so the tail is newest.
-    static func recentColors(_ library: [ColorViewModel], limit: Int = 12) -> [ColorViewModel] {
-        Array(library.suffix(limit).reversed())
-    }
-
-    private static func hex(_ color: Color) -> String { ColorComposer.hexKey(color) }
 }
