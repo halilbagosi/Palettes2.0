@@ -79,7 +79,7 @@ struct PhotoPinsView: View {
                         pinView(pin, number: offset + 1, rect: rect)
                     }
 
-                    if session.isExtracting {
+                    if session.isExtracting || session.isLoadingPhoto {
                         ProgressView()
                     }
                 }
@@ -112,7 +112,6 @@ struct PhotoPinsView: View {
         // Room for a pin to hang over the photo's edge.
         .padding(.horizontal, Self.pinSize / 2)
         .padding(.top, Self.pinSize / 2 - 4)
-        .task { await session.extractIfNeeded() }
     }
 
     // MARK: - Pin

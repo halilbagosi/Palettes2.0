@@ -141,7 +141,7 @@ struct PaletteEditor: View {
                 .animation(keyboardAnimation, value: panelKeyboard)
                 .onChange(of: geo.size.height, initial: true) { _, height in
                     // Heights seen while a keyboard is up are not the editor's own.
-                    if !softKeyboardUp { stableHeight = height }
+                    if !(softKeyboardUp || nameFocused || panelFieldFocused) { stableHeight = height }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
                     keyboardHeight = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0

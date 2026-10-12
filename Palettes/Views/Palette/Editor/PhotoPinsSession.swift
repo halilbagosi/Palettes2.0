@@ -50,6 +50,11 @@ final class PhotoPinsSession: ObservableObject {
         start { photo.downsampled(longSide: longSide) }
     }
 
+    /// Waits for the photo load, and the extraction that follows it, to finish.
+    func waitForLoad() async {
+        await loadTask?.value
+    }
+
     /// Drops the photo and its pins.
     func clear() {
         loadTask?.cancel()
@@ -71,21 +76,28 @@ final class PhotoPinsSession: ObservableObject {
                 image = produced
                 pins = []
                 sampler = nil
+                // The session finds the colors itself, so a replacement photo
+                // gets pins whether or not the pins view is on screen.
+                await extractIfNeeded()
             } else {
                 ToastManager.shared.show("Couldn't open that photo", icon: "exclamationmark.triangle.fill")
             }
         }
     }
 
-    /// Finds the photo's colors and where each sits, once per photo. Safe to
-    /// call whenever the pins view appears; does nothing if the pins exist.
+    /// Finds the photo's colors and where each sits, once per photo. Does
+    /// nothing if the pins exist or a search is already running.
     func extractIfNeeded() async {
-        guard let image, pins.isEmpty else { return }
+        guard let image, pins.isEmpty, !isExtracting else { return }
         isExtracting = true
         // Let the spinner draw before the work starts.
         try? await Task.sleep(for: .milliseconds(50))
         // The view went away (or the photo changed) before we began.
-        guard !Task.isCancelled, self.image === image else { return }
+        guard !Task.isCancelled, self.image === image else {
+            // A newer photo (or clear) owns the state; only undo our own flag.
+            if self.image === image { isExtracting = false }
+            return
+        }
         guard let sampler = ImageColorExtractor.PixelSampler(image: image) else {
             fail(AppError.imageProcessingFailed.localizedDescription)
             return

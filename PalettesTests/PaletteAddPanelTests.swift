@@ -36,7 +36,7 @@ struct PaletteEditorLayoutTests {
         #expect(PaletteEditorLayout.panelHeight(available: 560, minimum: minimum) == minimum)
     }
 
-    @Test func smallPhoneStillFitsPickChrome() {
+    @Test func panelOnASmallPhoneKeepsItsMinimumAndRoomAbove() {
         // A 667 pt phone leaves roughly 600 pt in the sheet.
         let h = PaletteEditorLayout.panelHeight(available: 600)
         #expect(h >= PaletteEditorLayout.minPanelHeight)
@@ -78,5 +78,32 @@ struct NextStarterTests {
         var rng = SystemRandomNumberGenerator()
         let taken = Set(ColorPickerModel.vividStarters.map { $0.uppercased() })
         #expect(ColorPickerModel.vividStarters.contains(ColorPickerModel.nextStarter(excluding: taken, using: &rng)))
+    }
+}
+
+@MainActor
+struct PhotoPinsSessionTests {
+    private func stripes(_ colors: [UIColor]) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: 300, height: 300)).image { ctx in
+            let h = 300 / CGFloat(colors.count)
+            for (i, c) in colors.enumerated() {
+                c.setFill()
+                ctx.fill(CGRect(x: 0, y: CGFloat(i) * h, width: 300, height: h))
+            }
+        }
+    }
+
+    @Test func aReplacementPhotoGetsItsOwnPins() async {
+        let session = PhotoPinsSession()
+        session.load(photo: stripes([.systemRed, .systemGreen, .systemBlue, .systemOrange]))
+        await session.waitForLoad()
+        let first = session.pins
+        #expect(!first.isEmpty)
+
+        session.load(photo: stripes([.systemPurple, .systemYellow, .systemTeal, .black]))
+        await session.waitForLoad()
+        #expect(!session.pins.isEmpty)
+        #expect(session.pins.map(\.hex) != first.map(\.hex))
+        #expect(!session.isExtracting && !session.isLoadingPhoto)
     }
 }
