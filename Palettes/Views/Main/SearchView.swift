@@ -372,4 +372,5 @@ private extension View {
 #Preview {
     SearchView()
         .environmentObject(AppData())
+        .environmentObject(SceneRouter())
 }

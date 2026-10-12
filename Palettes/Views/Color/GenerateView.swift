@@ -767,7 +767,8 @@ struct GenerateView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
             .liquidGlass(.interactive, in: .capsule)
-
+            .contentShape(Capsule())
+            .onTapGesture { vibeFocused = true }
         }
     }
 
@@ -978,5 +979,6 @@ private struct GenerateHeaderView: View {
     if #available(iOS 26.0, *) {
         GenerateView()
             .environmentObject(AppData())
+            .environmentObject(SceneRouter())
     }
 }
