@@ -109,7 +109,7 @@ struct PaletteView: View {
                         .formPresentationSizing()
                 }
                 .sheet(item: $paletteToEdit) { palette in
-                    PaletteEditSheet(paletteName: palette.name, palette: palette)
+                    PaletteEditSheet(palette: palette)
                         .environmentObject(appData)
                         .formPresentationSizing()
                 }

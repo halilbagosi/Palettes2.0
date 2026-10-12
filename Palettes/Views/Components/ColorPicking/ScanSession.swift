@@ -87,24 +87,18 @@ final class ScanSession: ObservableObject {
         }
     }
 
-    /// Finds the photo's dominant color and where it sits, and makes the photo current.
+    /// Makes the photo current; the host picks the starting color from it.
     private func commit(_ raw: UIImage) {
         let small = raw.downsampled(longSide: 2048)
         guard let sampler = ImageColorExtractor.PixelSampler(image: small) else {
             fail(AppError.imageProcessingFailed.localizedDescription)
             return
         }
-        do {
-            let rgb = try ImageColorExtractor.extractDominantRGB(from: small)
-            let hex = ColorAdjustment.hexString(r: rgb.r, g: rgb.g, b: rgb.b)
-            image = small
-            self.sampler = sampler
-            point = PhotoPinLocator.locate(hexes: [hex], in: sampler).first ?? CGPoint(x: 0.5, y: 0.5)
-            sampledColor = ColorAdjustment.color(r: rgb.r, g: rgb.g, b: rgb.b)
-            needsDelivery = true
-        } catch {
-            fail(error.localizedDescription)
-        }
+        image = small
+        self.sampler = sampler
+        point = CGPoint(x: 0.5, y: 0.5)
+        sampledColor = nil
+        needsDelivery = true
     }
 
     private func fail(_ message: String) {

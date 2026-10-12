@@ -60,11 +60,6 @@ struct PaletteDraft: Equatable {
         return (at, inserted.count)
     }
 
-    mutating func replaceAll(with new: [PaletteColor]) {
-        colors = []
-        append(new)
-    }
-
     @discardableResult
     mutating func remove(id: UUID) -> (index: Int, color: PaletteColor)? {
         guard let index = colors.firstIndex(where: { $0.id == id }) else { return nil }

@@ -127,12 +127,6 @@ struct PaletteDraftTests {
         #expect(edited != draft)   // drives Cancel's "Discard changes?" check
     }
 
-    @Test func replaceAllDedupsWithinIncomingBatch() {
-        var draft = PaletteDraft(colors: [pc("#999999")])
-        draft.replaceAll(with: [pc("#111111"), pc("#111111"), pc("#222222")])
-        #expect(draft.colors.map(\.hex) == ["#111111", "#222222"])
-    }
-
     @Test func moveClampsOutOfRangeIndex() {
         var draft = PaletteDraft(colors: [pc("#111111"), pc("#222222"), pc("#333333")])
         draft.move(id: draft.colors[0].id, to: 99)

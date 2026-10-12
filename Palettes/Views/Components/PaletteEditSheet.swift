@@ -5,7 +5,6 @@ import SwiftUI
 /// "Edit Palette" sheet: the shared `PaletteEditor` on a draft of the palette.
 /// Cancel throws the changes away; ✓ writes name and colors back in one go.
 struct PaletteEditSheet: View {
-    let paletteName: String
     let palette: PaletteViewModel
     @EnvironmentObject var appData: AppData
     @Environment(\.dismiss) var dismiss

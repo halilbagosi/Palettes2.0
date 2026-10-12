@@ -154,7 +154,7 @@ struct PaletteDetailView: View {
                 }
             }
             .sheet(isPresented: $isEditingPalette) {
-                PaletteEditSheet(paletteName: livePalette.name, palette: palette)
+                PaletteEditSheet(palette: palette)
                     .environmentObject(appData)
                     .formPresentationSizing()
             }
