@@ -40,12 +40,19 @@ struct PaletteEditor: View {
     /// Used when the name is left blank; recomputed as the colors change.
     @State private var suggestedName = ""
     @State private var showDiscardConfirmation = false
+    /// The first row the add panel just added; the list scrolls to it.
+    @State private var scrollTarget: UUID?
     @FocusState private var nameFocused: Bool
-    /// The add panel's Pick name field has the keyboard.
-    @State private var colorNameFocused = false
+    /// A text field in the add panel (Pick's name, Library's search) has focus.
+    @State private var panelFieldFocused = false
+    /// Height of the on-screen software keyboard, 0 when there is none (or a
+    /// hardware keyboard is attached): focus alone doesn't mean a keyboard
+    /// took any room.
+    @State private var keyboardHeight: CGFloat = 0
     /// The editor's height before a keyboard took some, so the bands keep
     /// their sizes while one is up.
     @State private var stableHeight: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 1
     @AppStorage("paletteAddSource") private var sourceRaw = PaletteAddSource.pick.rawValue
 
     init(mode: Mode, draft: PaletteDraft, onConfirm: @escaping (PaletteDraft, String) -> Void) {
@@ -57,7 +64,14 @@ struct PaletteEditor: View {
 
     private var isCreating: Bool { mode == .create }
     private var hasChanges: Bool { draft != original }
-    private var keyboardUp: Bool { nameFocused || colorNameFocused }
+    private var softKeyboardUp: Bool { keyboardHeight > Self.softKeyboardThreshold }
+    /// The palette's name is being typed on a software keyboard: the panel steps aside.
+    private var nameKeyboard: Bool { nameFocused && softKeyboardUp }
+    /// A panel field is being typed in: the strip and list step aside instead.
+    private var panelKeyboard: Bool { panelFieldFocused && softKeyboardUp }
+
+    /// A hardware keyboard shows at most a shortcut bar, far below this.
+    private static let softKeyboardThreshold: CGFloat = 120
 
     private var source: Binding<PaletteAddSource> {
         Binding(
@@ -82,28 +96,33 @@ struct PaletteEditor: View {
         NavigationStack(path: $path) {
             GeometryReader { geo in
                 let available = stableHeight > 0 ? stableHeight : geo.size.height
-                let panelHeight = PaletteEditorLayout.panelHeight(available: available)
+                let preferred = PaletteEditorLayout.panelHeight(
+                    available: available,
+                    minimum: PaletteEditorLayout.minimum(typeScale: typeScale)
+                )
+                // With the strip and list stepped aside, the panel still has
+                // to fit in what the keyboard leaves.
+                let panelHeight = panelKeyboard ? min(preferred, max(geo.size.height - 12, 0)) : preferred
 
                 VStack(spacing: 0) {
-                    // Named-color typing in the panel needs the room: the
-                    // strip and list step aside (hidden, not removed, so
-                    // their state stays).
+                    // Typing in the panel needs the room: the strip and list
+                    // step aside (hidden, not removed, so their state stays).
                     VStack(spacing: 0) {
                         header
                         list
                     }
-                    .frame(maxHeight: colorNameFocused ? 0 : .infinity)
+                    .frame(maxHeight: panelKeyboard ? 0 : .infinity)
                     .clipped()
-                    .opacity(colorNameFocused ? 0 : 1)
-                    .allowsHitTesting(!colorNameFocused)
-                    .accessibilityHidden(colorNameFocused)
+                    .opacity(panelKeyboard ? 0 : 1)
+                    .allowsHitTesting(!panelKeyboard)
+                    .accessibilityHidden(panelKeyboard)
 
                     PaletteAddPanel(
                         draft: draft,
                         selection: $selection,
                         source: source,
                         height: panelHeight,
-                        colorNameFocused: $colorNameFocused,
+                        fieldFocused: $panelFieldFocused,
                         onAdd: add
                     )
                     .padding(.horizontal, 12)
@@ -111,17 +130,24 @@ struct PaletteEditor: View {
                     .padding(.bottom, 8)
                     // The palette's own name field needs the whole screen
                     // above the keyboard.
-                    .frame(height: nameFocused ? 0 : panelHeight + 12, alignment: .top)
+                    .frame(height: nameKeyboard ? 0 : panelHeight + 12, alignment: .top)
                     .clipped()
-                    .opacity(nameFocused ? 0 : 1)
-                    .allowsHitTesting(!nameFocused)
-                    .accessibilityHidden(nameFocused)
+                    .opacity(nameKeyboard ? 0 : 1)
+                    .allowsHitTesting(!nameKeyboard)
+                    .accessibilityHidden(nameKeyboard)
                 }
                 .frame(maxHeight: .infinity, alignment: .bottom)
-                .animation(keyboardAnimation, value: keyboardUp)
+                .animation(keyboardAnimation, value: nameKeyboard)
+                .animation(keyboardAnimation, value: panelKeyboard)
                 .onChange(of: geo.size.height, initial: true) { _, height in
                     // Heights seen while a keyboard is up are not the editor's own.
-                    if !keyboardUp { stableHeight = height }
+                    if !softKeyboardUp { stableHeight = height }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+                    keyboardHeight = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                    keyboardHeight = 0
                 }
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
@@ -154,9 +180,7 @@ struct PaletteEditor: View {
         // Sheets cover the app-root toast overlay, so host one here too.
         .toastOverlay()
         // A swipe down mustn't silently throw away changes; Cancel asks first.
-        // Nor may it steal a drag on the pickers: Pick and Scan are drag
-        // surfaces, so a downward drag there would otherwise close the sheet.
-        .interactiveDismissDisabled(hasChanges || source.wrappedValue.isDragSurface)
+        .interactiveDismissDisabled(hasChanges)
         .onAppear { updateSuggestedName() }
         // A pending Undo mustn't outlive the draft it would act on.
         .onDisappear { ToastManager.shared.dismissUndo() }
@@ -263,10 +287,10 @@ struct PaletteEditor: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .softScrollEdge()
-            .onChange(of: draft.colors.count) { old, new in
-                // Show what was just added.
-                guard new > old, let last = draft.colors.last else { return }
-                withAnimation(appendAnimation) { proxy.scrollTo(last.id, anchor: .bottom) }
+            .onChange(of: scrollTarget) { _, target in
+                guard let target else { return }
+                scrollTarget = nil
+                withAnimation(appendAnimation) { proxy.scrollTo(target, anchor: .center) }
             }
         }
     }
@@ -306,10 +330,14 @@ struct PaletteEditor: View {
     /// Colors from the add panel are appended (duplicates by hex skipped). An
     /// empty palette takes them as they are, which is the same thing.
     private func add(_ colors: [PaletteColor]) {
+        let before = draft.colors.count
         var added = 0
         withAnimation(appendAnimation) { added = draft.append(colors) }
         if added == 0 {
             ToastManager.shared.show("Already in this palette", icon: "info.circle")
+        } else {
+            // Show what was just added (not on Undo or Duplicate).
+            scrollTarget = draft.colors[before].id
         }
     }
 

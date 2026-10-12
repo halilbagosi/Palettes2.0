@@ -13,11 +13,14 @@ import SwiftUI
 struct LibraryPickerView: View {
     /// Uppercased "#RRGGBB" of colors already in the palette.
     var excludedHexes: Set<String>
+    /// The search field has the keyboard, so the editor can make room.
+    @Binding var searchFocused: Bool
     var onAdd: ([ColorViewModel]) -> Void
 
     @EnvironmentObject private var appData: AppData
     @State private var selection: Set<UUID> = []
     @State private var search = ""
+    @FocusState private var searchIsFocused: Bool
 
     private var colors: [ColorViewModel] {
         let items = Array(appData.colors.reversed())
@@ -68,6 +71,8 @@ struct LibraryPickerView: View {
                 .disabled(pickable.isEmpty)
             }
             .sensoryFeedback(.selection, trigger: selection)
+            .onChange(of: searchIsFocused) { _, focused in searchFocused = focused }
+            .onDisappear { searchFocused = false }
         }
     }
 
@@ -96,6 +101,8 @@ struct LibraryPickerView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
+                .focused($searchIsFocused)
+                .onSubmit { searchIsFocused = false }
             if !search.isEmpty {
                 Button { search = "" } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -170,7 +177,7 @@ struct LibraryPickerView: View {
 }
 
 #Preview {
-    LibraryPickerView(excludedHexes: [], onAdd: { _ in })
+    LibraryPickerView(excludedHexes: [], searchFocused: .constant(false), onAdd: { _ in })
         .frame(height: 300)
         .padding()
         .environmentObject(AppData(inMemory: true))

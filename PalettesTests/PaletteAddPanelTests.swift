@@ -16,7 +16,7 @@ struct PaletteEditorLayoutTests {
     }
 
     @Test func panelLeavesRoomForTheStripAndList() {
-        for available in stride(from: 540.0, through: 1100.0, by: 20.0) {
+        for available in stride(from: 600.0, through: 1100.0, by: 20.0) {
             let h = PaletteEditorLayout.panelHeight(available: available)
             #expect(available - h >= PaletteEditorLayout.reservedAbovePanel - 0.001, "available \(available)")
         }
@@ -24,10 +24,23 @@ struct PaletteEditorLayoutTests {
         #expect(PaletteEditorLayout.panelHeight(available: 1200) <= 1200 * PaletteEditorLayout.panelRatio)
     }
 
-    @Test func pickerGetsWhatTheChromeLeaves() {
-        let panel = PaletteEditorLayout.panelHeight(available: 700)
-        #expect(PaletteEditorLayout.pickerContentHeight(panelHeight: panel) == panel - PaletteEditorLayout.pickChrome)
-        #expect(PaletteEditorLayout.pickerContentHeight(panelHeight: 300) == PaletteEditorLayout.minPickerContent)
+    @Test func minimumGrowsWithTypeSizeUpToACap() {
+        #expect(PaletteEditorLayout.minimum(typeScale: 1) == PaletteEditorLayout.minPanelHeight)
+        #expect(PaletteEditorLayout.minimum(typeScale: 0.8) == PaletteEditorLayout.minPanelHeight)
+        #expect(PaletteEditorLayout.minimum(typeScale: 1.2) > PaletteEditorLayout.minPanelHeight)
+        #expect(PaletteEditorLayout.minimum(typeScale: 3) == PaletteEditorLayout.minPanelHeight * PaletteEditorLayout.maxTypeScale)
+    }
+
+    @Test func panelHonorsAScaledMinimum() {
+        let minimum = PaletteEditorLayout.minimum(typeScale: 1.3)
+        #expect(PaletteEditorLayout.panelHeight(available: 560, minimum: minimum) == minimum)
+    }
+
+    @Test func smallPhoneStillFitsPickChrome() {
+        // A 667 pt phone leaves roughly 600 pt in the sheet.
+        let h = PaletteEditorLayout.panelHeight(available: 600)
+        #expect(h >= PaletteEditorLayout.minPanelHeight)
+        #expect(600 - h >= 240 - 0.001)
     }
 }
 

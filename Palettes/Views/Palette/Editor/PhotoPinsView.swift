@@ -40,26 +40,13 @@ enum PhotoPinGeometry {
 
 struct PhotoPinsView: View {
     let image: UIImage
+    @ObservedObject var session: PhotoPinsSession
     let onAdd: ([PaletteColor]) -> Void
     /// Opens the Camera / Library choice for another photo.
     let onChangePhoto: () -> Void
-    /// The photo gave no colors; the host drops it.
-    let onFail: () -> Void
-
-    struct Pin: Identifiable, Equatable {
-        let id: Int
-        var point: CGPoint
-        var hex: String
-        /// The name belongs to `nameHex`; it is refreshed when a drag ends.
-        var name: String
-        var nameHex: String
-    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var pins: [Pin] = []
-    @State private var sampler: ImageColorExtractor.PixelSampler?
-    @State private var isLoading = true
     /// Pins being dragged, each with where it was when its finger went down.
     /// Keyed per pin so two fingers on two pins don't share state.
     @State private var dragOrigins: [Int: CGPoint] = [:]
@@ -69,7 +56,7 @@ struct PhotoPinsView: View {
 
     private var colors: [PaletteColor] {
         var seen = Set<String>()
-        return pins.compactMap { pin in
+        return session.pins.compactMap { pin in
             guard seen.insert(pin.hex.uppercased()).inserted, let color = Color(hex: pin.hex) else { return nil }
             let name = pin.nameHex == pin.hex ? pin.name : ColorNamer.name(forHex: pin.hex)
             return PaletteColor(color: color, hex: pin.hex, name: name)
@@ -88,11 +75,11 @@ struct PhotoPinsView: View {
                         .position(x: rect.midX, y: rect.midY)
                         .accessibilityLabel("Photo")
 
-                    ForEach(Array(pins.enumerated()), id: \.element.id) { offset, pin in
+                    ForEach(Array(session.pins.enumerated()), id: \.element.id) { offset, pin in
                         pinView(pin, number: offset + 1, rect: rect)
                     }
 
-                    if isLoading {
+                    if session.isExtracting {
                         ProgressView()
                     }
                 }
@@ -111,7 +98,7 @@ struct PhotoPinsView: View {
                 .padding(6)
             }
 
-            PaletteStrip(colors: pins.compactMap { Color(hex: $0.hex) }, height: 32, cornerRadius: 10)
+            PaletteStrip(colors: session.pins.compactMap { Color(hex: $0.hex) }, height: 32, cornerRadius: 10)
                 .accessibilityHidden(true)
 
             Button { onAdd(colors) } label: {
@@ -125,12 +112,12 @@ struct PhotoPinsView: View {
         // Room for a pin to hang over the photo's edge.
         .padding(.horizontal, Self.pinSize / 2)
         .padding(.top, Self.pinSize / 2 - 4)
-        .task(id: ObjectIdentifier(image)) { await load() }
+        .task { await session.extractIfNeeded() }
     }
 
     // MARK: - Pin
 
-    private func pinView(_ pin: Pin, number: Int, rect: CGRect) -> some View {
+    private func pinView(_ pin: PhotoPin, number: Int, rect: CGRect) -> some View {
         let lifted = dragOrigins[pin.id] != nil
         let color = Color(hex: pin.hex) ?? .gray
         return Circle()
@@ -171,7 +158,7 @@ struct PhotoPinsView: View {
     private func drag(_ id: Int, in rect: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
             .onChanged { value in
-                if dragOrigins[id] == nil, let start = pins.first(where: { $0.id == id })?.point {
+                if dragOrigins[id] == nil, let start = session.pins.first(where: { $0.id == id })?.point {
                     dragOrigins[id] = start
                 }
                 guard let origin = dragOrigins[id] else { return }
@@ -192,64 +179,27 @@ struct PhotoPinsView: View {
 
     /// Moves a pin and re-reads the color under it.
     private func place(_ id: Int, at point: CGPoint) {
-        guard let i = pins.firstIndex(where: { $0.id == id }) else { return }
-        pins[i].point = point
-        if let sampler {
+        guard let i = session.pins.firstIndex(where: { $0.id == id }) else { return }
+        session.pins[i].point = point
+        if let sampler = session.sampler {
             let rgb = sampler.color(at: point, radius: 2)
-            pins[i].hex = ColorAdjustment.hexString(r: rgb.r, g: rgb.g, b: rgb.b)
+            session.pins[i].hex = ColorAdjustment.hexString(r: rgb.r, g: rgb.g, b: rgb.b)
         }
     }
 
     private func refreshName(of id: Int) {
-        guard let i = pins.firstIndex(where: { $0.id == id }), pins[i].nameHex != pins[i].hex else { return }
-        pins[i].name = ColorNamer.name(forHex: pins[i].hex)
-        pins[i].nameHex = pins[i].hex
+        guard let i = session.pins.firstIndex(where: { $0.id == id }), session.pins[i].nameHex != session.pins[i].hex else { return }
+        session.pins[i].name = ColorNamer.name(forHex: session.pins[i].hex)
+        session.pins[i].nameHex = session.pins[i].hex
     }
 
     private func nudge(_ id: Int, by direction: Int) {
-        guard let pin = pins.first(where: { $0.id == id }) else { return }
+        guard let pin = session.pins.first(where: { $0.id == id }) else { return }
         place(id, at: PhotoPinGeometry.nudged(pin.point, by: direction))
         refreshName(of: id)
-        if let moved = pins.first(where: { $0.id == id }) {
+        if let moved = session.pins.first(where: { $0.id == id }) {
             UIAccessibility.post(notification: .announcement, argument: moved.name)
         }
-    }
-
-    // MARK: - Loading
-
-    /// Pulls the colors, then finds where each sits in the photo. Gives the
-    /// spinner a moment to draw first.
-    private func load() async {
-        pins = []
-        sampler = nil
-        isLoading = true
-        try? await Task.sleep(for: .milliseconds(50))
-        // `try?` swallows cancellation; don't extract after the photo changed.
-        guard !Task.isCancelled else { return }
-        guard let sampler = ImageColorExtractor.PixelSampler(image: image) else {
-            fail(AppError.imageProcessingFailed.localizedDescription)
-            return
-        }
-        do {
-            let extracted = try ImageColorExtractor.extractColors(from: image, count: 6)
-            guard !extracted.isEmpty else {
-                fail("Couldn't find any colors in that photo")
-                return
-            }
-            let points = PhotoPinLocator.locate(hexes: extracted.map(\.hex), in: sampler)
-            self.sampler = sampler
-            pins = zip(extracted.indices, zip(extracted, points)).map { index, pair in
-                Pin(id: index, point: pair.1, hex: pair.0.hex, name: pair.0.name, nameHex: pair.0.hex)
-            }
-            isLoading = false
-        } catch {
-            fail(error.localizedDescription)
-        }
-    }
-
-    private func fail(_ message: String) {
-        ToastManager.shared.show(message, icon: "exclamationmark.triangle.fill")
-        onFail()
     }
 }
 
@@ -261,7 +211,8 @@ struct PhotoPinsView: View {
             ctx.fill(CGRect(x: 0, y: CGFloat(i) * 100, width: 400, height: 100))
         }
     }
-    return PhotoPinsView(image: image, onAdd: { _ in }, onChangePhoto: {}, onFail: {})
+    let session = PhotoPinsSession()
+    return PhotoPinsView(image: image, session: session, onAdd: { _ in }, onChangePhoto: {})
         .frame(height: 300)
         .padding()
 }

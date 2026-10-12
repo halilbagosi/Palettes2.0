@@ -12,8 +12,9 @@ import SwiftUI
 import PhotosUI
 
 struct PaletteScanSource: View {
-    /// Owned by the panel, so the photo survives switching sources.
-    @Binding var image: UIImage?
+    /// Owned by the panel, so the photo, its pins and a load in flight survive
+    /// switching sources.
+    @ObservedObject var session: PhotoPinsSession
     var onAdd: ([PaletteColor]) -> Void
 
     @State private var photosPickerItem: PhotosPickerItem?
@@ -22,22 +23,19 @@ struct PaletteScanSource: View {
     @State private var cameraImage: UIImage?
     @State private var didCapture = false
     @State private var showChangeDialog = false
-    @State private var isLoading = false
-    @State private var loadTask: Task<Void, Never>?
     @State private var showTrueToneAlert = false
     @AppStorage("didAcknowledgeTrueToneWarning") private var didAcknowledgeTrueToneWarning = false
 
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
-    private static let longSide: CGFloat = 2048
 
     var body: some View {
         Group {
-            if let image {
+            if let image = session.image {
                 PhotoPinsView(
                     image: image,
+                    session: session,
                     onAdd: onAdd,
-                    onChangePhoto: { showChangeDialog = true },
-                    onFail: { self.image = nil }
+                    onChangePhoto: { showChangeDialog = true }
                 )
             } else {
                 emptyState
@@ -64,15 +62,14 @@ struct PaletteScanSource: View {
         .onChange(of: didCapture) { _, captured in
             guard captured else { return }
             didCapture = false
-            if let photo = cameraImage { use(photo) }
+            if let photo = cameraImage { session.load(photo: photo) }
             cameraImage = nil
         }
         .onChange(of: photosPickerItem) { _, item in
             guard let item else { return }
             photosPickerItem = nil
-            use(item)
+            session.load(item: item)
         }
-        .onDisappear { loadTask?.cancel() }
     }
 
     // MARK: - Empty
@@ -83,7 +80,7 @@ struct PaletteScanSource: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.primary.opacity(0.07))
 
-                if isLoading {
+                if session.isLoadingPhoto {
                     ProgressView()
                 } else {
                     VStack(spacing: 8) {
@@ -121,37 +118,6 @@ struct PaletteScanSource: View {
         }
         .buttonStyle(.plain)
         .tint(.primary)
-        .disabled(isLoading)
-    }
-
-    // MARK: - Loading
-
-    /// A library photo is decoded off the main actor, straight to a 2048 px
-    /// thumbnail.
-    private func use(_ item: PhotosPickerItem) {
-        let longSide = Self.longSide
-        start {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { return nil }
-            return await Task.detached { UIImage.downsampled(from: data, longSide: longSide) }.value
-        }
-    }
-
-    private func use(_ photo: UIImage) {
-        start { photo.downsampled(longSide: Self.longSide) }
-    }
-
-    private func start(_ produce: @escaping () async -> UIImage?) {
-        loadTask?.cancel()
-        isLoading = true
-        loadTask = Task {
-            let produced = await produce()
-            guard !Task.isCancelled else { return }
-            isLoading = false
-            if let produced {
-                image = produced
-            } else {
-                ToastManager.shared.show("Couldn't open that photo", icon: "exclamationmark.triangle.fill")
-            }
-        }
+        .disabled(session.isLoadingPhoto)
     }
 }

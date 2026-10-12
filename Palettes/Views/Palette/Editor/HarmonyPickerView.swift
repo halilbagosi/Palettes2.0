@@ -69,7 +69,7 @@ struct HarmonyPickerView: View {
                 .foregroundStyle(.secondary)
 
             if draft.colors.isEmpty {
-                chip(hex: pickHex, isSelected: true, label: "Pick color")
+                chip(hex: pickHex, isSelected: true, label: "Pick color", isInteractive: false)
                     .allowsHitTesting(false)
                 Spacer(minLength: 0)
             } else {
@@ -79,7 +79,7 @@ struct HarmonyPickerView: View {
                             Button { selection = entry.id } label: {
                                 chip(hex: entry.hex, color: entry.color,
                                      isSelected: entry.hex.caseInsensitiveCompare(base) == .orderedSame,
-                                     label: entry.name)
+                                     label: entry.name, isInteractive: true)
                             }
                             .buttonStyle(.plain)
                         }
@@ -92,7 +92,7 @@ struct HarmonyPickerView: View {
         .frame(height: 38)
     }
 
-    private func chip(hex: String, color: Color? = nil, isSelected: Bool, label: String) -> some View {
+    private func chip(hex: String, color: Color? = nil, isSelected: Bool, label: String, isInteractive: Bool) -> some View {
         Circle()
             .fill(color ?? Color(hex: hex) ?? .gray)
             .frame(width: 30, height: 30)
@@ -105,8 +105,8 @@ struct HarmonyPickerView: View {
             .contentShape(Circle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(label)
-            .accessibilityHint("Builds the harmonies on this color")
-            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityHint(isInteractive ? "Builds the harmonies on this color" : "")
+            .accessibilityAddTraits(isInteractive ? (isSelected ? [.isButton, .isSelected] : .isButton) : (isSelected ? .isSelected : []))
     }
 
     // MARK: - Rows

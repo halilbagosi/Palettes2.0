@@ -21,27 +21,27 @@ enum PaletteEditorLayout {
     /// source switch, a swatch row, the picker with its own mode switch and an
     /// Add button), so the share is a little over half.
     static let panelRatio: CGFloat = 0.55
-    static let minPanelHeight: CGFloat = 300
+    /// Enough for Pick: the panel's padding, the source switch, the swatch row,
+    /// the picker's mode switch with a usable field (about 90 pt), the Add
+    /// button and the gaps. Scaled up with Dynamic Type (see `minimum(typeScale:)`).
+    static let minPanelHeight: CGFloat = 350
     /// What the strip and the top of the list need above the panel.
     static let reservedAbovePanel: CGFloat = 240
+    /// Dynamic Type grows the fixed chrome (switches, button, swatch row) but
+    /// the screen doesn't grow with it, so the growth is capped.
+    static let maxTypeScale: CGFloat = 1.35
 
-    /// The panel's height in an editor `available` points tall.
-    static func panelHeight(available: CGFloat) -> CGFloat {
-        let preferred = max(available * panelRatio, minPanelHeight)
-        let cap = max(available - reservedAbovePanel, minPanelHeight)
-        return min(preferred, cap)
+    /// The smallest panel for a type size whose body font is `typeScale` times
+    /// the default (1 at the default size).
+    static func minimum(typeScale: CGFloat) -> CGFloat {
+        minPanelHeight * min(max(typeScale, 1), maxTypeScale)
     }
 
-    /// Everything in the Pick source that isn't the picker's own content: the
-    /// panel's padding, the source switch, the swatch row, the picker's mode
-    /// switch, the Add button and the gaps between them.
-    static let pickChrome: CGFloat = 222
-    static let minPickerContent: CGFloat = 120
-
-    /// The height left for the picker's field (Spectrum, Grid, Sliders) in a
-    /// panel `panelHeight` tall.
-    static func pickerContentHeight(panelHeight: CGFloat) -> CGFloat {
-        max(panelHeight - pickChrome, minPickerContent)
+    /// The panel's height in an editor `available` points tall.
+    static func panelHeight(available: CGFloat, minimum: CGFloat = minPanelHeight) -> CGFloat {
+        let preferred = max(available * panelRatio, minimum)
+        let cap = max(available - reservedAbovePanel, minimum)
+        return min(preferred, cap)
     }
 }
 
@@ -59,9 +59,6 @@ enum PaletteAddSource: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The sources whose content is a drag surface (a swipe down on it must
-    /// not be taken for the sheet's dismiss gesture).
-    var isDragSurface: Bool { self == .pick || self == .scan }
 }
 
 extension View {
@@ -79,9 +76,9 @@ struct PaletteAddPanel: View {
     @Binding var selection: UUID?
     @Binding var source: PaletteAddSource
     let height: CGFloat
-    /// True while the Pick name field has the keyboard, so the editor can
-    /// make room.
-    @Binding var colorNameFocused: Bool
+    /// True while a text field in the panel (Pick's name, Library's search)
+    /// has the keyboard, so the editor can make room.
+    @Binding var fieldFocused: Bool
     var onAdd: ([PaletteColor]) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -89,7 +86,8 @@ struct PaletteAddPanel: View {
     // Kept here, not in the sources, so switching sources doesn't lose them.
     @State private var pickColor = Color(hex: ColorPickerModel.randomStarter()) ?? .blue
     @State private var pickName = ""
-    @State private var scanImage: UIImage?
+    // Reference type in @State: the panel doesn't redraw on every pin drag.
+    @State private var scan = PhotoPinsSession()
 
     var body: some View {
         VStack(spacing: 10) {
@@ -106,8 +104,7 @@ struct PaletteAddPanel: View {
                         color: $pickColor,
                         name: $pickName,
                         excludedHexes: draft.hexes,
-                        contentHeight: PaletteEditorLayout.pickerContentHeight(panelHeight: height),
-                        nameFocused: $colorNameFocused,
+                        nameFocused: $fieldFocused,
                         onAdd: { entry in
                             onAdd([entry])
                             pickColor = Color(hex: ColorPickerModel.nextStarter(excluding: draft.hexes.union([entry.hex.uppercased()]))) ?? .blue
@@ -115,9 +112,9 @@ struct PaletteAddPanel: View {
                         }
                     )
                 case .scan:
-                    PaletteScanSource(image: $scanImage, onAdd: onAdd)
+                    PaletteScanSource(session: scan, onAdd: onAdd)
                 case .library:
-                    LibraryPickerView(excludedHexes: draft.hexes) { picked in
+                    LibraryPickerView(excludedHexes: draft.hexes, searchFocused: $fieldFocused) { picked in
                         onAdd(picked.map { PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name) })
                     }
                 case .harmony:
@@ -130,6 +127,8 @@ struct PaletteAddPanel: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Nothing draws outside the card, whatever the type size.
+            .clipped()
             .transition(.opacity)
         }
         .animation(reduceMotion ? nil : .snappy, value: source)
@@ -138,113 +137,6 @@ struct PaletteAddPanel: View {
         .padding(.bottom, 12)
         .frame(height: height)
         .liquidGlass(.regular, in: .rect(cornerRadius: 24))
-    }
-}
-
-// MARK: - Pick
-
-/// A compact new-color builder: the swatch with its name and HEX, the picker
-/// (Spectrum, Grid or Sliders) and "+ Add to Palette". Scan is the panel's own
-/// source, so the picker doesn't offer it here.
-private struct PalettePickSource: View {
-    @Binding var color: Color
-    @Binding var name: String
-    let excludedHexes: Set<String>
-    let contentHeight: CGFloat
-    @Binding var nameFocused: Bool
-    var onAdd: (PaletteColor) -> Void
-
-    @EnvironmentObject private var appData: AppData
-    @FocusState private var nameField: Bool
-    /// The name for the current color, once the color settles.
-    @State private var autoName = ""
-
-    private var hex: String { ColorComposer.hexKey(color) }
-    private var isDuplicate: Bool { excludedHexes.contains(hex.uppercased()) }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            swatchRow
-
-            ColorPickerPanel(
-                color: $color,
-                compact: true,
-                allowsScan: false,
-                contentHeight: contentHeight,
-                onPick: { color = $0 }
-            )
-
-            Button(action: add) {
-                Label("Add to Palette", systemImage: "plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .glassButton(prominent: true)
-            .controlSize(.large)
-            .disabled(isDuplicate)
-        }
-        .task(id: hex) {
-            // Names follow the color once it settles, not on every drag frame.
-            try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled else { return }
-            autoName = suggestedName(forHex: hex)
-        }
-        .onChange(of: nameField) { _, focused in nameFocused = focused }
-        .onDisappear { nameFocused = false }
-    }
-
-    private var swatchRow: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(color.gradient)
-                .frame(width: 48, height: 48)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                )
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                TextField("Name", text: $name, prompt: Text(autoName.isEmpty ? "Name" : autoName))
-                    .font(.subheadline.weight(.medium))
-                    .submitLabel(.done)
-                    .focused($nameField)
-                    .onSubmit { nameField = false }
-                    .accessibilityLabel("Color name")
-
-                // The HEX and the notice share one line, so a notice never
-                // moves the picker.
-                ZStack(alignment: .leading) {
-                    Text(hex)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .opacity(isDuplicate ? 0 : 1)
-                    Label("Already in this palette", systemImage: "info.circle")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .opacity(isDuplicate ? 1 : 0)
-                }
-                .lineLimit(1)
-                .animation(.easeOut(duration: 0.2), value: isDuplicate)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(isDuplicate ? "Already in this palette" : "Color preview, \(hex)")
-            }
-        }
-        .frame(height: 48)
-    }
-
-    private func add() {
-        guard !isDuplicate else { return }
-        let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolved = typed.isEmpty ? suggestedName(forHex: hex) : typed
-        nameField = false
-        onAdd(PaletteColor(color: color, hex: hex, name: resolved))
-    }
-
-    /// A saved color's own name first, then ColorNamer, as everywhere else.
-    private func suggestedName(forHex hex: String) -> String {
-        if let existing = appData.colors.first(where: { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }) {
-            return existing.name
-        }
-        return ColorNamer.name(forHex: hex)
+        .clipShape(.rect(cornerRadius: 24))
     }
 }
