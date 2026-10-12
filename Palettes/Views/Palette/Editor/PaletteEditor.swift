@@ -42,6 +42,9 @@ struct PaletteEditor: View {
     @State private var showDiscardConfirmation = false
     /// The first row the add panel just added; the list scrolls to it.
     @State private var scrollTarget: UUID?
+    /// Colors that just filled an empty palette, each with its place in the
+    /// entrance stagger (see FirstFillStagger). Emptied once it has played.
+    @State private var entrance: [UUID: Int] = [:]
     @FocusState private var nameFocused: Bool
     /// A text field in the add panel (Pick's name, Library's search) has focus.
     @State private var panelFieldFocused = false
@@ -84,8 +87,10 @@ struct PaletteEditor: View {
         suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
     }
 
-    private var appendAnimation: Animation {
-        reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
+    /// Rows and bands moving to make or close room. Reduce Motion: no layout
+    /// movement at all (nil); the first-fill entrance fades by itself.
+    private var appendAnimation: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.35, bounce: 0)
     }
 
     private var keyboardAnimation: Animation? {
@@ -201,6 +206,7 @@ struct PaletteEditor: View {
                 PaletteStripEditor(
                     draft: $draft,
                     selection: $selection,
+                    entrance: entrance,
                     onEdit: { path.append(.edit($0)) },
                     onTag: { path.append(.tag($0)) },
                     onRemove: { index, color in showUndo(for: color, at: index) }
@@ -274,7 +280,9 @@ struct PaletteEditor: View {
                                         onEdit: { selection = entry.id; path.append(.edit(entry.id)) },
                                         onRemove: { removeColor(entry.id) }
                                     )
-                                    .transition(.opacity)
+                                    .firstFillEntrance(index: entrance[entry.id])
+                                    // A staggered row fades in by itself.
+                                    .transition(entrance[entry.id] == nil ? .opacity : .identity)
                                 }
                             }
                         }
@@ -332,12 +340,29 @@ struct PaletteEditor: View {
     private func add(_ colors: [PaletteColor]) {
         let before = draft.colors.count
         var added = 0
-        withAnimation(appendAnimation) { added = draft.append(colors) }
+        var staggered: [UUID: Int] = [:]
+        withAnimation(appendAnimation) {
+            added = draft.append(colors)
+            // Set in the same update that inserts the views, so they start hidden.
+            staggered = FirstFillStagger.plan(existingCount: before, added: draft.colors.dropFirst(before).map(\.id))
+            entrance = staggered
+        }
         if added == 0 {
             ToastManager.shared.show("Already in this palette", icon: "info.circle")
         } else {
+            if !staggered.isEmpty { clearEntrance(staggered) }
             // Show what was just added (not on Undo or Duplicate).
             scrollTarget = draft.colors[before].id
+        }
+    }
+
+    /// Drops the entrance plan once it has played, so a row that scrolls into
+    /// view later doesn't animate in again.
+    private func clearEntrance(_ plan: [UUID: Int]) {
+        let wait = FirstFillStagger.totalDuration(count: plan.count)
+        Task {
+            try? await Task.sleep(for: .seconds(wait + 0.1))
+            for id in plan.keys { entrance[id] = nil }
         }
     }
 

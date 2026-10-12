@@ -30,6 +30,9 @@ struct PaletteStripEditor: View {
     @Binding var draft: PaletteDraft
     /// The band last tapped; the add panel's Harmony source builds on it.
     @Binding var selection: UUID?
+    /// Bands that are entering as a first fill, each with its place in the
+    /// stagger (empty otherwise).
+    var entrance: [UUID: Int] = [:]
     var onEdit: (UUID) -> Void
     var onTag: (UUID) -> Void
     /// For the Undo toast.
@@ -37,6 +40,8 @@ struct PaletteStripEditor: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var targetedID: UUID?
+    /// Completed drops, for the release haptic.
+    @State private var dropCount = 0
     /// The band being dragged, recorded when the drag starts so the insertion
     /// bar can sit on the side where it will land.
     @State private var draggingID: UUID?
@@ -68,14 +73,14 @@ struct PaletteStripEditor: View {
         return target
     }
 
-    /// The drop's settle.
-    private var settle: Animation {
-        reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0.15)
+    /// The drop's settle. Reduce Motion: bands jump (nil), no layout movement.
+    private var settle: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)
     }
 
     /// Duplicate and remove: the same timing without the bounce.
-    private var reshuffle: Animation {
-        reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0)
+    private var reshuffle: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.35, bounce: 0)
     }
 
     private var currentSlot: BarSlot? {
@@ -102,7 +107,8 @@ struct PaletteStripEditor: View {
             }
         }
         .frame(height: height)
-        .background(draft.colors.last?.color ?? Color.clear)
+        // Clear while bands stagger in, so the last color doesn't fill the strip first.
+        .background(entrance.isEmpty ? (draft.colors.last?.color ?? Color.clear) : Color.clear)
         .overlay { insertionBar }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(
@@ -111,6 +117,7 @@ struct PaletteStripEditor: View {
                 .allowsHitTesting(false)
         )
         .sensoryFeedback(.selection, trigger: targetedID) { _, new in new != nil }
+        .sensoryFeedback(.impact(weight: .light), trigger: dropCount)
         .onChange(of: currentSlot) { _, new in
             if let new {
                 lastSlot = new
@@ -174,6 +181,7 @@ struct PaletteStripEditor: View {
                 Rectangle().strokeBorder(ink, lineWidth: 3).allowsHitTesting(false)
             }
         }
+        .firstFillEntrance(index: entrance[id])
         .contentShape(Rectangle())
         .onTapGesture {
             selection = id
@@ -189,6 +197,7 @@ struct PaletteStripEditor: View {
             guard let dropped = items.first,
                   let to = Self.dropIndex(moving: dropped.id, onto: id, in: draft.colors) else { return false }
             withAnimation(settle) { draft.move(id: dropped.id, to: to) }
+            dropCount += 1
             return true
         } isTargeted: { isTargeted in
             if isTargeted {

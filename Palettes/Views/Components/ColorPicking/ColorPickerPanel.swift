@@ -32,6 +32,7 @@ struct ColorPickerPanel: View {
     var scanSession: ScanSession?
     var onPick: (Color) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("colorPickerMode") private var modeRaw = ColorPickerMode.spectrum.rawValue
     @StateObject private var localScanSession = ScanSession()
 
@@ -49,6 +50,15 @@ struct ColorPickerPanel: View {
     /// The Spectrum field leaves room for its saturation track (12 + 28 pt).
     private var spectrumHeight: CGFloat {
         contentHeight.map { max($0 - 40, 60) } ?? (compact ? 180 : 220)
+    }
+
+    /// The mode switch crossfades. With a fixed `contentHeight` nothing around
+    /// it moves, so Reduce Motion keeps a short fade; otherwise the area
+    /// resizes with the mode, which is layout movement, so Reduce Motion
+    /// switches instantly.
+    private var modeSwitchAnimation: Animation? {
+        guard reduceMotion else { return .snappy }
+        return contentHeight == nil ? nil : .easeInOut(duration: 0.2)
     }
 
     var body: some View {
@@ -76,7 +86,7 @@ struct ColorPickerPanel: View {
                 .transition(.opacity)
             }
         }
-        .animation(.snappy, value: mode)
+        .animation(modeSwitchAnimation, value: mode)
     }
 }
 

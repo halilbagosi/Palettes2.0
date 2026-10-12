@@ -50,6 +50,8 @@ struct PhotoPinsView: View {
     /// Pins being dragged, each with where it was when its finger went down.
     /// Keyed per pin so two fingers on two pins don't share state.
     @State private var dragOrigins: [Int: CGPoint] = [:]
+    /// Pins released, for the release haptic.
+    @State private var releaseCount = 0
 
     private static let pinSize: CGFloat = 30
     private static let space = "photoPins"
@@ -109,6 +111,7 @@ struct PhotoPinsView: View {
             .controlSize(.large)
             .disabled(colors.isEmpty)
         }
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: releaseCount)
         // Room for a pin to hang over the photo's edge.
         .padding(.horizontal, Self.pinSize / 2)
         .padding(.top, Self.pinSize / 2 - 4)
@@ -170,6 +173,7 @@ struct PhotoPinsView: View {
             }
             .onEnded { _ in
                 dragOrigins[id] = nil
+                releaseCount += 1
                 refreshName(of: id)
             }
     }

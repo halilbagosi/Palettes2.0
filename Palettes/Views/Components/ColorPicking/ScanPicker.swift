@@ -185,6 +185,8 @@ struct ScanPicker: View {
         var grabbed: Bool
     }
     @GestureState private var drag: Drag?
+    /// Marker releases, for the release haptic (same as a photo pin's).
+    @State private var releaseCount = 0
 
     /// Shown once per install the first time a Scan view appears; also used by
     /// the palette add panel's Scan source.
@@ -200,6 +202,7 @@ struct ScanPicker: View {
                 sourceButtons
             }
         }
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: releaseCount)
         .onAppear {
             if !didAcknowledgeTrueToneWarning { showTrueToneAlert = true }
         }
@@ -345,6 +348,7 @@ struct ScanPicker: View {
                     ? ScanPickerGeometry.moved(from: current.origin, by: value.translation, fill: fill, visible: visible)
                     : ScanPickerGeometry.point(at: value.location, fill: fill, visible: visible))
             }
+            .onEnded { _ in releaseCount += 1 }
     }
 
     /// Moves the marker and reports the color under it, 1:1 with no animation.
@@ -369,6 +373,10 @@ struct ScanPicker: View {
 
     // MARK: - Camera / Library
 
+    /// Glass rule: these buttons sit on the composer's plain background, so
+    /// they are interactive glass. Inside the palette add panel's own glass
+    /// card, the Scan source uses a tint (`panelWell`) instead, since glass
+    /// doesn't read on glass.
     private var sourceButtons: some View {
         HStack(spacing: 12) {
             if Self.cameraAvailable {

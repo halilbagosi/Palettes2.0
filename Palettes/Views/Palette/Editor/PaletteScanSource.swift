@@ -107,6 +107,9 @@ struct PaletteScanSource: View {
         }
     }
 
+    /// Glass rule: these buttons sit inside the add panel's glass card, so they
+    /// keep a tint (`panelWell`), not glass-on-glass. ScanPicker's identical
+    /// buttons sit on a plain background and use interactive glass.
     private func sourceButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: symbol)

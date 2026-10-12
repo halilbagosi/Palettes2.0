@@ -131,7 +131,9 @@ struct PaletteAddPanel: View {
             .clipped()
             .transition(.opacity)
         }
-        .animation(reduceMotion ? nil : .snappy, value: source)
+        // The content area is a fixed frame, so the swap is a crossfade with no
+        // layout movement; Reduce Motion keeps just the (short) fade.
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.35, bounce: 0), value: source)
         .padding(.horizontal, 14)
         .padding(.top, 12)
         .padding(.bottom, 12)
