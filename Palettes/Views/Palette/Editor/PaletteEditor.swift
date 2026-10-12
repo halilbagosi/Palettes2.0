@@ -61,6 +61,11 @@ struct PaletteEditor: View {
     /// of the top two thirds leaves out.
     @State private var fixedUpperHeight: CGFloat = 0
     @State private var gridContentHeight: CGFloat = 0
+    /// The whole top block's natural height (a first guess until measured).
+    @State private var upperHeight: CGFloat = 250
+    /// What the add panel needs to stay usable (Library's search, a few cards
+    /// and the Add button), scaled with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var panelFloor: CGFloat = 210
     /// One card's height, so the grid can show one and a half rows.
     @State private var cardHeight: CGFloat = 0
     @AppStorage("paletteAddSource") private var sourceRaw = PaletteAddSource.pick.rawValue
@@ -96,6 +101,16 @@ struct PaletteEditor: View {
         )
     }
 
+    /// The top block's height: its own, unless that would leave the panel less
+    /// than `panelFloor` (the panel's 20 pt of padding included), then it scrolls.
+    /// Nil lets it take what a keyboard leaves while the name is typed.
+    private func upperFrameHeight(available: CGFloat) -> CGFloat? {
+        if panelKeyboard { return 0 }
+        if nameKeyboard { return nil }
+        let floor = min(panelFloor, available * 0.6)
+        return min(upperHeight, max(available - floor - 20, 96))
+    }
+
     private var nameHint: String {
         suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
     }
@@ -121,14 +136,21 @@ struct PaletteEditor: View {
                 VStack(spacing: 0) {
                     // Typing in the source's view needs the room: the top steps
                     // aside (hidden, not removed, so its state stays).
-                    upper(gridMax: gridMax)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        .frame(height: panelKeyboard ? 0 : nil, alignment: .top)
-                        .clipped()
-                        .opacity(panelKeyboard ? 0 : 1)
-                        .allowsHitTesting(!panelKeyboard)
-                        .accessibilityHidden(panelKeyboard)
+                    // It scrolls when a short screen (landscape, large text) would
+                    // otherwise leave the panel too little room.
+                    ScrollView {
+                        upper(gridMax: gridMax)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { upperHeight = $0 }
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicators(.hidden)
+                    .frame(height: upperFrameHeight(available: available))
+                    .clipped()
+                    .opacity(panelKeyboard ? 0 : 1)
+                    .allowsHitTesting(!panelKeyboard)
+                    .accessibilityHidden(panelKeyboard)
 
                     PaletteAddPanel(
                         draft: draft,
