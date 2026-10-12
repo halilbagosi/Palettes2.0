@@ -46,6 +46,8 @@ struct ColorEditView: View {
                     }
                 }
         }
+        // Sheets cover the app-root toast overlay; a tap on a value copies it.
+        .toastOverlay()
     }
 
     private func handleSaveTapped() {
