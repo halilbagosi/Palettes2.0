@@ -52,9 +52,10 @@ private struct FirstFillEntrance: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .opacity(entered ? 1 : 0)
+            // Never invisible: an item with no place in a stagger is always shown.
+            .opacity(entered || index == nil ? 1 : 0)
             // Reduce Motion: a fade only, no rise.
-            .offset(y: entered || reduceMotion ? 0 : FirstFillStagger.rise)
+            .offset(y: entered || index == nil || reduceMotion ? 0 : FirstFillStagger.rise)
             .onAppear {
                 guard let index, !entered else { return }
                 if reduceMotion {

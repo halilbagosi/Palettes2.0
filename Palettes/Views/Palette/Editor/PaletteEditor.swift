@@ -211,6 +211,9 @@ struct PaletteEditor: View {
                     onTag: { path.append(.tag($0)) },
                     onRemove: { index, color in showUndo(for: color, at: index) }
                 )
+                // On a first fill the bands fade in themselves; the strip's own
+                // fade would multiply with band 0's.
+                .transition(entrance.isEmpty ? .opacity : .identity)
             }
 
             // Always laid out, so the first color doesn't move the list.
@@ -345,7 +348,9 @@ struct PaletteEditor: View {
             added = draft.append(colors)
             // Set in the same update that inserts the views, so they start hidden.
             staggered = FirstFillStagger.plan(existingCount: before, added: draft.colors.dropFirst(before).map(\.id))
-            entrance = staggered
+            // Only a real plan replaces the current one, so a quick second
+            // add doesn't cut a running entrance short.
+            if !staggered.isEmpty { entrance = staggered }
         }
         if added == 0 {
             ToastManager.shared.show("Already in this palette", icon: "info.circle")
