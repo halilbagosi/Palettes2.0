@@ -46,6 +46,11 @@ struct SheetConfirmButton: View {
         }
     }
 
+    private var spokenTitle: String {
+        if case .add(let count?) = kind, count >= 1 { return "Add \(count) \(count == 1 ? "color" : "colors")" }
+        return title
+    }
+
     private var symbol: String {
         if case .add = kind { return "plus" }
         return "checkmark"
@@ -69,6 +74,7 @@ struct SheetConfirmButton: View {
                 }
             }
             .buttonStyle(.glassProminent)
+            .accessibilityLabel(spokenTitle)
         } else {
             Button(action: action) {
                 if showsTitle {
@@ -81,6 +87,7 @@ struct SheetConfirmButton: View {
                         .fontWeight(.semibold)
                 }
             }
+            .accessibilityLabel(spokenTitle)
         }
     }
 }

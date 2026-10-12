@@ -69,6 +69,7 @@ struct LibraryPickerView: View {
                 }
                 .glassButton(prominent: true)
                 .controlSize(.large)
+                .accessibilityLabel(pickable.isEmpty ? "Add" : "Add \(pickable.count) \(pickable.count == 1 ? "color" : "colors")")
                 .disabled(pickable.isEmpty)
             }
             .sensoryFeedback(.selection, trigger: selection)

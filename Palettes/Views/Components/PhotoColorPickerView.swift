@@ -113,12 +113,12 @@ struct PhotoColorPickerView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Use") {
+                    // Choosing a color, not adding one to a palette: a checkmark.
+                    SheetConfirmButton(kind: .save) {
                         onUse(currentRGB)
                         onUseSample?(currentRGB, sampledPoint)
                         close()
                     }
-                    .fontWeight(.semibold)
                     .disabled(!hasSample)
                 }
             }
