@@ -3,7 +3,7 @@
 **Goal:** The creation sheets work the way iOS sheets do, so they need no
 explaining, and they look like the rest of the app.
 
-**Status:** Revision 2 is implemented on `feature/sheet-redesign`. It was built
+**Status:** Superseded by plans 018 and 019 (the color and palette sheets were redesigned again). Revision 2 was implemented on `feature/sheet-redesign`. It was built
 without Xcode, so `xcodebuild` and the on-device checks below are still
 pending.
 
