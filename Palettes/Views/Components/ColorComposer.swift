@@ -52,7 +52,17 @@ struct ColorComposer: View {
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var cameraImage: UIImage?
     @State private var didCapture = false
-    @State private var showPhotoPicker = false
+    /// The full-screen photo picker; a fresh value per request, so a retry
+    /// always presents even if an earlier presentation was refused.
+    @State private var photoPicker: PhotoPickerRequest?
+    /// The camera cover is up or still dismissing; a second cover waits for it.
+    @State private var cameraCoverActive = false
+    /// A new photo is ready to open in the picker once the camera has gone.
+    @State private var pickerWaitingForCamera = false
+
+    private struct PhotoPickerRequest: Identifiable {
+        let id = UUID()
+    }
 
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
@@ -152,9 +162,17 @@ struct ColorComposer: View {
             photosPickerItem: $photosPickerItem,
             cameraImage: $cameraImage,
             didCapture: $didCapture,
-            session: scanSession
+            session: scanSession,
+            onCameraPresented: { cameraCoverActive = true },
+            onCameraDismissed: {
+                cameraCoverActive = false
+                if pickerWaitingForCamera {
+                    pickerWaitingForCamera = false
+                    photoPicker = PhotoPickerRequest()
+                }
+            }
         ))
-        .fullScreenCover(isPresented: $showPhotoPicker) {
+        .fullScreenCover(item: $photoPicker) { _ in
             if let image = scanSession.image {
                 PhotoColorPickerView(
                     image: image,
@@ -176,7 +194,7 @@ struct ColorComposer: View {
             // The picker starts in the photo's center.
             scanSession.sample(at: CGPoint(x: 0.5, y: 0.5))
             if let picked = scanSession.sampledColor { apply(picked, from: .outside) }
-            showPhotoPicker = true
+            if cameraCoverActive { pickerWaitingForCamera = true } else { photoPicker = PhotoPickerRequest() }
         }
     }
 
@@ -304,7 +322,7 @@ struct ColorComposer: View {
             isLoading: scanSession.isLoading,
             height: 150,
             canPick: scanSession.image != nil && !scanSession.isLoading,
-            onPick: { showPhotoPicker = true },
+            onPick: { photoPicker = PhotoPickerRequest() },
             onRemove: {
                 withAnimation(layoutAnimation) { scanSession.clear() }
             }
@@ -637,13 +655,18 @@ private struct PhotoSources: ViewModifier {
     @Binding var cameraImage: UIImage?
     @Binding var didCapture: Bool
     let session: ScanSession
+    var onCameraPresented: () -> Void = {}
+    var onCameraDismissed: () -> Void = {}
 
     func body(content: Content) -> some View {
         if enabled {
             content
                 .photosPicker(isPresented: $showLibrary, selection: $photosPickerItem, matching: .images)
-                .fullScreenCover(isPresented: $showCamera) {
+                .fullScreenCover(isPresented: $showCamera, onDismiss: onCameraDismissed) {
                     CameraPicker(image: $cameraImage, didCapture: $didCapture, isPresented: $showCamera)
+                }
+                .onChange(of: showCamera) { _, presented in
+                    if presented { onCameraPresented() }
                 }
                 .onChange(of: photosPickerItem) { _, item in
                     guard let item else { return }
