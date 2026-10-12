@@ -53,6 +53,9 @@ struct GeneratedBrief {
 
     @Guide(description: "The color harmony that best suits the vibe")
     var harmony: BriefHarmony
+
+    @Guide(description: "How many colors the palette needs, 4 to 8: fewer for a simple or single-color vibe, more for a rich multi-part one", .range(4...8))
+    var suggestedSize: Int
 }
 
 @available(iOS 26.0, *)
@@ -103,7 +106,8 @@ extension PaletteBrief {
         self.init(
             hue: PaletteBrief.hue(forColorWord: model.mainColor) ?? PaletteBrief.heuristic(from: vibe).hue,
             tone: PaletteTone(lightness: lightness, chroma: chroma),
-            scheme: scheme
+            scheme: scheme,
+            suggestedSize: model.suggestedSize
         )
     }
 }
@@ -127,7 +131,7 @@ enum PaletteGenerator {
     ///   the generated palette's title stays distinct from them.
     static func generate(
         baseColors: [BaseColor],
-        size: Int,
+        size: Int?,
         vibe: String?,
         scheme: HarmonyScheme = .auto,
         existingNames: [String] = [],
@@ -141,13 +145,12 @@ enum PaletteGenerator {
 
         // The user's chosen colors are locked: they ship verbatim, in order.
         let locked = lockedEntries(from: baseColors)
-        let targetCount = max(size, locked.count)
-        guard targetCount >= 2 else { throw AppError.generationFailed }
         let trimmedVibe = vibe?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         // 1. Brief.
         let brief = trimmedVibe.isEmpty ? PaletteBrief.neutral : await makeBrief(vibe: trimmedVibe)
         try Task.checkCancellation()
+        let targetCount = PaletteBrief.resolvedSize(requested: size, locked: locked.count, suggested: brief.suggestedSize)
 
         // The user's mode always wins. Auto follows the brief's harmony,
         // unless two or more chosen colors already imply one.

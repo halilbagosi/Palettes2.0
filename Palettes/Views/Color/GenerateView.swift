@@ -13,7 +13,7 @@ struct GenerateView: View {
     @Namespace private var orbNamespace
 
     // Form state
-    @State private var paletteSize = 4
+    @State private var paletteSize: Int? = nil  // nil = Auto
     @State private var colorsFadeLeading = false
     @State private var colorsFadeTrailing = true
     @State private var selectedColorIDs: Set<UUID> = []
@@ -234,7 +234,7 @@ struct GenerateView: View {
     private var generationCopy: some View {
         VStack(spacing: 20) {
             OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
-            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize ?? 6)
                 .frame(maxWidth: 360)
         }
         .padding(.horizontal, 24)
@@ -516,6 +516,15 @@ struct GenerateView: View {
         return HStack(alignment: .top, spacing: 12) {
             layout {
                 Menu {
+                    Button {
+                        paletteSize = nil
+                    } label: {
+                        if paletteSize == nil {
+                            Label("Auto", systemImage: "checkmark")
+                        } else {
+                            Text("Auto")
+                        }
+                    }
                     ForEach(sizeOptions, id: \.self) { size in
                         Button {
                             paletteSize = size
@@ -530,7 +539,7 @@ struct GenerateView: View {
                 } label: {
                     generationOptionLabel(
                         title: "Size",
-                        value: "\(paletteSize) colors",
+                        value: paletteSize.map { "\($0) colors" } ?? "Auto",
                         systemImage: "square.stack.3d.up"
                     )
                 }
@@ -912,7 +921,7 @@ struct GenerateView: View {
     /// Result state is left alone so the outgoing result view doesn't blank
     /// mid-transition; it's overwritten by the next generation anyway.
     private func resetForm() {
-        paletteSize = 4
+        paletteSize = nil
         selectedColorIDs = []
         scheme = .auto
         vibeDescription = ""

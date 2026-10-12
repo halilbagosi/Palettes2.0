@@ -19,11 +19,13 @@ struct GeneratePaletteIntent: AppIntent {
     @Parameter(title: "Vibe", description: "The mood or theme, like 'warm sunset' or 'calm ocean'.")
     var vibe: String
 
-    @Parameter(title: "Number of Colors", default: 6, controlStyle: .stepper, inclusiveRange: (2, 12))
-    var size: Int
+    @Parameter(title: "Number of Colors", description: "Leave empty to let the app choose.", controlStyle: .stepper, inclusiveRange: (2, 12))
+    var size: Int?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Generate a \(\.$vibe) palette with \(\.$size) colors")
+        Summary("Generate a \(\.$vibe) palette") {
+            \.$size
+        }
     }
 
     @MainActor
@@ -33,7 +35,7 @@ struct GeneratePaletteIntent: AppIntent {
         }
 
         // Palettes come in even sizes (2–12), matching the in-app picker.
-        let evenSize = min(12, max(2, size + size % 2))
+        let evenSize = size.map { min(12, max(2, $0 + $0 % 2)) }
         let generated = try await PaletteGenerator.generate(
             baseColors: [],
             size: evenSize,
