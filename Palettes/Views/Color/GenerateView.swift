@@ -112,6 +112,15 @@ struct GenerateView: View {
             .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
             // Kept in landscape: bringing the bar back for the result moved the
             // side insets a moment after the result appeared, so it jumped over.
+            .toolbar {
+                // The bar is hidden while generating in portrait, and the
+                // result view has its own controls.
+                if phase == .form {
+                    ToolbarItem(placement: .topBarLeading) {
+                        SettingsToolbarButton()
+                    }
+                }
+            }
             .toolbar(phase == .generating && isPortrait ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {

@@ -117,6 +117,11 @@ struct SearchView: View {
                 }
             }
             .navigationTitle("Search")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    SettingsToolbarButton()
+                }
+            }
             .featureIntro(.search)
             .navigationDestination(for: ColorViewModel.self) { color in
                 ColorDetailView(colorItem: color)

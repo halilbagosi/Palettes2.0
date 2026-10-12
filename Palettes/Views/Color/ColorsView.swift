@@ -330,6 +330,11 @@ struct ColorsView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if !isSelecting {
+            ToolbarItem(placement: .topBarLeading) {
+                SettingsToolbarButton()
+            }
+        }
         if !appData.colors.isEmpty {
             if isSelecting {
                 ToolbarItem(placement: .topBarLeading) {

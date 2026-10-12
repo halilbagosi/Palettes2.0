@@ -379,11 +379,7 @@ struct PaletteView: View {
     private var toolbarContent: some ToolbarContent {
         if !isSelecting {
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    router.isShowingSettings = true
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                }
+                SettingsToolbarButton()
             }
         }
         if !appData.palettes.isEmpty {
