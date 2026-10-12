@@ -41,6 +41,25 @@ struct PaletteDraft: Equatable {
         return added
     }
 
+    /// Swaps the colors in `ids` for `new` (duplicates by hex skipped), placed
+    /// where the first of them was; appended when none of them are left.
+    /// Returns where the new colors start and how many went in.
+    @discardableResult
+    mutating func replace(_ ids: Set<UUID>, with new: [PaletteColor]) -> (index: Int, added: Int) {
+        let index = colors.firstIndex { ids.contains($0.id) }
+            .map { first in colors[..<first].count(where: { !ids.contains($0.id) }) }
+        colors.removeAll { ids.contains($0.id) }
+        let at = index ?? colors.count
+        var seen = hexes
+        var inserted: [PaletteColor] = []
+        for color in new where !seen.contains(color.hex.uppercased()) {
+            seen.insert(color.hex.uppercased())
+            inserted.append(color)
+        }
+        colors.insert(contentsOf: inserted, at: at)
+        return (at, inserted.count)
+    }
+
     mutating func replaceAll(with new: [PaletteColor]) {
         colors = []
         append(new)

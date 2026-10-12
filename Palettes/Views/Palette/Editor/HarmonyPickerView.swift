@@ -47,13 +47,13 @@ struct HarmonyPickerView: View {
         VStack(spacing: 8) {
             chips
 
-            ScrollView {
+            FadingScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(harmonies, id: \.scheme) { harmony in
                         row(harmony.scheme.displayName, hexes: harmony.hexes)
                     }
                 }
-                .padding(.bottom, 2)
+                .padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
         }
@@ -84,8 +84,7 @@ struct HarmonyPickerView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.vertical, 3)
-                    .padding(.horizontal, 2)
+                    .padding(4)
                 }
             }
         }
@@ -93,16 +92,21 @@ struct HarmonyPickerView: View {
     }
 
     private func chip(hex: String, color: Color? = nil, isSelected: Bool, label: String, isInteractive: Bool) -> some View {
-        Circle()
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        return shape
             .fill(color ?? Color(hex: hex) ?? .gray)
             .frame(width: 30, height: 30)
-            .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+            .overlay(shape.strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+            // The selected chip gets a white frame just outside its edge.
             .overlay {
                 if isSelected {
-                    Circle().strokeBorder(.white, lineWidth: 2.5).shadow(color: .black.opacity(0.35), radius: 2)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(.white, lineWidth: 2.5)
+                        .padding(-3.5)
+                        .shadow(color: .black.opacity(0.35), radius: 2)
                 }
             }
-            .contentShape(Circle())
+            .contentShape(shape)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(label)
             .accessibilityHint(isInteractive ? "Builds the harmonies on this color" : "")
@@ -127,7 +131,7 @@ struct HarmonyPickerView: View {
                     .foregroundStyle(.tint)
             }
             .padding(10)
-            .panelWell(in: .rect(cornerRadius: 14))
+            .liquidGlass(.regular, in: .rect(cornerRadius: 14))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

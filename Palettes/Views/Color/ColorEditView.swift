@@ -34,7 +34,7 @@ struct ColorEditView: View {
 
     var body: some View {
         NavigationStack {
-            ColorComposer(color: $internalColor, name: $internalName)
+            ColorComposer(color: $internalColor, name: $internalName, tinted: true)
                 .navigationTitle("Edit Color")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

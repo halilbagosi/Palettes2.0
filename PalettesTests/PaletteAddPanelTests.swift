@@ -10,9 +10,39 @@ struct PaletteEditorLayoutTests {
         #expect(h >= PaletteEditorLayout.minPanelHeight)
     }
 
-    @Test func panelNeverShrinksBelowTheMinimum() {
-        #expect(PaletteEditorLayout.panelHeight(available: 450) == PaletteEditorLayout.minPanelHeight)
-        #expect(PaletteEditorLayout.panelHeight(available: 100) == PaletteEditorLayout.minPanelHeight)
+    @Test func panelKeepsItsMinimumWhenThereIsRoom() {
+        // Just enough for the minimum plus the strip and name field.
+        let available = PaletteEditorLayout.minPanelHeight + PaletteEditorLayout.minimumAbovePanel
+        #expect(PaletteEditorLayout.panelHeight(available: available) == PaletteEditorLayout.minPanelHeight)
+        #expect(PaletteEditorLayout.panelHeight(available: 600) == PaletteEditorLayout.minPanelHeight)
+    }
+
+    @Test func panelShrinksBelowTheMinimumInAShortContainer() {
+        // Shorter than the minimum plus the header: the panel gives way, not the strip.
+        let h = PaletteEditorLayout.panelHeight(available: 450)
+        #expect(h < PaletteEditorLayout.minPanelHeight)
+        #expect(abs(450 - h - PaletteEditorLayout.minimumAbovePanel) < 0.001)
+    }
+
+    @Test func panelIsCappedBelowTheMinimumEvenWhenTheContainerIsShorterThanIt() {
+        // available < minimum (iPhone landscape).
+        let h = PaletteEditorLayout.panelHeight(available: 330)
+        #expect(h < 330)
+        #expect(h >= PaletteEditorLayout.floorPanelHeight)
+        #expect(330 - h >= PaletteEditorLayout.minimumAbovePanel - 0.001)
+    }
+
+    @Test func panelNeverShrinksBelowTheFloor() {
+        #expect(PaletteEditorLayout.panelHeight(available: 250) == PaletteEditorLayout.floorPanelHeight)
+        #expect(PaletteEditorLayout.panelHeight(available: 100) == PaletteEditorLayout.floorPanelHeight)
+        #expect(PaletteEditorLayout.panelHeight(available: 0) == PaletteEditorLayout.floorPanelHeight)
+    }
+
+    @Test func aScaledMinimumAlsoGivesWayInAShortContainer() {
+        let minimum = PaletteEditorLayout.minimum(typeScale: 1.35)
+        let h = PaletteEditorLayout.panelHeight(available: 580, minimum: minimum)
+        #expect(h < minimum)
+        #expect(580 - h >= PaletteEditorLayout.minimumAbovePanel - 0.001)
     }
 
     @Test func panelLeavesRoomForTheStripAndList() {
@@ -33,7 +63,7 @@ struct PaletteEditorLayoutTests {
 
     @Test func panelHonorsAScaledMinimum() {
         let minimum = PaletteEditorLayout.minimum(typeScale: 1.3)
-        #expect(PaletteEditorLayout.panelHeight(available: 560, minimum: minimum) == minimum)
+        #expect(PaletteEditorLayout.panelHeight(available: 800, minimum: minimum) == minimum)
     }
 
     @Test func panelOnASmallPhoneKeepsItsMinimumAndRoomAbove() {
@@ -82,7 +112,7 @@ struct NextStarterTests {
 }
 
 @MainActor
-struct PhotoPinsSessionTests {
+struct PaletteScanSessionTests {
     private func stripes(_ colors: [UIColor]) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 300, height: 300)).image { ctx in
             let h = 300 / CGFloat(colors.count)
@@ -93,17 +123,51 @@ struct PhotoPinsSessionTests {
         }
     }
 
-    @Test func aReplacementPhotoGetsItsOwnPins() async {
-        let session = PhotoPinsSession()
+    @Test func aReplacementPhotoReplacesThePreviousPhotosColors() async throws {
+        let session = PaletteScanSession()
         session.load(photo: stripes([.systemRed, .systemGreen, .systemBlue, .systemOrange]))
         await session.waitForLoad()
-        let first = session.pins
-        #expect(!first.isEmpty)
+        let first = try #require(session.delivery)
+        session.takeDelivery()
+        #expect(!first.colors.isEmpty)
+        #expect(first.replacing.isEmpty)
 
         session.load(photo: stripes([.systemPurple, .systemYellow, .systemTeal, .black]))
         await session.waitForLoad()
-        #expect(!session.pins.isEmpty)
-        #expect(session.pins.map(\.hex) != first.map(\.hex))
-        #expect(!session.isExtracting && !session.isLoadingPhoto)
+        let second = try #require(session.delivery)
+        #expect(second.replacing == Set(first.colors.map(\.id)))
+        #expect(second.colors.map(\.hex) != first.colors.map(\.hex))
+        #expect(!session.isLoading)
+    }
+
+    @Test func removeDropsThePhotoAndUndoBringsItBack() async throws {
+        let session = PaletteScanSession()
+        session.load(photo: stripes([.systemRed, .systemBlue]))
+        await session.waitForLoad()
+        let found = try #require(session.delivery).colors
+        session.takeDelivery()
+
+        let removed = try #require(session.removePhoto())
+        #expect(removed.colorIDs == Set(found.map(\.id)))
+        #expect(session.image == nil)
+
+        session.restore(removed)
+        #expect(session.image != nil)
+        // The restored photo still knows its colors: a new photo replaces them.
+        session.load(photo: stripes([.systemGreen, .systemYellow]))
+        await session.waitForLoad()
+        #expect(session.delivery?.replacing == removed.colorIDs)
+    }
+
+    @Test func thePickerGetsOnlyThePhotosColors() async {
+        let session = PaletteScanSession()
+        session.load(photo: stripes([.systemRed, .systemBlue]))
+        await session.waitForLoad()
+        let found = session.delivery?.colors ?? []
+        let other = PaletteColor(color: .green, hex: "#00FF00", name: "Green")
+        let photo = session.photoColors(in: [other] + found)
+        #expect(photo.colors.map(\.id) == found.map(\.id))
+        #expect(photo.points.count == found.count)
+        #expect(photo.points.values.allSatisfy { (0...1).contains($0.x) && (0...1).contains($0.y) })
     }
 }

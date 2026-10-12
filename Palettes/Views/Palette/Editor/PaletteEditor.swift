@@ -2,11 +2,11 @@
 //  PaletteEditor.swift
 //  Palettes
 //
-//  The one palette editor, for New Palette and Edit Palette, laid out like the
-//  New Palette sheet: the palette strip pinned at the top (tap a band to edit
-//  it, hold to reorder), a scrolling middle with the name and the "Added
-//  Colors" rows, and the add panel pinned at the bottom (Pick · Scan · Library
-//  · Harmony). It works on a `PaletteDraft`: nothing reaches AppData until ✓;
+//  The one palette editor, for New Palette and Edit Palette. Top to bottom:
+//  the palette strip (tap a band to edit it, hold to reorder), the name, the
+//  source switch (Pick · Scan · Library · Harmony), "Added Colors" (a
+//  collapsible grid of cards, one and a half rows tall before it scrolls) and
+//  the selected source's view, which takes the rest of the sheet. It works on a `PaletteDraft`: nothing reaches AppData until ✓;
 //  the wrapper that presents the editor decides what ✓ does.
 //
 
@@ -55,7 +55,14 @@ struct PaletteEditor: View {
     /// The editor's height before a keyboard took some, so the bands keep
     /// their sizes while one is up.
     @State private var stableHeight: CGFloat = 0
-    @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 1
+    /// The Added Colors grid is shown (it starts collapsed).
+    @State private var addedExpanded = false
+    /// The strip, name, switch and Added Colors header: what the grid's share
+    /// of the top two thirds leaves out.
+    @State private var fixedUpperHeight: CGFloat = 0
+    @State private var gridContentHeight: CGFloat = 0
+    /// One card's height, so the grid can show one and a half rows.
+    @State private var cardHeight: CGFloat = 0
     @AppStorage("paletteAddSource") private var sourceRaw = PaletteAddSource.pick.rawValue
 
     init(mode: Mode, draft: PaletteDraft, onConfirm: @escaping (PaletteDraft, String) -> Void) {
@@ -75,6 +82,12 @@ struct PaletteEditor: View {
 
     /// A hardware keyboard shows at most a shortcut bar, far below this.
     private static let softKeyboardThreshold: CGFloat = 120
+    /// The most of the sheet the strip, name, switch and Added Colors take
+    /// (a guard for short screens; the grid's own limit is `visibleRows`).
+    private static let upperShare: CGFloat = 2.0 / 3.0
+    /// Rows the Added Colors grid shows before it scrolls; the half row tells
+    /// the user there is more. The rest of the room goes to the source's view.
+    private static let visibleRows: CGFloat = 1.5
 
     private var source: Binding<PaletteAddSource> {
         Binding(
@@ -101,47 +114,44 @@ struct PaletteEditor: View {
         NavigationStack(path: $path) {
             GeometryReader { geo in
                 let available = stableHeight > 0 ? stableHeight : geo.size.height
-                let preferred = PaletteEditorLayout.panelHeight(
-                    available: available,
-                    minimum: PaletteEditorLayout.minimum(typeScale: typeScale)
-                )
-                // With the strip and list stepped aside, the panel still has
-                // to fit in what the keyboard leaves.
-                let panelHeight = panelKeyboard ? min(preferred, max(geo.size.height - 12, 0)) : preferred
+                // The grid scrolls within what the fixed parts leave of the top
+                // two thirds (12 is the gap above it).
+                let gridMax = max(available * Self.upperShare - fixedUpperHeight - 12, 0)
 
                 VStack(spacing: 0) {
-                    // Typing in the panel needs the room: the strip and list
-                    // step aside (hidden, not removed, so their state stays).
-                    VStack(spacing: 0) {
-                        header
-                        list
-                    }
-                    .frame(maxHeight: panelKeyboard ? 0 : .infinity)
-                    .clipped()
-                    .opacity(panelKeyboard ? 0 : 1)
-                    .allowsHitTesting(!panelKeyboard)
-                    .accessibilityHidden(panelKeyboard)
+                    // Typing in the source's view needs the room: the top steps
+                    // aside (hidden, not removed, so its state stays).
+                    upper(gridMax: gridMax)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .frame(height: panelKeyboard ? 0 : nil, alignment: .top)
+                        .clipped()
+                        .opacity(panelKeyboard ? 0 : 1)
+                        .allowsHitTesting(!panelKeyboard)
+                        .accessibilityHidden(panelKeyboard)
 
                     PaletteAddPanel(
                         draft: draft,
                         selection: $selection,
-                        source: source,
-                        height: panelHeight,
+                        source: source.wrappedValue,
                         fieldFocused: $panelFieldFocused,
-                        onAdd: add
+                        onAdd: { add($0) },
+                        onScan: { add($0, replacing: $1) },
+                        onPicked: applyPicked,
+                        onRemovePhoto: removePhoto
                     )
-                    .padding(.horizontal, 12)
-                    .padding(.top, 4)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
                     .padding(.bottom, 8)
                     // The palette's own name field needs the whole screen
                     // above the keyboard.
-                    .frame(height: nameKeyboard ? 0 : panelHeight + 12, alignment: .top)
+                    .frame(maxHeight: nameKeyboard ? 0 : .infinity)
                     .clipped()
                     .opacity(nameKeyboard ? 0 : 1)
                     .allowsHitTesting(!nameKeyboard)
                     .accessibilityHidden(nameKeyboard)
                 }
-                .frame(maxHeight: .infinity, alignment: .bottom)
+                .frame(maxHeight: .infinity, alignment: .top)
                 .animation(keyboardAnimation, value: nameKeyboard)
                 .animation(keyboardAnimation, value: panelKeyboard)
                 .onChange(of: geo.size.height, initial: true) { _, height in
@@ -196,8 +206,7 @@ struct PaletteEditor: View {
 
     // MARK: - Strip
 
-    /// The palette as it will look, pinned so it stays in view while the list
-    /// scrolls and the panel is used.
+    /// The palette as it will look, always in view.
     private var header: some View {
         VStack(spacing: 6) {
             if draft.colors.isEmpty {
@@ -224,8 +233,6 @@ struct PaletteEditor: View {
                 .opacity(draft.colors.isEmpty ? 0 : 1)
                 .accessibilityHidden(draft.colors.isEmpty)
         }
-        .padding(.horizontal)
-        .padding(.top, 8)
     }
 
     private var caption: String {
@@ -244,7 +251,7 @@ struct PaletteEditor: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 72)
+        .frame(height: PaletteStripEditor.height)
         .liquidGlass(.regular, in: .rect(cornerRadius: 16))
         // Vanish instantly when the first color arrives, so a fading glass
         // rim doesn't read as a stray hairline over the strip.
@@ -253,51 +260,94 @@ struct PaletteEditor: View {
         .accessibilityLabel("Empty palette. Add at least 2 colors to build your palette.")
     }
 
-    // MARK: - List
+    // MARK: - Top
 
-    private var list: some View {
+    private func upper(gridMax: CGFloat) -> some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 12) {
+                header
+
+                TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $draft.name)
+                    .font(.system(size: 18, weight: .medium))
+                    .submitLabel(.done)
+                    .focused($nameFocused)
+                    .onSubmit { nameFocused = false }
+                    .padding()
+                    .liquidGlass(.regular, in: .rect(cornerRadius: 16))
+                    .accessibilityLabel("Palette name")
+                    .accessibilityHint(nameHint)
+
+                Picker("Add colors from", selection: source) {
+                    ForEach(PaletteAddSource.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .sensoryFeedback(.selection, trigger: sourceRaw)
+
+                if !draft.colors.isEmpty {
+                    addedHeader
+                }
+            }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { fixedUpperHeight = $0 }
+
+            if addedExpanded && !draft.colors.isEmpty {
+                addedGrid(maxHeight: gridMax)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private var addedHeader: some View {
+        Button {
+            withAnimation(appendAnimation ?? .easeInOut(duration: 0.2)) { addedExpanded.toggle() }
+        } label: {
+            HStack {
+                Text("Added Colors")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .rotationEffect(.degrees(addedExpanded ? 90 : 0))
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Added Colors")
+        .accessibilityValue(addedExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint(addedExpanded ? "Hides the colors" : "Shows the colors")
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The grid's height for `visibleRows` rows (its 4 pt top padding, the
+    /// cards and the gaps between whole rows), once a card has been measured.
+    private var rowsHeight: CGFloat {
+        guard cardHeight > 0 else { return .infinity }
+        let rows = Self.visibleRows
+        return 4 + cardHeight * rows + SwatchCardGrid.spacing * rows.rounded(.down)
+    }
+
+    /// Three cards to a row, one and a half rows tall; the rest scrolls.
+    private func addedGrid(maxHeight: CGFloat) -> some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $draft.name)
-                        .font(.system(size: 18, weight: .medium))
-                        .submitLabel(.done)
-                        .focused($nameFocused)
-                        .onSubmit { nameFocused = false }
-                        .padding()
-                        .liquidGlass(.regular, in: .rect(cornerRadius: 16))
-                        .accessibilityLabel("Palette name")
-                        .accessibilityHint(nameHint)
-
-                    if !draft.colors.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Added Colors")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .accessibilityAddTraits(.isHeader)
-
-                            LazyVStack(spacing: 8) {
-                                ForEach(draft.colors) { entry in
-                                    PaletteColorRow(
-                                        color: entry,
-                                        onEdit: { selection = entry.id; path.append(.edit(entry.id)) },
-                                        onRemove: { removeColor(entry.id) }
-                                    )
-                                    .firstFillEntrance(index: entrance[entry.id])
-                                    // A staggered row fades in by itself.
-                                    .transition(entrance[entry.id] == nil ? .opacity : .identity)
-                                }
-                            }
-                        }
-                        .padding(.top, 20)
+            FadingScrollView {
+                LazyVGrid(columns: SwatchCardGrid.columns, spacing: SwatchCardGrid.spacing) {
+                    ForEach(draft.colors) { entry in
+                        PaletteColorCard(
+                            color: entry,
+                            onEdit: { selection = entry.id; path.append(.edit(entry.id)) },
+                            onRemove: { removeColor(entry.id) }
+                        )
+                        .firstFillEntrance(index: entrance[entry.id])
+                        // A staggered card fades in by itself.
+                        .transition(entrance[entry.id] == nil ? .opacity : .identity)
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { cardHeight = $0 }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 12)
+                .padding(.vertical, 4)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { gridContentHeight = $0 }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .softScrollEdge()
+            .frame(height: min(gridContentHeight, rowsHeight, maxHeight))
+            .scrollIndicators(.hidden)
             .onChange(of: scrollTarget) { _, target in
                 guard let target else { return }
                 scrollTarget = nil
@@ -339,25 +389,67 @@ struct PaletteEditor: View {
     // MARK: - Draft
 
     /// Colors from the add panel are appended (duplicates by hex skipped). An
-    /// empty palette takes them as they are, which is the same thing.
-    private func add(_ colors: [PaletteColor]) {
-        let before = draft.colors.count
-        var added = 0
+    /// empty palette takes them as they are, which is the same thing. A new
+    /// Scan photo's colors take the place of the previous photo's (`replacing`).
+    private func add(_ colors: [PaletteColor], replacing ids: Set<UUID> = []) {
+        let kept = draft.colors.count(where: { !ids.contains($0.id) })
+        var result = (index: 0, added: 0)
         var staggered: [UUID: Int] = [:]
+        if let selection, ids.contains(selection) { self.selection = nil }
         withAnimation(appendAnimation) {
-            added = draft.append(colors)
+            result = draft.replace(ids, with: colors)
+            let inserted = draft.colors[result.index ..< result.index + result.added].map(\.id)
             // Set in the same update that inserts the views, so they start hidden.
-            staggered = FirstFillStagger.plan(existingCount: before, added: draft.colors.dropFirst(before).map(\.id))
+            staggered = FirstFillStagger.plan(existingCount: kept, added: inserted)
             // Only a real plan replaces the current one, so a quick second
             // add doesn't cut a running entrance short.
             if !staggered.isEmpty { entrance = staggered }
         }
-        if added == 0 {
+        if result.added == 0 {
             ToastManager.shared.show("Already in this palette", icon: "info.circle")
         } else {
             if !staggered.isEmpty { clearEntrance(staggered) }
             // Show what was just added (not on Undo or Duplicate).
-            scrollTarget = draft.colors[before].id
+            if addedExpanded { scrollTarget = draft.colors[result.index].id }
+        }
+    }
+
+    /// Scan's Remove: the photo's colors come out too; Undo puts both back.
+    private func removePhoto(_ removed: PaletteScanSession.Removed, undo: @escaping () -> Void) {
+        let taken = draft.colors.enumerated()
+            .filter { removed.colorIDs.contains($0.element.id) }
+            .map { (index: $0.offset, color: $0.element) }
+        withAnimation(appendAnimation) {
+            for entry in taken { draft.remove(id: entry.color.id) }
+        }
+        if let selection, removed.colorIDs.contains(selection) { self.selection = nil }
+        ToastManager.shared.show("Photo removed", icon: "trash.fill") {
+            withAnimation(appendAnimation) {
+                // In order, so each lands where it was.
+                for entry in taken { _ = draft.reinsert(entry.color, at: entry.index) }
+            }
+            undo()
+        }
+    }
+
+    /// Colors moved in Scan's picker take their new values, unless that would
+    /// give the palette the same hex twice; those keep what they had.
+    private func applyPicked(_ picked: [PaletteColor]) {
+        var finalHex = Dictionary(uniqueKeysWithValues: draft.colors.map { ($0.id, $0.hex.uppercased()) })
+        for color in picked where finalHex[color.id] != nil { finalHex[color.id] = color.hex.uppercased() }
+        var skipped = 0
+        withAnimation(appendAnimation) {
+            for color in picked where finalHex[color.id] != nil {
+                let taken = finalHex.contains { $0.key != color.id && $0.value == color.hex.uppercased() }
+                if taken {
+                    skipped += 1
+                } else {
+                    draft.update(id: color.id, color: color.color, hex: color.hex, name: color.name)
+                }
+            }
+        }
+        if skipped > 0 {
+            ToastManager.shared.show("Already in this palette", icon: "info.circle")
         }
     }
 
@@ -453,6 +545,7 @@ private struct EditColorPage: View {
         ColorComposer(
             color: $color,
             name: $name,
+            tinted: true,
             notice: isDuplicate ? "Already in this palette" : nil,
             tag: (role: draft.colors.first(where: { $0.id == id })?.role, onTap: onTag)
         )

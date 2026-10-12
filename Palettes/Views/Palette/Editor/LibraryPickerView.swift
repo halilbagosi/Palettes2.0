@@ -3,9 +3,10 @@
 //  Palettes
 //
 //  The add panel's Library source: the user's saved colors, newest first and
-//  searchable, as a multi-select. Colors already in the palette show checked
-//  and can't be picked again. "+ Add N" hands the picked colors to the editor.
-//  Tap-only, so it may scroll.
+//  searchable, as a multi-select grid of cards (three to a row, like Added
+//  Colors). Colors already in the palette show checked and can't be picked
+//  again. "+ Add N" hands the picked colors to the editor. Tap-only, so it
+//  may scroll.
 //
 
 import SwiftUI
@@ -43,21 +44,21 @@ struct LibraryPickerView: View {
             VStack(spacing: 8) {
                 searchField
 
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        if colors.isEmpty {
-                            Text("No colors match \u{201C}\(search)\u{201D}")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 24)
-                        } else {
+                FadingScrollView {
+                    if colors.isEmpty {
+                        Text("No colors match \u{201C}\(search)\u{201D}")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 24)
+                    } else {
+                        LazyVGrid(columns: SwatchCardGrid.columns, spacing: SwatchCardGrid.spacing) {
                             ForEach(colors) { item in
-                                row(item)
+                                card(item)
                             }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.bottom, 2)
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
@@ -115,10 +116,10 @@ struct LibraryPickerView: View {
         .font(.subheadline)
         .padding(.horizontal, 12)
         .frame(height: 38)
-        .panelWell(in: .rect(cornerRadius: 12))
+        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
     }
 
-    private func row(_ item: ColorViewModel) -> some View {
+    private func card(_ item: ColorViewModel) -> some View {
         let alreadyIn = excludedHexes.contains(item.HEX.uppercased())
         let isSelected = selection.contains(item.id)
 
@@ -129,42 +130,23 @@ struct LibraryPickerView: View {
                 selection.insert(item.id)
             }
         } label: {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(item.color.gradient)
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                    )
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(alreadyIn ? "In palette" : item.HEX)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
+            SwatchCard(color: item.color, name: item.name, hex: alreadyIn ? "In palette" : item.HEX) {
                 Image(systemName: alreadyIn || isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, isSelected ? Color.accentColor : Color.black.opacity(0.35))
+                    .shadow(color: .black.opacity(0.25), radius: 2)
                     .contentTransition(.symbolEffect(.replace))
+                    .padding(4)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .panelWell(in: .rect(cornerRadius: 12))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(alreadyIn)
         .opacity(alreadyIn ? 0.5 : 1)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(item.name), \(alreadyIn ? "in palette" : item.HEX)")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private func add() {

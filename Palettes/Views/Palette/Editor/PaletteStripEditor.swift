@@ -59,7 +59,8 @@ struct PaletteStripEditor: View {
         var ink: Color
     }
 
-    private let height: CGFloat = 72
+    /// Also the height of the empty preview and of Pick's swatch.
+    static let height: CGFloat = 72
     private let cornerRadius: CGFloat = 16
 
     /// The final index (after removal) when band `id` is dropped on band
@@ -106,7 +107,7 @@ struct PaletteStripEditor: View {
                 band(entry)
             }
         }
-        .frame(height: height)
+        .frame(height: Self.height)
         // Clear while bands stagger in, so the last color doesn't fill the strip first.
         .background(entrance.isEmpty ? (draft.colors.last?.color ?? Color.clear) : Color.clear)
         .overlay { insertionBar }
@@ -155,6 +156,7 @@ struct PaletteStripEditor: View {
         let id = entry.id
         let index = draft.colors.firstIndex { $0.id == id } ?? 0
         let isLast = index == draft.colors.count - 1
+        let isFirst = index == 0
 
         ZStack(alignment: .bottom) {
             if let role = entry.role, !role.isEmpty {
@@ -178,7 +180,16 @@ struct PaletteStripEditor: View {
         }
         .overlay {
             if selection == id {
-                Rectangle().strokeBorder(ink, lineWidth: 3).allowsHitTesting(false)
+                // The end bands' frames follow the strip's rounded corners.
+                UnevenRoundedRectangle(
+                    topLeadingRadius: isFirst ? cornerRadius : 0,
+                    bottomLeadingRadius: isFirst ? cornerRadius : 0,
+                    bottomTrailingRadius: isLast ? cornerRadius : 0,
+                    topTrailingRadius: isLast ? cornerRadius : 0,
+                    style: .continuous
+                )
+                .strokeBorder(ink, lineWidth: 3)
+                .allowsHitTesting(false)
             }
         }
         .firstFillEntrance(index: entrance[id])
@@ -190,7 +201,7 @@ struct PaletteStripEditor: View {
         .draggable(beginDrag(id)) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(entry.color)
-                .frame(width: 64, height: height)
+                .frame(width: 64, height: Self.height)
         }
         .dropDestination(for: BandDragItem.self) { items, _ in
             draggingID = nil

@@ -104,6 +104,18 @@ final class ScanSession: ObservableObject {
         start { image }
     }
 
+    /// Drops the photo (and any load still in flight).
+    func clear() {
+        loadTask?.cancel()
+        loadCounter += 1
+        isLoading = false
+        needsDelivery = false
+        image = nil
+        sampler = nil
+        sampledColor = nil
+        point = CGPoint(x: 0.5, y: 0.5)
+    }
+
     /// Moves the marker and reads the color under it.
     func sample(at point: CGPoint) {
         self.point = point
@@ -373,10 +385,7 @@ struct ScanPicker: View {
 
     // MARK: - Camera / Library
 
-    /// Glass rule: these buttons sit on the composer's plain background, so
-    /// they are interactive glass. Inside the palette add panel's own glass
-    /// card, the Scan source uses a tint (`panelWell`) instead, since glass
-    /// doesn't read on glass.
+    /// Dev's Camera / Library buttons: interactive glass on the plain background.
     private var sourceButtons: some View {
         HStack(spacing: 12) {
             if Self.cameraAvailable {

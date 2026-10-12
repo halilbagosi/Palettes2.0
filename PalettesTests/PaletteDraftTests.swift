@@ -15,6 +15,30 @@ struct PaletteDraftTests {
         #expect(draft.colors.map(\.hex) == ["#FF0000", "#00FF00"])
     }
 
+    @Test func replacePutsNewColorsWhereTheOldOnesStarted() {
+        var draft = PaletteDraft(colors: [pc("#111111"), pc("#AA0000"), pc("#222222"), pc("#BB0000")])
+        let old: Set<UUID> = [draft.colors[1].id, draft.colors[3].id]
+        let result = draft.replace(old, with: [pc("#00AA00"), pc("#00BB00")])
+        #expect(result.index == 1)
+        #expect(result.added == 2)
+        #expect(draft.colors.map(\.hex) == ["#111111", "#00AA00", "#00BB00", "#222222"])
+    }
+
+    @Test func replaceSkipsHexesTheRestAlreadyHas() {
+        var draft = PaletteDraft(colors: [pc("#111111"), pc("#AA0000")])
+        let result = draft.replace([draft.colors[1].id], with: [pc("#111111"), pc("#aa0000")])
+        // The old color is gone, so its own hex may come back; the kept one's may not.
+        #expect(result.added == 1)
+        #expect(draft.colors.map(\.hex) == ["#111111", "#aa0000"])
+    }
+
+    @Test func replaceAppendsWhenTheOldColorsAreGone() {
+        var draft = PaletteDraft(colors: [pc("#111111")])
+        let result = draft.replace([UUID()], with: [pc("#222222")])
+        #expect(result.index == 1)
+        #expect(draft.colors.map(\.hex) == ["#111111", "#222222"])
+    }
+
     @Test func canSaveNeedsTwoColors() {
         var draft = PaletteDraft()
         #expect(!draft.canSave)
