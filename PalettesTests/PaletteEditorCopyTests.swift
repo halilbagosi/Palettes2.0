@@ -22,6 +22,8 @@ final class PaletteEditorCopyTests: XCTestCase {
     }
 
     func testMinStackedHeightSumsContent() {
-        XCTAssertEqual(PaletteEditorCopy.minStackedHeight(strip: 100, name: 50, picker: 30, panel: 200, spacing: 10), 100 + 50 + 30 + 200 + 30 + 28)
+        let got = PaletteEditorCopy.minStackedHeight(strip: 100, name: 50, picker: 30, spacing: 10)
+        let expected: CGFloat = 100 + 50 + 30 + 20 + 28
+        XCTAssertEqual(got, expected)
     }
 }

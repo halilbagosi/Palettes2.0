@@ -6,7 +6,8 @@
 //  Scan · Library · Harmony; the editor shows the switch under the palette
 //  name). Like the dev branch's sheet, there is no card around it: each
 //  source's controls are separate components with their own glass. It is
-//  pinned, not scrolled; the lists inside it scroll within it.
+//  a floor height and no scroll view of its own; the lists inside it
+//  scroll within it.
 //  Every source hands colors to the editor through `onAdd`, which appends
 //  them to the draft.
 //
@@ -37,7 +38,7 @@ struct PaletteAddPanel: View {
     @Binding var selection: UUID?
     let source: PaletteAddSource
     /// True while a text field in the panel (Pick's name, Library's search)
-    /// has the keyboard, so the editor can make room.
+    /// has the keyboard, so the editor scrolls the panel into view.
     @Binding var fieldFocused: Bool
     var onAdd: ([PaletteColor]) -> Void
     /// A new photo's colors, to go in place of the previous photo's (`replacing`).

@@ -21,11 +21,16 @@ enum SheetLayout: Equatable {
     /// with room for two columns (width at least 0.75 of height; a ratio, not
     /// points), or when it is too short for the stacked layout
     /// (`size.height < minStackedHeight`, computed from content with
-    /// `@ScaledMetric`, never a screen constant). Otherwise stacked.
+    /// `@ScaledMetric`) AND wide enough for two usable columns
+    /// (`2 * minColumnWidth`). A narrow, short container stays stacked and
+    /// scrolls rather than squeezing into two cramped columns.
+    /// The least width a split column can have and still be usable.
+    static let minColumnWidth: CGFloat = 300
+
     static func resolve(size: CGSize, horizontal: UserInterfaceSizeClass?, minStackedHeight: CGFloat) -> SheetLayout {
         if size.width > size.height { return .split }
         if horizontal == .regular, size.width >= size.height * 0.75 { return .split }
-        if size.height < minStackedHeight { return .split }
+        if size.height < minStackedHeight, size.width >= minColumnWidth * 2 { return .split }
         return .stacked
     }
 }

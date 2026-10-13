@@ -4,8 +4,9 @@
 //
 //  The add panel's Library source: the user's saved colors, newest first and
 //  searchable, as a multi-select grid of cards (about three to a row).
-//  Colors already in the palette show checked and can't be picked again. "+ Add N" hands the picked colors to the editor. Tap-only, so it
-//  may scroll.
+//  Colors already in the palette show checked and can't be picked again.
+//  "+ Add N" hands the picked colors to the editor. Tap-only, so it may
+//  scroll.
 //
 
 import SwiftUI
@@ -13,7 +14,7 @@ import SwiftUI
 struct LibraryPickerView: View {
     /// Uppercased "#RRGGBB" of colors already in the palette.
     var excludedHexes: Set<String>
-    /// The search field has the keyboard, so the editor can make room.
+    /// The search field has the keyboard, so the editor scrolls the panel into view.
     @Binding var searchFocused: Bool
     var onAdd: ([ColorViewModel]) -> Void
 

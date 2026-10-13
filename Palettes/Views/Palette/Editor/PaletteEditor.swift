@@ -37,11 +37,12 @@ enum PaletteEditorCopy {
     /// Vertical padding around the stacked content (8 above, 20 below).
     static let stackedPadding: CGFloat = 28
 
-    /// What the stacked layout needs to show everything usably: the four
-    /// blocks, the gaps between them and the padding. Callers pass
-    /// `@ScaledMetric` heights, so it grows with Dynamic Type.
-    static func minStackedHeight(strip: CGFloat, name: CGFloat, picker: CGFloat, panel: CGFloat, spacing: CGFloat) -> CGFloat {
-        strip + name + picker + panel + spacing * 3 + stackedPadding
+    /// What the stacked layout's non-scrolling top block needs: the strip, the
+    /// name field, the source switch, the gaps and the padding. The add panel
+    /// is left out on purpose: stacked scrolls, so the panel's floor never
+    /// forces split. Callers pass `@ScaledMetric` heights.
+    static func minStackedHeight(strip: CGFloat, name: CGFloat, picker: CGFloat, spacing: CGFloat) -> CGFloat {
+        strip + name + picker + spacing * 2 + stackedPadding
     }
 }
 
@@ -72,7 +73,8 @@ struct PaletteEditor: View {
     /// entrance stagger (see FirstFillStagger). Emptied once it has played.
     @State private var entrance: [UUID: Int] = [:]
     @FocusState private var nameFocused: Bool
-    /// A text field in the add panel (Pick's name, Library's search) has focus.
+    /// A text field in the add panel (Pick's name, Library's search) has focus;
+    /// the scroll views then bring the panel into view above the keyboard.
     @State private var panelFieldFocused = false
 
     // Content-based sizes (scaled with Dynamic Type) the stacked/split
@@ -80,6 +82,8 @@ struct PaletteEditor: View {
     /// The strip with its caption and subtext.
     @ScaledMetric(relativeTo: .body) private var stripBlockHeight: CGFloat = 120
     @ScaledMetric(relativeTo: .body) private var nameHeight: CGFloat = 56
+    /// The name field's text size, scaled so the field and `nameHeight` agree.
+    @ScaledMetric(relativeTo: .body) private var nameFontSize: CGFloat = 18
     @ScaledMetric(relativeTo: .body) private var pickerHeight: CGFloat = 32
     /// What the add panel needs to stay usable (Library's search, a few cards
     /// and the Add button).
@@ -87,6 +91,7 @@ struct PaletteEditor: View {
     @AppStorage("paletteAddSource") private var sourceRaw = PaletteAddSource.pick.rawValue
 
     private static let blockSpacing: CGFloat = 12
+    private static let panelID = "addPanel"
 
     init(mode: Mode, draft: PaletteDraft, onConfirm: @escaping (PaletteDraft, String) -> Void) {
         self.mode = mode
@@ -101,7 +106,7 @@ struct PaletteEditor: View {
     private var minStackedHeight: CGFloat {
         PaletteEditorCopy.minStackedHeight(
             strip: stripBlockHeight, name: nameHeight, picker: pickerHeight,
-            panel: panelMinHeight, spacing: Self.blockSpacing
+            spacing: Self.blockSpacing
         )
     }
 
@@ -136,7 +141,7 @@ struct PaletteEditor: View {
                 } else {
                     switch layout {
                     case .stacked:
-                        FillingScroll(minContentHeight: 0) {
+                        FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused) {
                             VStack(spacing: Self.blockSpacing) {
                                 stripBlock(fillsHeight: false)
                                 nameField
@@ -199,7 +204,7 @@ struct PaletteEditor: View {
     /// Split's first side: the strip (as tall as the side allows), its name and
     /// subtext. Scrolls when a short container can't fit them.
     private var visualColumn: some View {
-        FillingScroll(minContentHeight: 0) {
+        FillingScroll {
             VStack(spacing: Self.blockSpacing) {
                 stripBlock(fillsHeight: true)
                 nameField
@@ -212,7 +217,7 @@ struct PaletteEditor: View {
 
     /// Split's second side: the source switch and the add panel.
     private var controlsColumn: some View {
-        FillingScroll(minContentHeight: 0) {
+        FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused) {
             VStack(spacing: Self.blockSpacing) {
                 sourcePicker
                 addPanel
@@ -246,11 +251,12 @@ struct PaletteEditor: View {
         )
         .frame(maxHeight: .infinity)
         .frame(minHeight: panelMinHeight)
+        .id(Self.panelID)
     }
 
     private var nameField: some View {
         TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $draft.name)
-            .font(.system(size: 18, weight: .medium))
+            .font(.system(size: nameFontSize, weight: .medium))
             .submitLabel(.done)
             .focused($nameFocused)
             .onSubmit { nameFocused = false }
@@ -425,7 +431,8 @@ struct PaletteEditor: View {
         }
     }
 
-    /// The row's minus: remove, then offer Undo.
+    /// Remove a color, then offer Undo. No row calls it yet; the Harmony "\u{2013}"
+    /// uses it (next task).
     private func removeColor(_ id: UUID) {
         var removed: (index: Int, color: PaletteColor)?
         withAnimation(appendAnimation) { removed = draft.remove(id: id) }
@@ -535,16 +542,32 @@ private struct EditColorPage: View {
 /// A vertical scroll view whose content is at least as tall as the view, so
 /// flexible children (the add panel, a tall strip) fill the room there is and
 /// the rest scrolls. Bounces only when the content overflows.
+/// (The panel's own list scrolls inside this on the same axis; at the panel's
+/// floor height the two don't fight in practice, and the inner one wins touches
+/// that start on it.)
 private struct FillingScroll<Content: View>: View {
-    var minContentHeight: CGFloat
+    /// When `revealWhen` turns true, scrolls the child with `.id(revealID)` to
+    /// the top so a focused field in it clears the keyboard.
+    var revealID: String?
+    var revealWhen = false
     @ViewBuilder var content: Content
 
     @State private var viewport: CGFloat = 0
 
     var body: some View {
-        ScrollView {
-            content
-                .frame(minHeight: max(viewport, minContentHeight))
+        ScrollViewReader { proxy in
+            ScrollView {
+                content
+                    .frame(minHeight: viewport)
+            }
+            .onChange(of: revealWhen) { _, now in
+                guard now, let revealID else { return }
+                // The keyboard is still arriving; scroll once it has room.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(350))
+                    withAnimation { proxy.scrollTo(revealID, anchor: .top) }
+                }
+            }
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollIndicators(.hidden)

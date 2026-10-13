@@ -21,8 +21,16 @@ final class SheetLayoutTests: XCTestCase {
         XCTAssertEqual(resolve(1024, 1366, .regular), .stacked)
     }
     func testRegularNearSquareIsSplit() { XCTAssertEqual(resolve(900, 1000, .regular), .split) }
-    func testDuoOuterPortraitSplitsWhenContentDoesNotFit() {
-        XCTAssertEqual(resolve(380, 430, .compact, min: 520), .split)
+    func testNarrowShortStaysStackedEvenWhenContentDoesNotFit() {
+        XCTAssertEqual(resolve(380, 430, .compact, min: 520), .stacked)
+        XCTAssertEqual(resolve(393, 852, .compact, min: 2000), .stacked)
+    }
+    func testWideShortSplitsViaWidthGreaterThanHeight() {
+        XCTAssertEqual(resolve(700, 400, .compact, min: 300), .split)
+    }
+    func testWideEnoughPortraitTooShortIsSplit() {
+        XCTAssertEqual(resolve(600, 650, .compact, min: 700), .split)
+        XCTAssertEqual(resolve(599, 650, .compact, min: 700), .stacked)
     }
     func testDuoOuterPortraitStackedWhenContentFits() {
         XCTAssertEqual(resolve(380, 430, .compact, min: 300), .stacked)
@@ -32,8 +40,8 @@ final class SheetLayoutTests: XCTestCase {
     func testNilSizeClassPortraitIsStacked() { XCTAssertEqual(resolve(393, 852, nil), .stacked) }
     func testSquareIsStacked() { XCTAssertEqual(resolve(500, 500, .compact), .stacked) }
     func testLargerMinStackedHeightFlipsBorderlineToSplit() {
-        XCTAssertEqual(resolve(393, 600, .compact, min: 500), .stacked)
-        XCTAssertEqual(resolve(393, 600, .compact, min: 700), .split)
+        XCTAssertEqual(resolve(650, 700, .compact, min: 600), .stacked)
+        XCTAssertEqual(resolve(650, 700, .compact, min: 800), .split)
     }
 
     // MARK: SheetMeasureTracker
