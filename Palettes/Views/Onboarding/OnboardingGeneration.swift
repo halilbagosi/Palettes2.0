@@ -66,7 +66,8 @@ enum OnboardingPaletteMaker {
         existingNames: [String],
         revealDelay: Duration = .zero,
         onColors: @escaping @MainActor ([Color]) -> Void,
-        onLatePalette: (@MainActor (PaletteViewModel) -> Void)? = nil
+        onLatePalette: (@MainActor (PaletteViewModel) -> Void)? = nil,
+        onLateTask: (@MainActor (Task<Void, Never>) -> Void)? = nil
     ) async throws -> Made {
         if usesAI, #available(iOS 26.0, *), modelAvailable {
             let palette = try await PaletteGenerator.generate(
@@ -75,7 +76,8 @@ enum OnboardingPaletteMaker {
                 vibe: nil,
                 existingNames: existingNames,
                 onPartialColors: onColors,
-                onLateNaming: onLatePalette
+                onLateNaming: onLatePalette,
+                onLateNamingTask: onLateTask
             )
             var generated = palette
             generated.isGenerated = true

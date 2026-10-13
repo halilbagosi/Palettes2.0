@@ -31,6 +31,8 @@ final class OnboardingInterimFlow: ObservableObject {
     /// A color chosen in the full-screen picker, applied when the adjust step begins.
     private var pendingPick: (r: Double, g: Double, b: Double)?
     private var genTask: Task<Void, Never>?
+    /// The model's late naming, owned here so leaving cancels the model call.
+    private var lateNamingTask: Task<Void, Never>?
 
     init(model: OnboardingModel) { self.model = model }
 
@@ -44,7 +46,12 @@ final class OnboardingInterimFlow: ObservableObject {
         return ColorNamer.name(forHex: String(hex.dropFirst()))
     }
 
-    func stop() { genTask?.cancel() }
+    func stop() {
+        genTask?.cancel()
+        lateNamingTask?.cancel()
+        lateNamingTask = nil
+        pendingLatePalette = nil
+    }
 
     // MARK: Adjust
 
@@ -97,31 +104,62 @@ final class OnboardingInterimFlow: ObservableObject {
         }
     }
 
-    private var runID = 0
+    private(set) var runID = 0
     /// A late model name that landed before the palette was marked ready.
-    private var pendingLatePalette: PaletteViewModel?
+    private(set) var pendingLatePalette: PaletteViewModel?
 
     /// The model's names arrived after "ready" was already shown on
-    /// fallback names: swap them in.
-    private func applyLateNaming(_ palette: PaletteViewModel) {
+    /// fallback names: swap them in. Ignored once the palette is being saved
+    /// or onboarding is over, so the title on screen never differs from the
+    /// saved palette.
+    func applyLateNaming(_ palette: PaletteViewModel) {
+        guard !isSaving, !model.isFinished else { return }
         guard case .ready(let made) = genState else {
             pendingLatePalette = palette
             return
         }
         withAnimation(.easeInOut(duration: 0.3)) {
             genState = .ready(OnboardingPaletteMaker.Made(
-                palette: palette, usedAI: made.usedAI, anchorHex: made.anchorHex))
+                palette: Self.swapped(made.palette, with: palette),
+                usedAI: made.usedAI, anchorHex: made.anchorHex))
         }
+        UIAccessibility.post(notification: .announcement, argument: "Palette named \(palette.name)")
+    }
+
+    /// The late palette, keeping the shown palette's identity and Generated tag.
+    nonisolated static func swapped(_ shown: PaletteViewModel, with late: PaletteViewModel) -> PaletteViewModel {
+        var result = late
+        result.id = shown.id
+        result.isGenerated = shown.isGenerated
+        return result
+    }
+
+    /// The palette is ready; applies a late name that arrived first.
+    func markReady(_ made: OnboardingPaletteMaker.Made) {
+        genColors = made.palette.colors
+        withAnimation(.easeInOut(duration: 0.3)) { genState = .ready(made) }
+        if let late = pendingLatePalette {
+            pendingLatePalette = nil
+            applyLateNaming(late)
+        }
+        UIAccessibility.post(notification: .announcement,
+                             argument: "Palette ready: \(made.palette.name)")
+    }
+
+    /// A late name from run `id`; stale runs are dropped.
+    func receiveLate(_ palette: PaletteViewModel, runID id: Int) {
+        guard runID == id else { return }
+        applyLateNaming(palette)
     }
 
     func startGeneration(appData: AppData, reduceMotion: Bool) {
         guard let hex = model.selectedHex else { return }
         isFromPhoto = false
         genColors = [adjustedColor]
-        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors, onLate in
+        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors, onLate, onTask in
             try await OnboardingPaletteMaker.make(
                 anchorHex: hex, existingNames: names, revealDelay: delay, onColors: onColors,
-                onLatePalette: onLate)
+                onLatePalette: onLate, onLateTask: onTask)
         }
     }
 
@@ -131,7 +169,7 @@ final class OnboardingInterimFlow: ObservableObject {
         guard let image = model.capturedImage else { return }
         isFromPhoto = true
         genColors = []
-        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors, _ in
+        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors, _, _ in
             try await OnboardingPaletteMaker.fromPhoto(
                 image, existingNames: names, revealDelay: delay, onColors: onColors)
         }
@@ -142,9 +180,12 @@ final class OnboardingInterimFlow: ObservableObject {
         reduceMotion: Bool,
         make: @escaping (_ names: [String], _ delay: Duration,
                          _ onColors: @escaping @MainActor ([Color]) -> Void,
-                         _ onLate: @escaping @MainActor (PaletteViewModel) -> Void) async throws -> OnboardingPaletteMaker.Made
+                         _ onLate: @escaping @MainActor (PaletteViewModel) -> Void,
+                         _ onTask: @escaping @MainActor (Task<Void, Never>) -> Void) async throws -> OnboardingPaletteMaker.Made
     ) {
         genTask?.cancel()
+        lateNamingTask?.cancel()
+        lateNamingTask = nil
         runID += 1
         let id = runID
         pendingLatePalette = nil
@@ -154,18 +195,13 @@ final class OnboardingInterimFlow: ObservableObject {
         genTask = Task {
             do {
                 let made = try await make(names, delay, { colors in self.genColors = colors }, { palette in
-                    guard self.runID == id else { return }
-                    self.applyLateNaming(palette)
+                    self.receiveLate(palette, runID: id)
+                }, { task in
+                    // A stale or stopped run must not leave its model call running.
+                    if self.runID == id, !Task.isCancelled { self.lateNamingTask = task } else { task.cancel() }
                 })
                 guard !Task.isCancelled else { return }
-                genColors = made.palette.colors
-                withAnimation(.easeInOut(duration: 0.3)) { genState = .ready(made) }
-                if let late = pendingLatePalette {
-                    pendingLatePalette = nil
-                    applyLateNaming(late)
-                }
-                UIAccessibility.post(notification: .announcement,
-                                     argument: "Palette ready: \(made.palette.name)")
+                markReady(made)
             } catch is CancellationError {
                 // Skipped or left the screen.
             } catch {

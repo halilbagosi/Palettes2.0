@@ -136,7 +136,8 @@ enum PaletteGenerator {
         scheme: HarmonyScheme = .auto,
         existingNames: [String] = [],
         onPartialColors: (@MainActor ([Color]) -> Void)? = nil,
-        onLateNaming: (@MainActor (PaletteViewModel) -> Void)? = nil
+        onLateNaming: (@MainActor (PaletteViewModel) -> Void)? = nil,
+        onLateNamingTask: (@MainActor (Task<Void, Never>) -> Void)? = nil
     ) async throws -> PaletteViewModel {
         #if !targetEnvironment(simulator)
         guard case .available = SystemLanguageModel.default.availability else {
@@ -193,8 +194,7 @@ enum PaletteGenerator {
                 await MainActor.run { onPartialColors(colors) }
             }
             for index in firstGenerated..<colors.count {
-                // Between colors only: the first one lands immediately.
-                if GenerationPacing.sleepsBeforeColor(at: index) {
+                if GenerationPacing.waitsBeforeRevealing(colorAt: index) {
                     try await Task.sleep(for: GenerationPacing.colorInterval)
                 }
                 let preview = Array(colors.prefix(index + 1))
@@ -229,11 +229,14 @@ enum PaletteGenerator {
             } else {
                 try Task.checkCancellation()
                 finished = true
-                Task { @MainActor in
-                    let late = await namingTask.value
-                    guard !Task.isCancelled, !late.colorNames.isEmpty || late.title != nil else { return }
-                    onLateNaming(assemble(late))
-                }
+                // The caller owns this task: cancelling it stops the model call
+                // and guarantees `onLateNaming` never fires afterwards.
+                let lateTask = lateNamingTask(
+                    awaiting: namingTask,
+                    isUseful: { !$0.colorNames.isEmpty || $0.title != nil },
+                    assemble: { assemble($0) },
+                    deliver: onLateNaming)
+                await MainActor.run { onLateNamingTask?(lateTask) }
                 return assemble(Naming(title: nil, colorNames: [:]))
             }
         } else {
@@ -242,6 +245,27 @@ enum PaletteGenerator {
         try Task.checkCancellation()
         finished = true
         return assemble(names)
+    }
+
+    /// Waits for the naming task and hands the assembled palette to
+    /// `deliver`, unless cancelled first (cancelling also cancels the naming
+    /// task, so the model call stops). Nothing is delivered if `isUseful`
+    /// rejects the result.
+    static func lateNamingTask<Result: Sendable>(
+        awaiting namingTask: Task<Result, Never>,
+        isUseful: @escaping @Sendable (Result) -> Bool,
+        assemble: @escaping @MainActor (Result) -> PaletteViewModel,
+        deliver: @escaping @MainActor (PaletteViewModel) -> Void
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            let late = await withTaskCancellationHandler {
+                await namingTask.value
+            } onCancel: {
+                namingTask.cancel()
+            }
+            guard !Task.isCancelled, isUseful(late) else { return }
+            deliver(assemble(late))
+        }
     }
 
     // MARK: - Locked base colors
@@ -382,8 +406,12 @@ enum GenerationPacing {
     /// How long "ready" waits for the model's names after the last color.
     static let namingGrace: Duration = .milliseconds(600)
 
-    /// The first color of a palette lands immediately; later ones wait.
-    static func sleepsBeforeColor(at index: Int) -> Bool { index > 0 }
+    /// Whether the reveal pauses before showing the color at `index` of the
+    /// final palette. Locked colors occupy the first indices and are already
+    /// on screen, so the first GENERATED color waits whenever any color is
+    /// showing (index > 0). Only index 0, which is generated only when
+    /// nothing is locked, lands immediately.
+    static func waitsBeforeRevealing(colorAt index: Int) -> Bool { index > 0 }
 }
 
 enum NamingRace {
