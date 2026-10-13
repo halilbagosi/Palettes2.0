@@ -48,7 +48,7 @@ struct HarmonyPickerView: View {
             chips
 
             FadingScrollView {
-                LazyVStack(spacing: 8) {
+                FoldAwareGrid(minimum: 240, maximum: 480, spacing: 8, rowSpacing: 8) {
                     ForEach(harmonies, id: \.scheme) { harmony in
                         row(harmony.scheme.displayName, hexes: harmony.hexes)
                     }

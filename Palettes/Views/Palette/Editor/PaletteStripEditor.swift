@@ -33,6 +33,9 @@ struct PaletteStripEditor: View {
     /// Bands that are entering as a first fill, each with its place in the
     /// stagger (empty otherwise).
     var entrance: [UUID: Int] = [:]
+    /// Take whatever height the container has (at least `height`) instead of
+    /// the fixed `height`: the split layout's tall strip.
+    var fillsHeight = false
     var onEdit: (UUID) -> Void
     var onTag: (UUID) -> Void
     /// For the Undo toast.
@@ -107,7 +110,7 @@ struct PaletteStripEditor: View {
                 band(entry)
             }
         }
-        .frame(height: Self.height)
+        .frame(minHeight: Self.height, maxHeight: fillsHeight ? .infinity : Self.height)
         // Clear while bands stagger in, so the last color doesn't fill the strip first.
         .background(entrance.isEmpty ? (draft.colors.last?.color ?? Color.clear) : Color.clear)
         .overlay { insertionBar }

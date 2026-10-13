@@ -3,9 +3,8 @@
 //  Palettes
 //
 //  The add panel's Library source: the user's saved colors, newest first and
-//  searchable, as a multi-select grid of cards (three to a row, like Added
-//  Colors). Colors already in the palette show checked and can't be picked
-//  again. "+ Add N" hands the picked colors to the editor. Tap-only, so it
+//  searchable, as a multi-select grid of cards (about three to a row).
+//  Colors already in the palette show checked and can't be picked again. "+ Add N" hands the picked colors to the editor. Tap-only, so it
 //  may scroll.
 //
 
@@ -52,7 +51,7 @@ struct LibraryPickerView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 24)
                     } else {
-                        LazyVGrid(columns: SwatchCardGrid.columns, spacing: SwatchCardGrid.spacing) {
+                        FoldAwareGrid(minimum: 96, maximum: 160, spacing: SwatchCardGrid.spacing, rowSpacing: SwatchCardGrid.spacing) {
                             ForEach(colors) { item in
                                 card(item)
                             }

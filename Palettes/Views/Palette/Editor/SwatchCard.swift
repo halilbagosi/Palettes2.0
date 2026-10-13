@@ -4,7 +4,7 @@
 //
 //  The library's compact color card, about a third of the sheet wide so three
 //  sit side by side: the color fills it, with the name and HEX on glass and a
-//  small control in its corner. Added Colors and the Library source both use it.
+//  small control in its corner. The Library source uses it.
 //
 
 import SwiftUI
@@ -68,45 +68,10 @@ struct SwatchCard<Accessory: View>: View {
     }
 }
 
-/// A card in the editor's Added Colors grid: tap to edit, the minus removes.
-struct PaletteColorCard: View {
-    let color: PaletteColor
-    var onEdit: () -> Void
-    var onRemove: () -> Void
-
-    var body: some View {
-        SwatchCard(color: color.color, name: color.name, hex: color.hex.uppercased(), role: color.role) {
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, Color.red.opacity(0.85))
-                    .shadow(color: .black.opacity(0.25), radius: 2)
-                    .padding(4)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Remove \(color.name.isEmpty ? "Untitled" : color.name)")
-        }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onEdit)
-        .accessibilityElement(children: .contain)
-        .accessibilityAction(named: "Edit", onEdit)
-        .accessibilityLabel("\(color.name.isEmpty ? "Untitled" : color.name), \(color.hex)")
-        .accessibilityValue(color.role ?? "")
-    }
-}
-
 #Preview {
     LazyVGrid(columns: SwatchCardGrid.columns, spacing: SwatchCardGrid.spacing) {
-        PaletteColorCard(
-            color: PaletteColor(color: Color(hex: "#264653") ?? .gray, hex: "#264653", name: "Charcoal Blue", role: "Primary"),
-            onEdit: {}, onRemove: {}
-        )
-        PaletteColorCard(
-            color: PaletteColor(color: Color(hex: "#E9C46A") ?? .gray, hex: "#E9C46A", name: "Saffron"),
-            onEdit: {}, onRemove: {}
-        )
+        SwatchCard(color: Color(hex: "#264653") ?? .gray, name: "Charcoal Blue", hex: "#264653", role: "Primary") {}
+        SwatchCard(color: Color(hex: "#E9C46A") ?? .gray, name: "Saffron", hex: "#E9C46A") {}
     }
     .padding()
 }
