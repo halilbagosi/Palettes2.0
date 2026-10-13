@@ -48,6 +48,9 @@ struct PaletteAddPanel: View {
     /// Scan's photo was removed; its colors come out of the palette.
     var onRemovePhoto: (PaletteScanSession.Removed, _ undo: @escaping () -> Void) -> Void
 
+    /// A harmony was taken out; the hexes to remove from the palette.
+    var onRemoveHarmony: ([String]) -> Void
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Kept here, not in the sources, so switching sources doesn't lose them.
@@ -86,7 +89,8 @@ struct PaletteAddPanel: View {
                         draft: draft,
                         selection: $selection,
                         pickHex: ColorComposer.hexKey(pickColor),
-                        onChoose: onAdd
+                        onChoose: onAdd,
+                        onRemove: onRemoveHarmony
                     )
                 }
             }

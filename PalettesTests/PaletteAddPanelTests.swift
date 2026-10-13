@@ -22,6 +22,25 @@ struct HarmonyBaseTests {
 }
 
 @MainActor
+struct HarmonyRowStateTests {
+    private let hexes = ["#264653", "#2A9D8F", "#E9C46A"]
+
+    @Test func noneWhenNothingIsInTheDraft() {
+        #expect(HarmonyRow.state(for: hexes, draftHexes: []) == .none)
+        #expect(HarmonyRow.state(for: hexes, draftHexes: ["#FFFFFF"]) == .none)
+    }
+
+    @Test func partialWhenSomeAreInTheDraft() {
+        #expect(HarmonyRow.state(for: hexes, draftHexes: ["#2A9D8F"]) == .partial)
+    }
+
+    @Test func allWhenEveryHexIsInTheDraftComparedUppercased() {
+        #expect(HarmonyRow.state(for: hexes, draftHexes: ["#264653", "#2A9D8F", "#E9C46A", "#000000"]) == .all)
+        #expect(HarmonyRow.state(for: ["#2a9d8f", "#e9c46a"], draftHexes: ["#2A9D8F", "#E9C46A"]) == .all)
+    }
+}
+
+@MainActor
 struct NextStarterTests {
     @Test func skipsTakenStarters() {
         var rng = SystemRandomNumberGenerator()

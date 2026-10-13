@@ -247,7 +247,8 @@ struct PaletteEditor: View {
             onAdd: { add($0) },
             onScan: { add($0, replacing: $1) },
             onPicked: applyPicked,
-            onRemovePhoto: removePhoto
+            onRemovePhoto: removePhoto,
+            onRemoveHarmony: removeHarmony
         )
         .frame(maxHeight: .infinity)
         .frame(minHeight: panelMinHeight)
@@ -431,8 +432,20 @@ struct PaletteEditor: View {
         }
     }
 
-    /// Remove a color, then offer Undo. No row calls it yet; the Harmony "\u{2013}"
-    /// uses it (next task).
+    /// Remove one draft color per harmony hex (a hex the palette holds twice
+    /// loses just one copy, and the same hex isn't taken twice by one harmony).
+    private func removeHarmony(_ hexes: [String]) {
+        var taken = Set<UUID>()
+        for hex in hexes {
+            let key = hex.uppercased()
+            if let entry = draft.colors.last(where: { $0.hex.uppercased() == key && !taken.contains($0.id) }) {
+                taken.insert(entry.id)
+                removeColor(entry.id)
+            }
+        }
+    }
+
+    /// Remove a color, then offer Undo. The Harmony "\u{2013}" uses it.
     private func removeColor(_ id: UUID) {
         var removed: (index: Int, color: PaletteColor)?
         withAnimation(appendAnimation) { removed = draft.remove(id: id) }

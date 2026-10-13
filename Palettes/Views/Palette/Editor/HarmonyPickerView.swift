@@ -23,12 +23,26 @@ enum HarmonyBase {
     }
 }
 
+/// How much of a harmony strip is already in the palette.
+enum HarmonyRow {
+    enum State { case none, partial, all }
+
+    /// `draftHexes` is uppercased ("#RRGGBB"), as `PaletteDraft.hexes` gives it.
+    static func state(for hexes: [String], draftHexes: Set<String>) -> State {
+        let present = hexes.filter { draftHexes.contains($0.uppercased()) }.count
+        if present == 0 { return .none }
+        return present == hexes.count ? .all : .partial
+    }
+}
+
 struct HarmonyPickerView: View {
     let draft: PaletteDraft
     @Binding var selection: UUID?
     /// "#RRGGBB" of the Pick source's color: the base while the palette is empty.
     let pickHex: String
     let onChoose: ([PaletteColor]) -> Void
+    /// Takes a fully added harmony's hexes back out of the palette.
+    let onRemove: ([String]) -> Void
 
     /// Spoken names for the strips' hexes; hexes are read until they resolve.
     @State private var names: [String: String] = [:]
@@ -116,8 +130,9 @@ struct HarmonyPickerView: View {
     // MARK: - Rows
 
     private func row(_ title: String, hexes: [String]) -> some View {
-        Button {
-            choose(hexes)
+        let isAdded = HarmonyRow.state(for: hexes, draftHexes: draft.hexes) == .all
+        return Button {
+            if isAdded { onRemove(hexes) } else { choose(hexes) }
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -126,9 +141,10 @@ struct HarmonyPickerView: View {
                         .foregroundStyle(.primary)
                     PaletteStrip(colors: hexes.compactMap { Color(hex: $0) }, height: 30, cornerRadius: 8)
                 }
-                Image(systemName: "plus.circle")
+                Image(systemName: isAdded ? "minus.circle.fill" : "plus.circle")
                     .font(.title3)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(isAdded ? Color.secondary : Color.accentColor)
+                    .accessibilityHidden(true)
             }
             .padding(10)
             .liquidGlass(.regular, in: .rect(cornerRadius: 14))
@@ -136,7 +152,8 @@ struct HarmonyPickerView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title): \(spokenColors(hexes))")
-        .accessibilityHint("Adds these colors to the palette")
+        .accessibilityValue(isAdded ? "Added" : "")
+        .accessibilityHint(isAdded ? "Remove harmony" : "Add harmony")
     }
 
     private func spokenColors(_ hexes: [String]) -> String {
@@ -157,8 +174,11 @@ struct HarmonyPickerView: View {
         if !Task.isCancelled { names = resolved }
     }
 
+    /// Adds only the strip's colors the palette doesn't have yet.
     private func choose(_ hexes: [String]) {
+        let have = draft.hexes
         let colors = hexes.compactMap { hex -> PaletteColor? in
+            guard !have.contains(hex.uppercased()) else { return nil }
             guard let color = Color(hex: hex) else { return nil }
             return PaletteColor(color: color, hex: hex, name: ColorNamer.name(forHex: hex))
         }
@@ -175,7 +195,8 @@ struct HarmonyPickerView: View {
         ]),
         selection: $selection,
         pickHex: "#3366CC",
-        onChoose: { _ in }
+        onChoose: { _ in },
+        onRemove: { _ in }
     )
     .frame(height: 260)
     .padding()
