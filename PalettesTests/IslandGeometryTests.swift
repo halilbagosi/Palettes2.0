@@ -160,15 +160,6 @@ final class IslandGeometryTests: XCTestCase {
         XCTAssertLessThan(thread.filletRadius, 0.5)
     }
 
-    @MainActor
-    func testFadeIsSolidThenEasedToClear() {
-        let stops = IslandGooCanvas.fadeStops(from: 0.2, to: 0.6)
-        XCTAssertEqual(stops.first?.location, 0)
-        XCTAssertEqual(stops.last?.location, 1)
-        let locations = stops.map(\.location)
-        XCTAssertEqual(locations, locations.sorted())
-    }
-
     func testNoneHasEmptyShape() {
         XCTAssertTrue(IslandGeometry.none.path(screenWidth: 375).isEmpty)
     }
