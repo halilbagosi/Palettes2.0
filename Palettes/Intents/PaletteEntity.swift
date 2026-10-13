@@ -63,6 +63,6 @@ struct PaletteEntityQuery: EntityStringQuery {
     @MainActor
     func suggestedEntities() async throws -> [PaletteEntity] {
         await AppData.shared.waitUntilLoaded()
-        return AppData.shared.palettes.prefix(10).map(PaletteEntity.init)
+        return AppData.shared.palettes.suffix(100).reversed().map(PaletteEntity.init)
     }
 }

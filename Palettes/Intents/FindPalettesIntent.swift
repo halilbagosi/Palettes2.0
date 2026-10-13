@@ -19,6 +19,7 @@ struct FindPalettesIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[PaletteEntity]> {
+        await AppData.shared.waitUntilLoaded()
         let all = AppData.shared.palettes
         let matches: [PaletteViewModel]
         if let term = searchTerm?.trimmingCharacters(in: .whitespacesAndNewlines), !term.isEmpty {

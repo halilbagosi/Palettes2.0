@@ -45,14 +45,16 @@ struct ColorEntity: AppEntity, IndexedEntity {
 struct ColorEntityQuery: EntityStringQuery {
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [ColorEntity] {
-        AppData.shared.colors
+        await AppData.shared.waitUntilLoaded()
+        return AppData.shared.colors
             .filter { identifiers.contains($0.id) }
             .map(ColorEntity.init)
     }
 
     @MainActor
     func entities(matching string: String) async throws -> [ColorEntity] {
-        AppData.shared.colors
+        await AppData.shared.waitUntilLoaded()
+        return AppData.shared.colors
             .filter {
                 $0.name.localizedCaseInsensitiveContains(string)
                     || $0.HEX.localizedCaseInsensitiveContains(string)
@@ -62,6 +64,13 @@ struct ColorEntityQuery: EntityStringQuery {
 
     @MainActor
     func suggestedEntities() async throws -> [ColorEntity] {
-        AppData.shared.colors.prefix(10).map(ColorEntity.init)
+        await AppData.shared.waitUntilLoaded()
+        return Self.suggested(from: AppData.shared.colors)
+    }
+
+    /// Most recent 100, newest first, so shortcut phrases resolve for a real library.
+    @MainActor
+    static func suggested(from colors: [ColorViewModel]) -> [ColorEntity] {
+        colors.suffix(100).reversed().map(ColorEntity.init)
     }
 }

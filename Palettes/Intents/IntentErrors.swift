@@ -5,6 +5,7 @@
 
 import AppIntents
 import Foundation
+import FoundationModels
 
 @available(iOS 26.0, *)
 enum PalettesIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
@@ -35,8 +36,6 @@ enum PalettesIntentError: Error, Equatable, CustomLocalizedStringResourceConvert
         }
     }
 }
-
-import FoundationModels
 
 @available(iOS 26.0, *)
 extension PalettesIntentError {

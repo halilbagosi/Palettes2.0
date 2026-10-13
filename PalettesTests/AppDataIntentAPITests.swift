@@ -77,20 +77,45 @@ struct IntentReadinessTests {
         #expect(Set(texts).count == 3)
     }
 
-    @Test func waitUntilLoadedReturnsWithSeededData() async {
+    @Test func waitUntilLoadedReturnsImmediatelyWhenNonEmpty() async {
         let data = AppData(inMemory: true)
         _ = data.addColor(name: "Seed", hex: "#112233")
-        await data.waitUntilLoaded()
-        #expect(data.colors.contains { $0.HEX == "#112233" })
+        let start = ContinuousClock.now
+        await data.waitUntilLoaded(timeout: .seconds(2))
+        #expect(ContinuousClock.now - start < .milliseconds(200))
     }
 
-    @Test func waitUntilLoadedWaitsOutReload() async {
+    @Test func waitUntilLoadedWaitsForReloadWhenEmpty() async {
         let data = AppData(inMemory: true)
-        _ = data.addColor(name: "Seed", hex: "#445566")
-        data.reloadFromStore()
+        data.colors = []
+        data.palettes = []
         let start = ContinuousClock.now
-        await data.waitUntilLoaded()
-        #expect(ContinuousClock.now - start >= .milliseconds(300))
-        #expect(data.colors.contains { $0.HEX == "#445566" })
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            data.reloadFromStore()
+        }
+        await data.waitUntilLoaded(timeout: .seconds(10))
+        let elapsed = ContinuousClock.now - start
+        #expect(elapsed >= .milliseconds(100))
+        #expect(elapsed < .seconds(8)) // returned on the reload signal, not the timeout
+    }
+
+    @Test func waitUntilLoadedIsBoundedWhenNothingArrives() async {
+        let data = AppData(inMemory: true)
+        data.colors = []
+        data.palettes = []
+        let start = ContinuousClock.now
+        await data.waitUntilLoaded(timeout: .milliseconds(200))
+        #expect(ContinuousClock.now - start < .seconds(1))
+    }
+
+    @available(iOS 26.0, *)
+    @Test func suggestedEntitiesCapAtHundredMostRecentFirst() {
+        let colors = (0..<150).map {
+            ColorViewModel(name: "C\($0)", color: .red, HEX: String(format: "#%06X", $0), usedInPalette: false)
+        }
+        let suggested = ColorEntityQuery.suggested(from: colors)
+        #expect(suggested.count == 100)
+        #expect(suggested.first?.hex == String(format: "#%06X", 149))
     }
 }

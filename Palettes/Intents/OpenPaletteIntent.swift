@@ -20,6 +20,7 @@ struct OpenPaletteIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        await AppData.shared.waitUntilLoaded()
         guard AppData.shared.palettes.contains(where: { $0.id == palette.id }) else {
             throw PalettesIntentError.paletteNotFound
         }
