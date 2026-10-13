@@ -30,7 +30,7 @@ enum SheetLayout: Equatable {
     }
 }
 
-/// Measures its own container and hands `content` the resolved `SheetLayout`
+/// Fills its container, measures it, and hands `content` the resolved `SheetLayout`
 /// and the active `Fold?` (nil unless a fold divides the container).
 ///
 ///     SheetLayoutReader(minStackedHeight: min) { layout, fold in … }
@@ -38,8 +38,9 @@ enum SheetLayout: Equatable {
 /// Size is measured with `onGeometryChange` (it changes on window resize or
 /// device fold/unfold); the fold comes from `onFoldChange`'s `GeometryReader`,
 /// because folding doesn't change the size. Until the first measurement the
-/// layout is `.stacked`. The fold is in the coordinates of the view `content`
-/// returns.
+/// layout is `.stacked`. The reader always fills its proposed space
+/// (`maxWidth/maxHeight: .infinity`) so it measures the container, not the
+/// content; the fold is in that container's coordinates.
 struct SheetLayoutReader<Content: View>: View {
     var minStackedHeight: CGFloat
     @ViewBuilder var content: (SheetLayout, Fold?) -> Content
@@ -55,6 +56,7 @@ struct SheetLayoutReader<Content: View>: View {
 
     var body: some View {
         content(layout, fold)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
             .onFoldChange { fold = $0 }
     }

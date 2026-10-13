@@ -27,6 +27,9 @@ final class SheetLayoutTests: XCTestCase {
     func testDuoOuterPortraitStackedWhenContentFits() {
         XCTAssertEqual(resolve(380, 430, .compact, min: 300), .stacked)
     }
+    func testHeightExactlyMinStackedHeightIsStacked() { XCTAssertEqual(resolve(393, 500, .compact, min: 500), .stacked) }
+    func testRegularRatioExactlyThreeQuartersIsSplit() { XCTAssertEqual(resolve(750, 1000, .regular), .split) }
+    func testNilSizeClassPortraitIsStacked() { XCTAssertEqual(resolve(393, 852, nil), .stacked) }
     func testSquareIsStacked() { XCTAssertEqual(resolve(500, 500, .compact), .stacked) }
     func testLargerMinStackedHeightFlipsBorderlineToSplit() {
         XCTAssertEqual(resolve(393, 600, .compact, min: 500), .stacked)
