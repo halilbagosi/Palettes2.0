@@ -3,6 +3,7 @@ import SwiftUI
 struct PaletteView: View {
 
     @State private var path = NavigationPath()
+    @Environment(\.selectedTab) private var selectedTab
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
     @State private var paletteToExport: PaletteViewModel?
@@ -157,6 +158,11 @@ struct PaletteView: View {
                 }
                 .onReceive(appData.$libraryOptionsTourPending) { pending in
                     if pending { beginOptionsTour() }
+                }
+                // Leaving the tab puts the stack away, so coming back (or the
+                // tab bar swapping chrome) never replays a pushed detail.
+                .onChange(of: selectedTab) { _, tab in
+                    if tab != .palettes, !path.isEmpty { path = NavigationPath() }
                 }
                 .onChange(of: path.count) { _, count in
                     // Opening a palette puts the card away.

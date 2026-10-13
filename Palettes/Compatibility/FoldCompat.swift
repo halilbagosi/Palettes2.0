@@ -43,6 +43,12 @@ nonisolated struct Fold: Equatable {
     }
 }
 
+enum FoldReport {
+    /// Whether the first reading should reach the caller. A nil fold changes
+    /// nothing (callers start out with no fold), so it is skipped.
+    nonisolated static func shouldReportOnAppear(_ fold: Fold?) -> Bool { fold != nil }
+}
+
 extension GeometryProxy {
     /// The active fold crossing this view, if any.
     var activeFold: Fold? {
@@ -76,7 +82,10 @@ extension View {
             GeometryReader { proxy in
                 let fold = proxy.activeFold?.dividing(proxy.size)
                 Color.clear
-                    .onAppear { action(fold) }
+                    // No fold on first appearance is the callers' initial
+                    // state: skip it, or their `withAnimation` opens an
+                    // animated transaction in the middle of a transition.
+                    .onAppear { if FoldReport.shouldReportOnAppear(fold) { action(fold) } }
                     .onChange(of: fold) { _, newFold in action(newFold) }
             }
         }

@@ -124,6 +124,25 @@ nonisolated struct MorphingGridIndex: LayoutValueKey {
     static let defaultValue: Int? = nil
 }
 
+/// The last measured viewport size of a lazy grid. A grid appearing in a tab
+/// switch starts from it, so its first frame mounts the window it will end
+/// up with instead of the fallback count and then re-mounting on measurement.
+@MainActor
+enum MorphingViewportCache {
+    private static var last: CGSize = .zero
+
+    static var seed: CGRect { seed(from: last) }
+
+    nonisolated static func seed(from size: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return .zero }
+        return CGRect(origin: .zero, size: size)
+    }
+
+    static func remember(_ viewport: CGRect) {
+        if viewport.width > 0, viewport.height > 0 { last = viewport.size }
+    }
+}
+
 /// `MorphingCardGrid` that only mounts cards near the visible part of the
 /// enclosing `ScrollView`, so cost scales with the screen, not the library.
 ///
@@ -139,7 +158,7 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
 
     /// Visible region of the scroll view in grid-local coordinates, snapped to
     /// `Self.snap` so scrolling only re-renders the grid every few rows.
-    @State private var viewport: CGRect = .zero
+    @State private var viewport: CGRect = MorphingViewportCache.seed
     /// iPhone Duo's fold across the grid (see `MorphingCardGrid.foldSpan`).
     @State private var foldSpan: ClosedRange<CGFloat>?
 
@@ -167,6 +186,7 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
         .onGeometryChange(for: CGRect.self) { proxy in
             Self.snappedViewport(proxy)
         } action: { newValue in
+            MorphingViewportCache.remember(newValue)
             viewport = newValue
         }
         .onVerticalFoldSpanChange { newValue in
