@@ -34,10 +34,12 @@ struct ColorComposer: View {
     var tag: (role: String?, onTap: () -> Void)? = nil
 
     @EnvironmentObject private var appData: AppData
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ScaledMetric(relativeTo: .title3) private var swatchHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .title3) private var shrunkSwatchHeight: CGFloat = 64
+    /// Name row, notice line and header padding, and the least room the
+    /// controls need, for `SheetLayout`'s "too short to stack" test.
+    @ScaledMetric(relativeTo: .title3) private var nameRowHeight: CGFloat = 96
+    @ScaledMetric(relativeTo: .body) private var minControlsHeight: CGFloat = 220
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
@@ -93,11 +95,8 @@ struct ColorComposer: View {
         case adjustments, hex, rgb, outside
     }
 
-    private var isRegular: Bool { horizontalSizeClass == .regular }
-
-    /// Side by side when wide (iPad) or short (iPhone landscape), so the cards
-    /// aren't squeezed under the pinned swatch.
-    private var usesTwoColumns: Bool { isRegular || verticalSizeClass == .compact }
+    /// Stacked needs the swatch, the name row and a usable slice of controls.
+    private var minStackedHeight: CGFloat { swatchHeight + nameRowHeight + minControlsHeight }
 
     /// While a value field has the keyboard, the swatch shrinks so the fields
     /// stay in view.
@@ -113,21 +112,29 @@ struct ColorComposer: View {
     }
 
     var body: some View {
-        Group {
-            if usesTwoColumns {
-                HStack(alignment: .top, spacing: 20) {
-                    header
-                        .frame(maxWidth: 380)
-                        .animation(layoutAnimation, value: isEditingValues)
-
-                    cards
-                }
-            } else {
+        SheetLayoutReader(minStackedHeight: minStackedHeight) { layout, fold in
+            switch layout {
+            case .stacked:
                 VStack(spacing: 0) {
-                    header
+                    header(fillsHeight: false)
                     cards
                 }
                 .animation(layoutAnimation, value: isEditingValues)
+            case .split:
+                if let fold {
+                    FoldSplit(fold: fold) {
+                        header(fillsHeight: true)
+                    } controls: {
+                        cards
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        header(fillsHeight: true)
+                            .frame(maxWidth: .infinity)
+                        cards
+                            .frame(maxWidth: .infinity)
+                    }
+                }
             }
         }
         .background(background.ignoresSafeArea())
@@ -220,9 +227,9 @@ struct ColorComposer: View {
 
     // MARK: - Header
 
-    private var header: some View {
+    private func header(fillsHeight: Bool) -> some View {
         VStack(spacing: 6) {
-            swatch
+            swatch(fillsHeight: fillsHeight)
             nameRow
                 .padding(.top, 6)
             noticeRow
@@ -246,12 +253,15 @@ struct ColorComposer: View {
     }
 
     /// Just the color: the name and HEX have their own fields.
-    private var swatch: some View {
+    /// Stacked: a fixed-height band that shrinks while a value field is
+    /// focused. Split: fills the whole height of its half.
+    private func swatch(fillsHeight: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return shape
             .fill(color.gradient)
             .frame(maxWidth: .infinity)
-            .frame(height: isEditingValues ? shrunkSwatchHeight : swatchHeight)
+            .frame(maxHeight: fillsHeight ? .infinity : nil)
+            .frame(height: fillsHeight ? nil : (isEditingValues ? shrunkSwatchHeight : swatchHeight))
             .overlay(shape.stroke(Color.primary.opacity(0.1), lineWidth: 1))
             .shadow(color: color.opacity(0.3), radius: 10, x: 0, y: 5)
             .contextMenu {
