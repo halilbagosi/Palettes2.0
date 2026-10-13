@@ -36,9 +36,10 @@ struct ColorComposer: View {
     @EnvironmentObject private var appData: AppData
     @ScaledMetric(relativeTo: .title3) private var swatchHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .title3) private var shrunkSwatchHeight: CGFloat = 64
-    /// Name row, notice line and header padding, and the least room the
+    /// Everything in the header below the swatch (spacing 6 + 6, the name row
+    /// ≈ 54, the notice line ≈ 16, padding 8 + 8 ≈ 104), and the least room the
     /// controls need, for `SheetLayout`'s "too short to stack" test.
-    @ScaledMetric(relativeTo: .title3) private var nameRowHeight: CGFloat = 96
+    @ScaledMetric(relativeTo: .title3) private var nameRowHeight: CGFloat = 104
     @ScaledMetric(relativeTo: .body) private var minControlsHeight: CGFloat = 220
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -113,21 +114,23 @@ struct ColorComposer: View {
 
     var body: some View {
         SheetLayoutReader(minStackedHeight: minStackedHeight) { layout, fold in
-            switch layout {
-            case .stacked:
-                VStack(spacing: 0) {
-                    header(fillsHeight: false)
+            // A fold always wins: a crease across stacked controls would
+            // leave them scrolling over it.
+            if let fold {
+                FoldSplit(fold: fold) {
+                    header(fillsHeight: true)
+                } controls: {
                     cards
                 }
-                .animation(layoutAnimation, value: isEditingValues)
-            case .split:
-                if let fold {
-                    FoldSplit(fold: fold) {
-                        header(fillsHeight: true)
-                    } controls: {
+            } else {
+                switch layout {
+                case .stacked:
+                    VStack(spacing: 0) {
+                        header(fillsHeight: false)
                         cards
                     }
-                } else {
+                    .animation(layoutAnimation, value: isEditingValues)
+                case .split:
                     HStack(spacing: 0) {
                         header(fillsHeight: true)
                             .frame(maxWidth: .infinity)
