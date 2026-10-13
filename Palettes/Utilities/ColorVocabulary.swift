@@ -101,8 +101,8 @@ enum ColorVocabulary {
         "neon": Envelope(minChroma: 0.15),
         "cerulean": Envelope(minChroma: 0.08, minLightness: 0.5, hueTolerance: 30),
         "beige": Envelope(maxChroma: 0.07, minLightness: 0.7),
-        "tan": Envelope(maxChroma: 0.07),
-        "sand": Envelope(maxChroma: 0.07, minLightness: 0.6),
+        "tan": Envelope(maxChroma: 0.09),
+        "sand": Envelope(maxChroma: 0.09, minLightness: 0.6),
         "taupe": Envelope(maxChroma: 0.07),
         "khaki": Envelope(maxChroma: 0.13),
         "navy": Envelope(maxLightness: 0.40),
@@ -178,12 +178,16 @@ enum ColorVocabulary {
     /// color in a hue family two or more steps away on the wheel, a hue on
     /// a true grey, only grey words on a clearly colored swatch, or a
     /// lightness or intensity the swatch doesn't have.
-    static func isPlausible(name: String, forHex hex: String) -> Bool {
+    ///
+    /// `strict` (model-proposed names) requires EVERY hue word to fit and
+    /// keeps the dark-word cutoff at 0.72; the default is looser, for
+    /// dictionary entries like "Rose Gold" where one fitting word is enough.
+    static func isPlausible(name: String, forHex hex: String, strict: Bool = false) -> Bool {
         guard let color = OKLCH(hex: hex) else { return false }
-        return isPlausible(name: name, for: color)
+        return isPlausible(name: name, for: color, strict: strict)
     }
 
-    static func isPlausible(name: String, for color: OKLCH) -> Bool {
+    static func isPlausible(name: String, for color: OKLCH, strict: Bool = false) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let words = tokens(trimmed)
         guard !words.isEmpty, words.count <= 4, trimmed.count <= 28 else { return false }
@@ -201,16 +205,18 @@ enum ColorVocabulary {
         if color.C < 0.006 {
             // A true grey has no hue to name.
             if !named.isEmpty { return false }
-        } else if named.allSatisfy({ ringDistance($0, own) > 1 }), !named.isEmpty {
-            // Every hue word is off: "Blue Lagoon" on an orange. One that
-            // fits is enough for a compound like "Rose Gold".
-            return false
+        } else if !named.isEmpty {
+            // Loose: reject only when every hue word is off ("Blue Lagoon" on
+            // an orange); one fit is enough for "Rose Gold". Strict: any
+            // hue word that is off ("Gold Blue" on a blue) rejects.
+            let off = named.map { ringDistance($0, own) > 1 }
+            if strict ? off.contains(true) : !off.contains(false) { return false }
         }
         if named.isEmpty {
             if color.C >= 0.06, words.contains(where: greyWords.contains) { return false }
             if words.contains(where: whiteWords.contains), color.L < 0.8 || color.C >= 0.1 { return false }
         }
-        if color.L > 0.78, words.contains(where: darkWords.contains) { return false }
+        if color.L > (strict ? 0.72 : 0.78), words.contains(where: darkWords.contains) { return false }
         if color.L < 0.40, words.contains(where: lightWords.contains) { return false }
         if color.C < 0.06, words.contains(where: vividWords.contains) { return false }
         return true
@@ -223,12 +229,12 @@ enum ColorVocabulary {
     static let moodAdjectives: Set<String> = [
         "gentle", "steady", "soft", "rich", "mellow", "calm", "bold", "warm", "cool", "subtle",
         "quiet", "lovely", "serene", "tranquil", "cozy", "lush", "radiant", "pure", "classic",
-        "delicate", "smooth", "bright", "crisp", "fresh", "elegant", "luxurious",
+        "delicate", "smooth", "bright", "crisp", "fresh", "elegant", "luxurious", "deep", "very",
     ]
 
     /// Our own description words; a name that uses one is echoing the prompt.
     static let descriptorWords: Set<String> = [
-        "muted", "vivid", "moderate", "light", "dark", "medium", "lightness", "intensity", "hue", "neutral",
+        "muted", "vivid", "moderate", "light", "dark", "medium", "lightness", "intensity", "hue", "neutral", "deep", "very",
     ]
 
     /// Whether a model-proposed name is a clean color name: one to three

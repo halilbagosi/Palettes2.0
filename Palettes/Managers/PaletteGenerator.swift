@@ -328,7 +328,7 @@ enum PaletteGenerator {
             guard needed.contains(index),
                   accepted[index] == nil,
                   ColorVocabulary.isCleanModelName(name),
-                  ColorVocabulary.isPlausible(name: name, forHex: hexes[index]),
+                  ColorVocabulary.isPlausible(name: name, forHex: hexes[index], strict: true),
                   used.insert(name.lowercased()).inserted else { continue }
             accepted[index] = name
         }

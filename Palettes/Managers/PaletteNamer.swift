@@ -104,7 +104,8 @@ enum PaletteNamer {
     // MARK: - Traits
 
     private struct Traits {
-        /// Hue of the palette's highest-chroma swatch, never an average
+        /// Hue of the palette's signature swatch (first chromatic, unless a
+        /// near-grey first sits beside a much louder one), never an average
         /// (averaging opposing hues names a family that isn't in the
         /// palette at all).
         var hue: Double
@@ -139,12 +140,15 @@ enum PaletteNamer {
                           seed: deterministicSeed(hexes))
         }
 
-        // The palette's "signature" color: its highest-chroma swatch (the
-        // earliest on a tie). Its hue names the family, so the title points
-        // at a color that is genuinely present and that reads as the
-        // palette's color, not at a dull first swatch beside a loud one.
-        var signature: (h: Double, s: Double, b: Double, c: Double)?
-        for entry in chromatic where entry.c > (signature?.c ?? -1) { signature = entry }
+        // The palette's "signature" color: its first chromatic swatch, so a
+        // blue palette with one orange accent is titled after the blue. Only
+        // when that first swatch is near-grey (chroma < 0.04) beside a much
+        // louder one does the louder swatch name the family.
+        var signature = chromatic.first
+        if let first = signature, first.c < 0.04,
+           let loudest = chromatic.max(by: { $0.c < $1.c }), loudest.c >= first.c + 0.06 {
+            signature = loudest
+        }
 
         // How spread out the hues are — a wide spread means "no single family
         // describes this", which the character words can acknowledge.

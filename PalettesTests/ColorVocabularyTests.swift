@@ -36,8 +36,35 @@ final class ColorVocabularyTests: XCTestCase {
         for hex in ["#57BBFF", "#658BA8", "#CBAA8E", "#808080"] {
             let text = ColorVocabulary.describe(hex: hex)
             XCTAssertFalse(text.contains(","), text)
-            XCTAssertFalse(ColorVocabulary.isCleanModelName(text), text)
+            XCTAssertTrue(text.hasPrefix("lightness="), text)
+            XCTAssertEqual(text.components(separatedBy: " intensity=").count, 2, text)
+            XCTAssertEqual(text.components(separatedBy: " hue=").count, 2, text)
+            XCTAssertTrue(ColorVocabulary.tokens(text).contains("lightness"), text)
         }
+    }
+
+    func testStrictModelNamesRejectContradictingHueWords() {
+        let blue = "#2F6BD8"
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Gold Blue", forHex: blue, strict: true))
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Lemon Lavender", forHex: "#2F6BD8", strict: true))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Rose Gold", forHex: "#B76E79"), "dictionary entries stay loose")
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Sky Blue", forHex: "#57BBFF", strict: true))
+    }
+
+    func testDeepAndVeryAreDescriptorWords() {
+        XCTAssertFalse(ColorVocabulary.isCleanModelName("Deep Amber"))
+        XCTAssertFalse(ColorVocabulary.isCleanModelName("Deep Teal"))
+        XCTAssertFalse(ColorVocabulary.isCleanModelName("Very Dark"))
+    }
+
+    func testEnvelopesDoNotRejectRealColors() {
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Tan", forHex: "#D2B48C"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Tan", forHex: "#C19A6B"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Tan", forHex: "#D8B98A"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Khaki", forHex: "#F0E68C"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Pale Turquoise", forHex: "#AFEEEE"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Sage", forHex: "#9CAF88"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Slate", forHex: "#708090"))
     }
 
     func testCleanModelNames() {
