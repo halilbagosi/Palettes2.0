@@ -30,6 +30,53 @@ enum SheetLayout: Equatable {
     }
 }
 
+/// Turns raw (size, bottom safe-area inset) readings into the size the layout
+/// decision should use, ignoring the shrink the software keyboard causes.
+///
+/// A sheet's frame shrinks when the keyboard appears, and the keyboard shows up
+/// as a bottom inset at least `keyboardThreshold` above the no-keyboard
+/// baseline. While it does, a height-only shrink is ignored. Heuristic limits:
+/// a host that adds its own bottom safe-area inset (an inset bar) of 100pt or
+/// more, or a hardware-keyboard shortcut bar, can look like a keyboard; the
+/// baseline re-learns when the inset rises without the height shrinking, or
+/// when the height grows. A rotation or first reading with the keyboard already
+/// up cannot see the full height, so it is estimated by adding back
+/// `inset - assumedHomeInset`; that estimate is only as good as the assumed
+/// home-indicator inset.
+nonisolated struct SheetMeasureTracker: Equatable, Sendable {
+    static let keyboardThreshold: CGFloat = 100
+    static let widthTolerance: CGFloat = 0.5
+    static let assumedHomeInset: CGFloat = 34
+
+    private(set) var size: CGSize = .zero
+    private var baseInset: CGFloat = 0
+
+    /// Feeds a reading and returns the size to lay out with.
+    @discardableResult
+    mutating func apply(size new: CGSize, bottomInset inset: CGFloat) -> CGSize {
+        let widthChanged = size == .zero || abs(new.width - size.width) > Self.widthTolerance
+        if widthChanged {
+            if inset >= Self.keyboardThreshold {
+                // Keyboard probably up: the frame is shrunk, so add it back.
+                size = CGSize(width: new.width, height: new.height + inset - Self.assumedHomeInset)
+                baseInset = Self.assumedHomeInset
+            } else {
+                size = new
+                baseInset = inset
+            }
+            return size
+        }
+        let keyboardUp = inset >= baseInset + Self.keyboardThreshold
+        let shrank = new.height < size.height
+        if keyboardUp, shrank { return size }
+        // An inset rise with no shrink is not the keyboard; growth means the
+        // inset is the new normal. Either way, re-baseline.
+        baseInset = shrank ? min(baseInset, inset) : inset
+        size = new
+        return size
+    }
+}
+
 private nonisolated struct SheetMeasure: Equatable, Sendable {
     var size: CGSize
     var bottomInset: CGFloat
@@ -47,46 +94,26 @@ private nonisolated struct SheetMeasure: Equatable, Sendable {
 /// (`maxWidth/maxHeight: .infinity`) so it measures the container, not the
 /// content; the fold is in that container's coordinates.
 ///
-/// The keyboard does not change the layout. A sheet's frame shrinks when the
-/// keyboard appears (the content must stay above it; `ignoresSafeArea(.keyboard)`
-/// on a measuring background does not undo that in a sheet, and no keyboard
-/// notification arrives reliably), so measuring it naively would drop a
-/// portrait sheet below `minStackedHeight`, flip it to split, tear down the
-/// focused field and dismiss the keyboard, oscillating. The keyboard shows up
-/// as a bottom safe-area inset larger than the smallest seen at this width, and
-/// while it does a height-only shrink is ignored; a width change (rotation,
-/// window resize) is real and applies.
+/// The keyboard does not change the layout: see `SheetMeasureTracker` for how
+/// its frame shrink is ignored (and the heuristic's limits).
 struct SheetLayoutReader<Content: View>: View {
     var minStackedHeight: CGFloat
     @ViewBuilder var content: (SheetLayout, Fold?) -> Content
 
     @Environment(\.horizontalSizeClass) private var horizontal
-    @State private var size: CGSize = .zero
+    @State private var tracker = SheetMeasureTracker()
     @State private var fold: Fold?
-    /// Smallest bottom safe-area inset seen at the current width: the inset
-    /// with no keyboard (home indicator).
-    @State private var baseInset: CGFloat = .infinity
 
     private var layout: SheetLayout {
-        size == .zero ? .stacked
-            : .resolve(size: size, horizontal: horizontal, minStackedHeight: minStackedHeight)
-    }
-
-    private func apply(_ new: SheetMeasure) {
-        if new.size.width != size.width { baseInset = .infinity }
-        baseInset = min(baseInset, new.bottomInset)
-        // A bigger bottom inset than the keyboard-less one means the keyboard
-        // is up and has shrunk the frame: keep the full-height size.
-        let keyboardUp = new.bottomInset > baseInset + 1
-        if keyboardUp, size != .zero, new.size.width == size.width, new.size.height < size.height { return }
-        size = new.size
+        tracker.size == .zero ? .stacked
+            : .resolve(size: tracker.size, horizontal: horizontal, minStackedHeight: minStackedHeight)
     }
 
     var body: some View {
         content(layout, fold)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onGeometryChange(for: SheetMeasure.self) { SheetMeasure(size: $0.size, bottomInset: $0.safeAreaInsets.bottom) } action: { new in
-                apply(new)
+                tracker.apply(size: new.size, bottomInset: new.bottomInset)
             }
             .onFoldChange { fold = $0 }
     }

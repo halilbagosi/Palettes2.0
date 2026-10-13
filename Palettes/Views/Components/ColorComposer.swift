@@ -37,7 +37,7 @@ struct ColorComposer: View {
     @ScaledMetric(relativeTo: .title3) private var swatchHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .title3) private var shrunkSwatchHeight: CGFloat = 64
     /// Everything in the header below the swatch (spacing 6 + 6, the name row
-    /// ≈ 54, the notice line ≈ 16, padding 8 + 8 ≈ 104), and the least room the
+    /// ≈ 54, the notice line ≈ 16, padding 8 + 8 = 98, plus 6 margin = 104), and the least room the
     /// controls need, for `SheetLayout`'s "too short to stack" test.
     @ScaledMetric(relativeTo: .title3) private var nameRowHeight: CGFloat = 104
     @ScaledMetric(relativeTo: .body) private var minControlsHeight: CGFloat = 220

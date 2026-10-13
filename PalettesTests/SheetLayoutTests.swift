@@ -35,4 +35,70 @@ final class SheetLayoutTests: XCTestCase {
         XCTAssertEqual(resolve(393, 600, .compact, min: 500), .stacked)
         XCTAssertEqual(resolve(393, 600, .compact, min: 700), .split)
     }
+
+    // MARK: SheetMeasureTracker
+
+    private func sz(_ w: CGFloat, _ h: CGFloat) -> CGSize { CGSize(width: w, height: h) }
+
+    func testTrackerFirstReadingApplies() {
+        var t = SheetMeasureTracker()
+        XCTAssertEqual(t.apply(size: sz(393, 700), bottomInset: 34), sz(393, 700))
+    }
+    func testTrackerKeyboardShrinkIgnoredAndDismissRestores() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 700), bottomInset: 34)
+        XCTAssertEqual(t.apply(size: sz(393, 400), bottomInset: 334), sz(393, 700))
+        XCTAssertEqual(t.apply(size: sz(393, 700), bottomInset: 34), sz(393, 700))
+        XCTAssertEqual(t.apply(size: sz(393, 650), bottomInset: 34), sz(393, 650))
+    }
+    func testTrackerWidthChangeResetsBaseline() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 700), bottomInset: 34)
+        XCTAssertEqual(t.apply(size: sz(700, 393), bottomInset: 21), sz(700, 393))
+        XCTAssertEqual(t.apply(size: sz(700, 150), bottomInset: 321), sz(700, 393))
+    }
+    func testTrackerWidthToleranceIgnoresSubPointJitter() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 700), bottomInset: 34)
+        XCTAssertEqual(t.apply(size: sz(393.3, 400), bottomInset: 334), sz(393, 700))
+    }
+    func testTrackerHeightOnlyResizeWithUnchangedInsetApplies() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 700), bottomInset: 34)
+        XCTAssertEqual(t.apply(size: sz(393, 500), bottomInset: 34), sz(393, 500))
+    }
+    func testTrackerSmallInsetIncreaseIsNotKeyboard() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 700), bottomInset: 34)
+        XCTAssertEqual(t.apply(size: sz(393, 650), bottomInset: 84), sz(393, 650))
+    }
+    func testTrackerFirstMeasurementWithKeyboardUpEstimatesFullHeight() {
+        var t = SheetMeasureTracker()
+        XCTAssertEqual(t.apply(size: sz(393, 400), bottomInset: 334), sz(393, 700))
+        // Further keyboard shrink ignored; dismiss gives the true size.
+        XCTAssertEqual(t.apply(size: sz(393, 380), bottomInset: 354), sz(393, 700))
+        XCTAssertEqual(t.apply(size: sz(393, 710), bottomInset: 34), sz(393, 710))
+    }
+    func testTrackerRotationWithKeyboardUpKeepsPortraitStacked() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 700), bottomInset: 34)
+        // Rotation to a still-portrait-shaped width while the keyboard is up.
+        let s = t.apply(size: sz(430, 520), bottomInset: 334)
+        XCTAssertEqual(s, sz(430, 820))
+        XCTAssertEqual(SheetLayout.resolve(size: s, horizontal: .compact, minStackedHeight: 600), .stacked)
+    }
+    func testTrackerTransientLowInsetDoesNotStickBaseline() {
+        var t = SheetMeasureTracker()
+        // Present animation reads inset 0; the host really has a 120pt inset bar.
+        t.apply(size: sz(393, 800), bottomInset: 0)
+        t.apply(size: sz(393, 800), bottomInset: 120)
+        // A legitimate detent shrink must apply.
+        XCTAssertEqual(t.apply(size: sz(393, 600), bottomInset: 120), sz(393, 600))
+    }
+    func testTrackerGrowthRebaselines() {
+        var t = SheetMeasureTracker()
+        t.apply(size: sz(393, 500), bottomInset: 0)
+        t.apply(size: sz(393, 800), bottomInset: 120)
+        XCTAssertEqual(t.apply(size: sz(393, 600), bottomInset: 120), sz(393, 600))
+    }
 }
