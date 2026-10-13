@@ -385,19 +385,26 @@ struct PaletteEditor: View {
 
     /// Scan's Remove: the photo's colors come out too; Undo puts both back.
     private func removePhoto(_ removed: PaletteScanSession.Removed, undo: @escaping () -> Void) {
+        removeColors(removed.colorIDs, message: "Photo removed", icon: "trash.fill", onUndo: undo)
+    }
+
+    /// Takes the colors out in one animation and offers one Undo that puts
+    /// them all back where they were.
+    private func removeColors(_ ids: Set<UUID>, message: String, icon: String = "trash.fill", onUndo: (() -> Void)? = nil) {
         let taken = draft.colors.enumerated()
-            .filter { removed.colorIDs.contains($0.element.id) }
+            .filter { ids.contains($0.element.id) }
             .map { (index: $0.offset, color: $0.element) }
         withAnimation(appendAnimation) {
             for entry in taken { draft.remove(id: entry.color.id) }
         }
-        if let selection, removed.colorIDs.contains(selection) { self.selection = nil }
-        ToastManager.shared.show("Photo removed", icon: "trash.fill") {
+        if let selection, ids.contains(selection) { self.selection = nil }
+        guard !taken.isEmpty || onUndo != nil else { return }
+        ToastManager.shared.show(message, icon: icon) {
             withAnimation(appendAnimation) {
-                // In order, so each lands where it was.
-                for entry in taken { _ = draft.reinsert(entry.color, at: entry.index) }
+                // Ascending index order, so each lands where it was.
+                for entry in taken.sorted(by: { $0.index < $1.index }) { _ = draft.reinsert(entry.color, at: entry.index) }
             }
-            undo()
+            onUndo?()
         }
     }
 
@@ -432,26 +439,13 @@ struct PaletteEditor: View {
         }
     }
 
-    /// Remove one draft color per harmony hex (a hex the palette holds twice
-    /// loses just one copy, and the same hex isn't taken twice by one harmony).
+    /// Remove the draft colors with the harmony's hexes (PaletteDraft keeps
+    /// each hex once), as one removal with one Undo.
     private func removeHarmony(_ hexes: [String]) {
-        var taken = Set<UUID>()
-        for hex in hexes {
-            let key = hex.uppercased()
-            if let entry = draft.colors.last(where: { $0.hex.uppercased() == key && !taken.contains($0.id) }) {
-                taken.insert(entry.id)
-                removeColor(entry.id)
-            }
-        }
-    }
-
-    /// Remove a color, then offer Undo. The Harmony "\u{2013}" uses it.
-    private func removeColor(_ id: UUID) {
-        var removed: (index: Int, color: PaletteColor)?
-        withAnimation(appendAnimation) { removed = draft.remove(id: id) }
-        guard let removed else { return }
-        if selection == id { selection = nil }
-        showUndo(for: removed.color, at: removed.index)
+        let keys = Set(hexes.map { $0.uppercased() })
+        let ids = Set(draft.colors.filter { keys.contains($0.hex.uppercased()) }.map(\.id))
+        guard !ids.isEmpty else { return }
+        removeColors(ids, message: ids.count == 1 ? "Color removed" : "Harmony removed")
     }
 
     /// Remove → Undo puts the color back where it was, role included.

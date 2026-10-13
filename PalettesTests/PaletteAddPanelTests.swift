@@ -6,6 +6,12 @@ import SwiftUI
 struct HarmonyBaseTests {
     private let palette = ["#264653", "#2A9D8F", "#E9C46A"]
 
+    @Test func stickyBaseHoldsWithoutSelection() {
+        #expect(HarmonyBase.resolve(selectedHex: nil, stickyHex: "#264653", paletteHexes: palette, pickHex: "#FF0000") == "#264653")
+        #expect(HarmonyBase.resolve(selectedHex: "#2a9d8f", stickyHex: "#264653", paletteHexes: palette, pickHex: "#FF0000") == "#2A9D8F")
+        #expect(HarmonyBase.resolve(selectedHex: nil, stickyHex: "#123456", paletteHexes: palette, pickHex: "#FF0000") == "#E9C46A")
+    }
+
     @Test func selectedBandWins() {
         #expect(HarmonyBase.resolve(selectedHex: "#2a9d8f", paletteHexes: palette, pickHex: "#FF0000") == "#2A9D8F")
     }

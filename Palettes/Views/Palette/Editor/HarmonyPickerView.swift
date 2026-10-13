@@ -12,12 +12,15 @@ import SwiftUI
 
 /// Which color the Harmony source builds on.
 enum HarmonyBase {
-    /// The chosen band if it is still in the palette, else the last color,
+    /// The chosen band if it is still in the palette, else the sticky base (the
+    /// base a harmony was just added on) if still there, else the last color,
     /// else (empty palette) the Pick color. Hexes are "#RRGGBB".
-    static func resolve(selectedHex: String?, paletteHexes: [String], pickHex: String) -> String {
-        if let selectedHex,
-           let match = paletteHexes.first(where: { $0.caseInsensitiveCompare(selectedHex) == .orderedSame }) {
-            return match
+    static func resolve(selectedHex: String?, stickyHex: String? = nil, paletteHexes: [String], pickHex: String) -> String {
+        for candidate in [selectedHex, stickyHex] {
+            if let candidate,
+               let match = paletteHexes.first(where: { $0.caseInsensitiveCompare(candidate) == .orderedSame }) {
+                return match
+            }
         }
         return paletteHexes.last ?? pickHex
     }
@@ -46,13 +49,16 @@ struct HarmonyPickerView: View {
 
     /// Spoken names for the strips' hexes; hexes are read until they resolve.
     @State private var names: [String: String] = [:]
+    /// The base a harmony was added on; it stays the base (so that harmony's
+    /// "\u{2013}" stays reachable) until another color is chosen or it leaves.
+    @State private var stickyHex: String?
 
     private var selectedHex: String? {
         selection.flatMap { id in draft.colors.first { $0.id == id }?.hex }
     }
 
     private var base: String {
-        HarmonyBase.resolve(selectedHex: selectedHex, paletteHexes: draft.colors.map(\.hex), pickHex: pickHex)
+        HarmonyBase.resolve(selectedHex: selectedHex, stickyHex: stickyHex, paletteHexes: draft.colors.map(\.hex), pickHex: pickHex)
     }
 
     var body: some View {
@@ -72,6 +78,7 @@ struct HarmonyPickerView: View {
             .scrollIndicators(.hidden)
         }
         .task(id: base) { await resolveNames() }
+        .onChange(of: selection) { _, new in if new != nil { stickyHex = nil } }
     }
 
     // MARK: - Base chips
@@ -132,7 +139,13 @@ struct HarmonyPickerView: View {
     private func row(_ title: String, hexes: [String]) -> some View {
         let isAdded = HarmonyRow.state(for: hexes, draftHexes: draft.hexes) == .all
         return Button {
-            if isAdded { onRemove(hexes) } else { choose(hexes) }
+            if isAdded {
+                // The base was in the palette before; only the rest comes out.
+                onRemove(hexes.filter { $0.caseInsensitiveCompare(base) != .orderedSame })
+            } else {
+                stickyHex = base
+                choose(hexes)
+            }
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -151,9 +164,16 @@ struct HarmonyPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title): \(spokenColors(hexes))")
-        .accessibilityValue(isAdded ? "Added" : "")
-        .accessibilityHint(isAdded ? "Remove harmony" : "Add harmony")
+        .accessibilityLabel("\(title)\(isAdded ? ", added" : ""): \(spokenColors(hexes))")
+        .accessibilityHint(isAdded ? "Removes the harmony's colors" : "Adds the harmony's colors")
+        .accessibilityAction(named: isAdded ? "Remove harmony" : "Add harmony") {
+            if isAdded {
+                onRemove(hexes.filter { $0.caseInsensitiveCompare(base) != .orderedSame })
+            } else {
+                stickyHex = base
+                choose(hexes)
+            }
+        }
     }
 
     private func spokenColors(_ hexes: [String]) -> String {
