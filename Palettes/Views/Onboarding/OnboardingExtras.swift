@@ -290,7 +290,7 @@ struct OnboardingExtrasView: View {
     @ViewBuilder
     private func siriCard(tint: Color) -> some View {
         if #available(iOS 26.0, *) {
-            ExtrasCard(title: "Ask Siri", symbol: "waveform", tint: tint,
+            ExtrasCard(title: "Ask Siri", symbol: "siri", tint: tint, multicolor: true,
                        caption: "Your palettes also show up in Spotlight search.") {
                 SiriPhraseBubble(phrase: OnboardingExtrasLogic.siriPhrase(
                     appName: appName, usesAI: OnboardingPaletteMaker.usesAI, paletteName: palette.name))
@@ -412,6 +412,8 @@ private struct ExtrasCard<Content: View>: View {
     let title: String
     let symbol: String
     let tint: Color
+    /// Draws the symbol in its own colours on a neutral black tile (the Siri mark needs a dark ground).
+    var multicolor: Bool = false
     let caption: String
     @ViewBuilder var content: Content
 
@@ -420,9 +422,12 @@ private struct ExtrasCard<Content: View>: View {
             HStack(alignment: .center, spacing: 14) {
                 Image(systemName: symbol)
                     .font(.system(size: 19, weight: .semibold))
+                    .symbolRenderingMode(multicolor ? .multicolor : .monochrome)
                     .foregroundStyle(GenerationResultView.ink(on: tint))
                     .frame(width: 44, height: 44)
-                    .background(tint.gradient, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(
+                        multicolor ? AnyShapeStyle(Color.black) : AnyShapeStyle(tint.gradient),
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 13, style: .continuous)
                             .stroke(Color.primary.opacity(0.08), lineWidth: 1)
