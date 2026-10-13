@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import SwiftData
+import AppIntents
 import CoreData
 import UIKit
 
@@ -143,6 +144,8 @@ class AppData: ObservableObject {
                                 palettes: palettes.map(PaletteEntity.init),
                                 colors: colors.map(ColorEntity.init)
                             )
+                            // Refresh the palette / color values Siri phrases resolve against.
+                            PalettesShortcuts.updateAppShortcutParameters()
                         }
                     }
                 }
@@ -205,7 +208,7 @@ class AppData: ObservableObject {
     /// Refetches the store and replaces the published arrays without
     /// triggering a write-back. The flag outlives the sinks' 300 ms debounce
     /// and clears 600 ms after the most recent reload.
-    private func reloadFromStore() {
+    func reloadFromStore() {
         guard container != nil else { return }
         // Flush any pending local edits before we replace the in-memory
         // arrays, so a reload can't clobber work that hasn't hit the store.
@@ -224,6 +227,18 @@ class AppData: ObservableObject {
             if self.isDirtyColors { self.persistColors(self.colors) }
             if self.isDirtyPalettes { self.persistPalettes(self.palettes) }
             if self.isDirtyTags { self.persistTags(self.customTags) }
+        }
+    }
+
+    /// Suspends until no store reload is in flight, so intent queries that
+    /// run on a cold launch never read arrays mid-replacement. The initial
+    /// `load()` is synchronous in `init`, so this returns immediately unless
+    /// a reload (CloudKit import, foregrounding) is pending. Bounded so a
+    /// stuck flag can't hang Siri.
+    func waitUntilLoaded(timeout: Duration = .seconds(2)) async {
+        let deadline = ContinuousClock.now + timeout
+        while isReloading, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 

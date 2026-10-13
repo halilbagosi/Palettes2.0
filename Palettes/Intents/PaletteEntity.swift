@@ -46,20 +46,23 @@ struct PaletteEntity: AppEntity, IndexedEntity {
 struct PaletteEntityQuery: EntityStringQuery {
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [PaletteEntity] {
-        AppData.shared.palettes
+        await AppData.shared.waitUntilLoaded()
+        return AppData.shared.palettes
             .filter { identifiers.contains($0.id) }
             .map(PaletteEntity.init)
     }
 
     @MainActor
     func entities(matching string: String) async throws -> [PaletteEntity] {
-        AppData.shared.palettes
+        await AppData.shared.waitUntilLoaded()
+        return AppData.shared.palettes
             .filter { $0.name.localizedCaseInsensitiveContains(string) }
             .map(PaletteEntity.init)
     }
 
     @MainActor
     func suggestedEntities() async throws -> [PaletteEntity] {
-        AppData.shared.palettes.prefix(10).map(PaletteEntity.init)
+        await AppData.shared.waitUntilLoaded()
+        return AppData.shared.palettes.prefix(10).map(PaletteEntity.init)
     }
 }

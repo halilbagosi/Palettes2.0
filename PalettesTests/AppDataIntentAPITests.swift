@@ -59,3 +59,38 @@ struct AppDataIntentAPITests {
         #expect(stored.first?.hex == "#DC143C")
     }
 }
+
+@MainActor
+struct IntentReadinessTests {
+    @available(iOS 26.0, *)
+    @Test func availabilityMapsToDistinctErrors() {
+        #expect(PalettesIntentError.error(for: .available) == nil)
+        #expect(PalettesIntentError.error(for: .unavailable(.appleIntelligenceNotEnabled)) == .aiDisabled)
+        #expect(PalettesIntentError.error(for: .unavailable(.modelNotReady)) == .aiModelDownloading)
+        #expect(PalettesIntentError.error(for: .unavailable(.deviceNotEligible)) == .aiDeviceIneligible)
+    }
+
+    @available(iOS 26.0, *)
+    @Test func errorMessagesAreDistinct() {
+        let texts = [PalettesIntentError.aiDisabled, .aiModelDownloading, .aiDeviceIneligible]
+            .map { String(localized: $0.localizedStringResource) }
+        #expect(Set(texts).count == 3)
+    }
+
+    @Test func waitUntilLoadedReturnsWithSeededData() async {
+        let data = AppData(inMemory: true)
+        _ = data.addColor(name: "Seed", hex: "#112233")
+        await data.waitUntilLoaded()
+        #expect(data.colors.contains { $0.HEX == "#112233" })
+    }
+
+    @Test func waitUntilLoadedWaitsOutReload() async {
+        let data = AppData(inMemory: true)
+        _ = data.addColor(name: "Seed", hex: "#445566")
+        data.reloadFromStore()
+        let start = ContinuousClock.now
+        await data.waitUntilLoaded()
+        #expect(ContinuousClock.now - start >= .milliseconds(300))
+        #expect(data.colors.contains { $0.HEX == "#445566" })
+    }
+}
