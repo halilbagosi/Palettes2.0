@@ -97,13 +97,31 @@ final class OnboardingInterimFlow: ObservableObject {
         }
     }
 
+    private var runID = 0
+    /// A late model name that landed before the palette was marked ready.
+    private var pendingLatePalette: PaletteViewModel?
+
+    /// The model's names arrived after "ready" was already shown on
+    /// fallback names: swap them in.
+    private func applyLateNaming(_ palette: PaletteViewModel) {
+        guard case .ready(let made) = genState else {
+            pendingLatePalette = palette
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            genState = .ready(OnboardingPaletteMaker.Made(
+                palette: palette, usedAI: made.usedAI, anchorHex: made.anchorHex))
+        }
+    }
+
     func startGeneration(appData: AppData, reduceMotion: Bool) {
         guard let hex = model.selectedHex else { return }
         isFromPhoto = false
         genColors = [adjustedColor]
-        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors in
+        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors, onLate in
             try await OnboardingPaletteMaker.make(
-                anchorHex: hex, existingNames: names, revealDelay: delay, onColors: onColors)
+                anchorHex: hex, existingNames: names, revealDelay: delay, onColors: onColors,
+                onLatePalette: onLate)
         }
     }
 
@@ -113,7 +131,7 @@ final class OnboardingInterimFlow: ObservableObject {
         guard let image = model.capturedImage else { return }
         isFromPhoto = true
         genColors = []
-        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors in
+        run(appData: appData, reduceMotion: reduceMotion) { names, delay, onColors, _ in
             try await OnboardingPaletteMaker.fromPhoto(
                 image, existingNames: names, revealDelay: delay, onColors: onColors)
         }
@@ -123,18 +141,29 @@ final class OnboardingInterimFlow: ObservableObject {
         appData: AppData,
         reduceMotion: Bool,
         make: @escaping (_ names: [String], _ delay: Duration,
-                         _ onColors: @escaping @MainActor ([Color]) -> Void) async throws -> OnboardingPaletteMaker.Made
+                         _ onColors: @escaping @MainActor ([Color]) -> Void,
+                         _ onLate: @escaping @MainActor (PaletteViewModel) -> Void) async throws -> OnboardingPaletteMaker.Made
     ) {
         genTask?.cancel()
+        runID += 1
+        let id = runID
+        pendingLatePalette = nil
         withAnimation(.easeInOut(duration: 0.3)) { genState = .generating }
         let names = appData.palettes.map(\.name)
-        let delay: Duration = reduceMotion ? .zero : .milliseconds(650)
+        let delay: Duration = reduceMotion ? .zero : GenerationPacing.colorInterval
         genTask = Task {
             do {
-                let made = try await make(names, delay) { colors in self.genColors = colors }
+                let made = try await make(names, delay, { colors in self.genColors = colors }, { palette in
+                    guard self.runID == id else { return }
+                    self.applyLateNaming(palette)
+                })
                 guard !Task.isCancelled else { return }
                 genColors = made.palette.colors
-                withAnimation(.easeInOut(duration: 0.4)) { genState = .ready(made) }
+                withAnimation(.easeInOut(duration: 0.3)) { genState = .ready(made) }
+                if let late = pendingLatePalette {
+                    pendingLatePalette = nil
+                    applyLateNaming(late)
+                }
                 UIAccessibility.post(notification: .announcement,
                                      argument: "Palette ready: \(made.palette.name)")
             } catch is CancellationError {
@@ -273,6 +302,9 @@ private struct GenerateInterimBody: View {
                 .accessibilityLabel("Palette colors")
                 .accessibilityValue(made.map { $0.palette.paletteColors.map { "\($0.name), \($0.hex)" }.joined(separator: "; ") } ?? "")
         }
-        .animation(.easeInOut(duration: 0.5), value: made != nil)
+        .animation(.easeInOut(duration: 0.3), value: made != nil)
+        // One light tick per color landing, here and not in the shared swatch
+        // row: the Generate tab's orb already fires its own.
+        .sensoryFeedback(.impact(weight: .light), trigger: flow.genColors.count)
     }
 }

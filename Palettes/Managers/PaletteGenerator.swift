@@ -135,7 +135,8 @@ enum PaletteGenerator {
         vibe: String?,
         scheme: HarmonyScheme = .auto,
         existingNames: [String] = [],
-        onPartialColors: (@MainActor ([Color]) -> Void)? = nil
+        onPartialColors: (@MainActor ([Color]) -> Void)? = nil,
+        onLateNaming: (@MainActor (PaletteViewModel) -> Void)? = nil
     ) async throws -> PaletteViewModel {
         #if !targetEnvironment(simulator)
         guard case .available = SystemLanguageModel.default.availability else {
@@ -175,12 +176,15 @@ enum PaletteGenerator {
         // 3. Names, requested while the orb shows the colors arriving. The
         //    user's own names are kept; the rest come from the model.
         let userNames = Dictionary(locked.map { ($0.hex, $0.name) }, uniquingKeysWith: { first, _ in first })
-        var preferred: [String?] = hexCodes.map { hex in
+        let preferred: [String?] = hexCodes.map { hex in
             guard let name = userNames[hex], !name.isEmpty else { return nil }
             return name
         }
         let unnamed = hexCodes.indices.filter { preferred[$0] == nil }
-        async let naming = modelNames(hexes: hexCodes, unnamed: unnamed, vibe: trimmedVibe.isEmpty ? nil : trimmedVibe)
+        let modelVibe = trimmedVibe.isEmpty ? nil : trimmedVibe
+        let namingTask = Task { await modelNames(hexes: hexCodes, unnamed: unnamed, vibe: modelVibe) }
+        var finished = false
+        defer { if !finished { namingTask.cancel() } }
 
         if let onPartialColors {
             let firstGenerated = min(locked.count, colors.count)
@@ -189,28 +193,55 @@ enum PaletteGenerator {
                 await MainActor.run { onPartialColors(colors) }
             }
             for index in firstGenerated..<colors.count {
-                try await Task.sleep(for: .milliseconds(700))
+                // Between colors only: the first one lands immediately.
+                if GenerationPacing.sleepsBeforeColor(at: index) {
+                    try await Task.sleep(for: GenerationPacing.colorInterval)
+                }
                 let preview = Array(colors.prefix(index + 1))
                 await MainActor.run { onPartialColors(preview) }
             }
         }
 
-        let names = await naming
-        try Task.checkCancellation()
-        for (index, name) in names.colorNames {
-            preferred[index] = name
+        func assemble(_ names: Naming) -> PaletteViewModel {
+            var preferred = preferred
+            for (index, name) in names.colorNames {
+                preferred[index] = name
+            }
+            return PaletteViewModel(
+                // The model's title is kept only when it's specific, names only
+                // colors the palette has, and is unused; otherwise a descriptive
+                // title is derived from the palette's main color.
+                name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames),
+                colors: colors,
+                hexCodes: hexCodes,
+                colorNames: ColorNamer.uniqueNames(forHexes: hexCodes, preferred: preferred),
+                colorRoles: built.roles
+            )
         }
 
-        return PaletteViewModel(
-            // The model's title is kept only when it's specific, names only
-            // colors the palette has, and is unused; otherwise a descriptive
-            // title is derived from the palette's main color.
-            name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames),
-            colors: colors,
-            hexCodes: hexCodes,
-            colorNames: ColorNamer.uniqueNames(forHexes: hexCodes, preferred: preferred),
-            colorRoles: built.roles
-        )
+        // With a late-naming callback the palette is ready after a short
+        // grace period, on fallback names; the model's names follow if they
+        // arrive. Without one, wait for the model as before.
+        let names: Naming
+        if let onLateNaming {
+            if let arrived = await NamingRace.firstResult(of: namingTask, within: GenerationPacing.namingGrace) {
+                names = arrived
+            } else {
+                try Task.checkCancellation()
+                finished = true
+                Task { @MainActor in
+                    let late = await namingTask.value
+                    guard !Task.isCancelled, !late.colorNames.isEmpty || late.title != nil else { return }
+                    onLateNaming(assemble(late))
+                }
+                return assemble(Naming(title: nil, colorNames: [:]))
+            }
+        } else {
+            names = await namingTask.value
+        }
+        try Task.checkCancellation()
+        finished = true
+        return assemble(names)
     }
 
     // MARK: - Locked base colors
@@ -265,7 +296,7 @@ enum PaletteGenerator {
         #endif
     }
 
-    private struct Naming {
+    fileprivate struct Naming {
         var title: String?
         var colorNames: [Int: String]
     }
@@ -339,5 +370,48 @@ enum PaletteGenerator {
     /// content, which must never reach device logs.
     private static func logFailure(_ error: Error, step: String) {
         logger.error("Palette \(step, privacy: .public) failed: \(String(describing: type(of: error)), privacy: .public)")
+    }
+}
+
+
+/// Timing for a generation reveal, kept in one place so the Generate tab and
+/// onboarding feel the same and the values are testable.
+enum GenerationPacing {
+    /// Gap between one color landing and the next.
+    static let colorInterval: Duration = .milliseconds(380)
+    /// How long "ready" waits for the model's names after the last color.
+    static let namingGrace: Duration = .milliseconds(600)
+
+    /// The first color of a palette lands immediately; later ones wait.
+    static func sleepsBeforeColor(at index: Int) -> Bool { index > 0 }
+}
+
+enum NamingRace {
+    /// The task's value if it finishes within `timeout`, otherwise nil. The
+    /// task itself keeps running either way.
+    static func firstResult<T: Sendable>(of task: Task<T, Never>, within timeout: Duration) async -> T? {
+        // Unstructured on purpose: a task group would wait for the slow
+        // child, and awaiting another task's value ignores cancellation.
+        await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+            let once = OnceBox<T?>(continuation)
+            Task { once.resume(await task.value) }
+            Task {
+                try? await Task.sleep(for: timeout)
+                once.resume(nil)
+            }
+        }
+    }
+}
+
+private final class OnceBox<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value, Never>?
+    init(_ continuation: CheckedContinuation<Value, Never>) { self.continuation = continuation }
+    func resume(_ value: Value) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
     }
 }
