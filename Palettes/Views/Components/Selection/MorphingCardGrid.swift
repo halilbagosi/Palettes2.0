@@ -180,17 +180,27 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
         guard viewport.width > 0 else {
             return (0..<min(items.count, Self.initialCount)).map { Slot(index: $0, item: items[$0]) }
         }
-        let overscan: CGFloat = 200
-        let minY = viewport.minY - overscan
-        let maxY = viewport.maxY + overscan
+        let indices = Self.mountedIndices(viewport: viewport, grid: grid, targets: morphTargets,
+                                          foldSpan: foldSpan, count: items.count)
+        return indices.map { Slot(index: $0, item: items[$0]) }
+    }
+
+    /// Extra points mounted above and below the viewport.
+    static var overscan: CGFloat { 300 }
+
+    /// Indices to mount: those near the viewport under `grid`, unioned with the
+    /// same window under every morph target.
+    static func mountedIndices(viewport: CGRect, grid: MorphingCardGrid, targets: [MorphingCardGrid],
+                               foldSpan: ClosedRange<CGFloat>?, count: Int) -> IndexSet {
         var indices = IndexSet()
-        for var config in [grid] + morphTargets {
+        for var config in [grid] + targets {
             config.foldSpan = foldSpan
             indices.insert(integersIn: config.itemRange(
-                fromY: minY, toY: maxY, width: viewport.width, itemCount: items.count
+                fromY: viewport.minY - overscan, toY: viewport.maxY + overscan,
+                width: viewport.width, itemCount: count
             ))
         }
-        return indices.map { Slot(index: $0, item: items[$0]) }
+        return indices
     }
 
     private static func snappedViewport(_ proxy: GeometryProxy) -> CGRect {

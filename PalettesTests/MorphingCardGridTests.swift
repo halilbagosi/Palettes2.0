@@ -75,4 +75,36 @@ final class MorphingCardGridTests: XCTestCase {
     func testItemRangeEmptyCollection() {
         XCTAssertTrue(compact.itemRange(fromY: 0, toY: 500, width: 361, itemCount: 0).isEmpty)
     }
+
+    // MARK: mountedIndices (overscan 300)
+
+    func testMountedIndicesAppliesOverscan() {
+        // viewport 1000...1200, +-300 -> 700...1500; compact stride 130 -> rows 5...11, 2 cols.
+        let v = CGRect(x: 0, y: 1000, width: 361, height: 200)
+        let got = LazyMorphingCardGrid<TestItem, EmptyView>.mountedIndices(
+            viewport: v, grid: compact, targets: [], foldSpan: nil, count: 100)
+        XCTAssertEqual(got, IndexSet(integersIn: 10..<24))
+    }
+
+    func testMountedIndicesUnionIncludesTargetLayout() {
+        let v = CGRect(x: 0, y: 0, width: 361, height: 400)
+        let alone = LazyMorphingCardGrid<TestItem, EmptyView>.mountedIndices(
+            viewport: v, grid: normal, targets: [], foldSpan: nil, count: 100)
+        let both = LazyMorphingCardGrid<TestItem, EmptyView>.mountedIndices(
+            viewport: v, grid: normal, targets: [compact], foldSpan: nil, count: 100)
+        XCTAssertTrue(both.isSuperset(of: alone))
+        XCTAssertGreaterThan(both.count, alone.count)
+        let compactOnly = LazyMorphingCardGrid<TestItem, EmptyView>.mountedIndices(
+            viewport: v, grid: compact, targets: [], foldSpan: nil, count: 100)
+        XCTAssertTrue(both.isSuperset(of: compactOnly))
+    }
+
+    func testMountedIndicesClampsToCount() {
+        let v = CGRect(x: 0, y: 0, width: 361, height: 5000)
+        let got = LazyMorphingCardGrid<TestItem, EmptyView>.mountedIndices(
+            viewport: v, grid: compact, targets: [normal], foldSpan: nil, count: 5)
+        XCTAssertEqual(got, IndexSet(integersIn: 0..<5))
+    }
+
+    private struct TestItem: Identifiable { let id = UUID() }
 }

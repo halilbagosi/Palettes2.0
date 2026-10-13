@@ -49,19 +49,31 @@ struct ColorsView: View {
 
     private var layoutBinding: Binding<ListLayout> {
         Binding(get: { layout }, set: { newValue in
+            // Open the morph window first so the target layout's extra cards are
+            // already mounted (with a frame) when the animated change lands.
             beginMorphWindow()
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                layoutRaw = newValue.rawValue
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(60))
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                    layoutRaw = newValue.rawValue
+                }
             }
         })
     }
 
     private var sortBinding: Binding<LibrarySort> {
-        Binding(get: { sort }, set: { sortRaw = $0.rawValue })
+        Binding(get: { sort }, set: { sortRaw = $0.rawValue; refreshDisplayed() })
     }
 
     private var originFilterBinding: Binding<LibraryOriginFilter> {
-        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue })
+        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue; refreshDisplayed() })
+    }
+
+    private var favoritesOnlyBinding: Binding<Bool> {
+        Binding(get: { favoritesOnly }, set: { newValue in
+            favoritesOnly = newValue
+            refreshDisplayed()
+        })
     }
 
     /// Filtered + sorted for display only; the stored array keeps creation order.
@@ -90,7 +102,7 @@ struct ColorsView: View {
         morphToken += 1
         let token = morphToken
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.8))
+            try? await Task.sleep(for: .seconds(1.0))
             if token == morphToken { isMorphing = false }
         }
     }
@@ -242,6 +254,7 @@ struct ColorsView: View {
                 withAnimation(.spring(response: 0.3)) {
                     favoritesOnly = false
                     originFilterRaw = LibraryOriginFilter.all.rawValue
+                    refreshDisplayed()
                 }
             }
             .frame(maxHeight: .infinity)
@@ -410,7 +423,7 @@ struct ColorsView: View {
             LibraryOptionsMenu(
                 layout: layoutBinding,
                 sort: sortBinding,
-                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                favoritesOnly: favoritesOnlyBinding.animation(.spring(response: 0.3)),
                 originFilter: originFilterBinding.animation(.spring(response: 0.3))
             )
         } label: {
