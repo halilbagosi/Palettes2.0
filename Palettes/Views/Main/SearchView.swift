@@ -23,11 +23,6 @@ struct SearchView: View {
 
     private var isSearching: Bool { !query.isEmpty }
 
-    /// Hex queries match with or without a leading "#".
-    private var hexQuery: String {
-        query.hasPrefix("#") ? String(query.dropFirst()) : query
-    }
-
     private var libraryIsEmpty: Bool {
         appData.colors.isEmpty && appData.palettes.isEmpty
     }
@@ -35,16 +30,11 @@ struct SearchView: View {
     // MARK: - Search Matching
 
     var filteredColors: [ColorViewModel] {
-        appData.colors.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            (!hexQuery.isEmpty && $0.HEX.localizedCaseInsensitiveContains(hexQuery))
-        }
+        LibrarySearch.colors(matching: query, in: appData.colors)
     }
 
     var filteredPalettes: [PaletteViewModel] {
-        appData.palettes.filter { palette in
-            SearchMatching.paletteMatchesQuery(palette, query: query, hexQuery: hexQuery)
-        }
+        LibrarySearch.palettes(matching: query, in: appData.palettes)
     }
 
     private var showColorResults: Bool { scope != .palettes && !filteredColors.isEmpty }
@@ -79,6 +69,13 @@ struct SearchView: View {
     /// Only offer chips for color-role tags that actually exist in the library's palettes.
     private var availableTags: [String] {
         SearchMatching.tagsInUse(palettes: appData.palettes)
+    }
+
+    /// A Search intent (Siri/Shortcuts/Spotlight) asked for a term: show it, then clear.
+    private func consumePendingSearchTerm() {
+        guard let term = appData.pendingSearchTerm else { return }
+        searchText = term
+        appData.pendingSearchTerm = nil
     }
 
     // MARK: - Recent Searches
@@ -136,6 +133,8 @@ struct SearchView: View {
                 Text(s.rawValue).tag(s)
             }
         }
+        .onAppear(perform: consumePendingSearchTerm)
+        .onReceive(appData.$pendingSearchTerm) { _ in consumePendingSearchTerm() }
         .onSubmit(of: .search) {
             recordRecentSearch()
         }

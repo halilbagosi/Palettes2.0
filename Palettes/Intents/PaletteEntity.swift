@@ -55,8 +55,7 @@ struct PaletteEntityQuery: EntityStringQuery {
     @MainActor
     func entities(matching string: String) async throws -> [PaletteEntity] {
         await AppData.shared.waitUntilLoaded()
-        return AppData.shared.palettes
-            .filter { $0.name.localizedCaseInsensitiveContains(string) }
+        return LibrarySearch.palettes(matching: string, in: AppData.shared.palettes)
             .map(PaletteEntity.init)
     }
 

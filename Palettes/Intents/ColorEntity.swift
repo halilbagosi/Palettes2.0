@@ -54,11 +54,7 @@ struct ColorEntityQuery: EntityStringQuery {
     @MainActor
     func entities(matching string: String) async throws -> [ColorEntity] {
         await AppData.shared.waitUntilLoaded()
-        return AppData.shared.colors
-            .filter {
-                $0.name.localizedCaseInsensitiveContains(string)
-                    || $0.HEX.localizedCaseInsensitiveContains(string)
-            }
+        return LibrarySearch.colors(matching: string, in: AppData.shared.colors)
             .map(ColorEntity.init)
     }
 
