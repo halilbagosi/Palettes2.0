@@ -26,4 +26,9 @@ final class PaletteEditorCopyTests: XCTestCase {
         let expected: CGFloat = 100 + 50 + 30 + 20 + 28
         XCTAssertEqual(got, expected)
     }
+
+    func testNamePlacementInSplit() {
+        XCTAssertTrue(PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: true))
+        XCTAssertFalse(PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: false))
+    }
 }

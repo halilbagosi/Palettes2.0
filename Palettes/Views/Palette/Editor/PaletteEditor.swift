@@ -34,6 +34,11 @@ enum PaletteEditorCopy {
         colorCount == 1 ? "1 color \u{00B7} add one more to create" : "\(colorCount) colors"
     }
 
+    /// Split layout: New Palette keeps the name under the strip; Edit Palette
+    /// puts it on the controls side, so the strip alone fills the left half
+    /// (like Edit Color's swatch).
+    static func nameBelongsToVisualColumn(isCreating: Bool) -> Bool { isCreating }
+
     /// Vertical padding around the stacked content (8 above, 20 below).
     static let stackedPadding: CGFloat = 28
 
@@ -201,13 +206,13 @@ struct PaletteEditor: View {
 
     // MARK: - Columns
 
-    /// Split's first side: the strip (as tall as the side allows), its name and
-    /// subtext. Scrolls when a short container can't fit them.
+    /// Split's first side: the strip (as tall as the side allows) with its
+    /// caption and subtext, and the name when creating. Scrolls when a short container can't fit them.
     private var visualColumn: some View {
         FillingScroll {
             VStack(spacing: Self.blockSpacing) {
                 stripBlock(fillsHeight: true)
-                nameField
+                if PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: isCreating) { nameField }
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -215,10 +220,12 @@ struct PaletteEditor: View {
         }
     }
 
-    /// Split's second side: the source switch and the add panel.
+    /// Split's second side: the name (when editing), the source switch and the
+    /// add panel.
     private var controlsColumn: some View {
         FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused) {
             VStack(spacing: Self.blockSpacing) {
+                if !PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: isCreating) { nameField }
                 sourcePicker
                 addPanel
             }
