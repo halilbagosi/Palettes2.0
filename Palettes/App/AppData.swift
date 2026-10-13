@@ -28,6 +28,12 @@ class AppData: ObservableObject {
     @Published var pendingOpenPaletteID: UUID?
     /// Search term a Search/Find intent asked to show; SearchView consumes it.
     @Published var pendingSearchTerm: String?
+
+    /// Returns the term a Search intent queued (if any) and clears it.
+    func takePendingSearchTerm() -> String? {
+        defer { pendingSearchTerm = nil }
+        return pendingSearchTerm
+    }
     /// Transient (never persisted): the palette that should show the
     /// onboarding coach mark when its detail screen appears.
     @Published var coachMarkPaletteID: UUID?

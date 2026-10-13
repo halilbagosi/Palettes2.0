@@ -43,22 +43,62 @@ struct LibrarySearchTests {
         #expect(LibrarySearch.palettes(matching: "57BBFF", in: ps).map(\.name) == ["Ocean Breeze"])
     }
 
-    @available(iOS 26.0, *)
-    @Test func findIntentsFilterSharedLibrary() async throws {
-        let data = AppData.shared
-        let savedP = data.palettes, savedC = data.colors
-        defer { data.palettes = savedP; data.colors = savedC }
-        data.palettes = [Self.ocean, Self.forest]
-        data.colors = Self.all
+    static func library() -> AppData {
+        let data = AppData(inMemory: true)
+        data.palettes = [ocean, forest]
+        data.colors = all
+        return data
+    }
 
-        let ocean = try await FindPalettesIntent(searchTerm: "ocean").perform().value ?? []
+    @Test func hueWordsMatchPalettesByAnyColourAndNeutralWords() {
+        let ps = [Self.ocean, Self.forest]
+        #expect(LibrarySearch.palettes(matching: "blue", in: ps).map(\.name) == ["Ocean Breeze"])
+        #expect(LibrarySearch.palettes(matching: "green", in: ps).map(\.name) == ["Forest"])
+        let mono = ColorViewModel(name: "Ink", color: Color(hex: "#000000")!, HEX: "#000000", usedInPalette: false)
+        for w in ["black", "white", "grey", "gray"] {
+            #expect(LibrarySearch.colors(matching: w, in: Self.all + [mono]).map(\.name) == ["Ink"])
+        }
+    }
+
+    @available(iOS 26.0, *)
+    @Test func findIntentsFilterInjectedLibrary() async throws {
+        let data = Self.library()
+        let ocean = try await FindPalettesIntent(searchTerm: "ocean", library: data).perform().value ?? []
         #expect(ocean.map(\.name) == ["Ocean Breeze"])
-        let allP = try await FindPalettesIntent(searchTerm: "").perform().value ?? []
+        let allP = try await FindPalettesIntent(searchTerm: "", library: data).perform().value ?? []
         #expect(allP.count == 2)
-        let blues = try await FindColorsIntent(searchTerm: "blue").perform().value ?? []
+        let blues = try await FindColorsIntent(searchTerm: "blue", library: data).perform().value ?? []
         #expect(blues.map(\.name) == ["Sky"])
-        let allC = try await FindColorsIntent(searchTerm: nil).perform().value ?? []
+        let allC = try await FindColorsIntent(searchTerm: nil, library: data).perform().value ?? []
         #expect(allC.count == 3)
+        let none = try await FindColorsIntent(searchTerm: "zzz", library: data).perform().value ?? []
+        #expect(none.isEmpty)
+    }
+
+    @available(iOS 26.0, *)
+    @Test func entityQueriesMatchString() async throws {
+        let data = Self.library()
+        let ps = try await PaletteEntityQuery(library: data).entities(matching: "forest")
+        #expect(ps.map(\.name) == ["Forest"])
+        let cs = try await ColorEntityQuery(library: data).entities(matching: "warm")
+        #expect(cs.map(\.name) == ["Brick"])
+    }
+
+    @available(iOS 26.0, *)
+    @Test func createPaletteIntentUsesInjectedLibrary() async throws {
+        let data = AppData(inMemory: true)
+        let created = try await CreatePaletteIntent(name: "Fresh", library: data).perform().value
+        #expect(created?.name == "Fresh")
+        #expect(data.palettes.contains { $0.name == "Fresh" })
+    }
+
+    @Test func pendingSearchTermIsTakenOnceAndCleared() {
+        let data = AppData(inMemory: true)
+        #expect(data.takePendingSearchTerm() == nil)
+        data.pendingSearchTerm = "ocean"
+        #expect(data.takePendingSearchTerm() == "ocean")
+        #expect(data.pendingSearchTerm == nil)
+        #expect(data.takePendingSearchTerm() == nil)
     }
 
     @available(iOS 26.0, *)

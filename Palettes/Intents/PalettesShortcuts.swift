@@ -76,7 +76,7 @@ struct PalettesShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: CreatePaletteIntent(),
             phrases: [
-                "Create a palette in \(.applicationName)"
+                "New empty palette in \(.applicationName)"
             ],
             shortTitle: "Create Palette",
             systemImageName: "plus.square.on.square"

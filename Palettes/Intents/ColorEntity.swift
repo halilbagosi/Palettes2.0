@@ -43,25 +43,31 @@ struct ColorEntity: AppEntity, IndexedEntity {
 
 @available(iOS 26.0, *)
 struct ColorEntityQuery: EntityStringQuery {
+    /// Injected so tests never touch the real store.
+    var library: AppData = .shared
+
+    init() {}
+    init(library: AppData) { self.library = library }
+
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [ColorEntity] {
-        await AppData.shared.waitUntilLoaded()
-        return AppData.shared.colors
+        await library.waitUntilLoaded()
+        return library.colors
             .filter { identifiers.contains($0.id) }
             .map(ColorEntity.init)
     }
 
     @MainActor
     func entities(matching string: String) async throws -> [ColorEntity] {
-        await AppData.shared.waitUntilLoaded()
-        return LibrarySearch.colors(matching: string, in: AppData.shared.colors)
+        await library.waitUntilLoaded()
+        return LibrarySearch.colors(matching: string, in: library.colors)
             .map(ColorEntity.init)
     }
 
     @MainActor
     func suggestedEntities() async throws -> [ColorEntity] {
-        await AppData.shared.waitUntilLoaded()
-        return Self.suggested(from: AppData.shared.colors)
+        await library.waitUntilLoaded()
+        return Self.suggested(from: library.colors)
     }
 
     /// Most recent 100, newest first, so shortcut phrases resolve for a real library.

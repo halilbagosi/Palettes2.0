@@ -17,6 +17,7 @@ enum LibrarySearch {
         switch w {
         case "warm": return [.reds, .oranges, .yellows, .pinks]
         case "cool": return [.greens, .blues, .purples]
+        case "black", "white", "grey", "gray": return [.neutrals]
         default: break
         }
         return Set(HueCategory.allCases.filter {
@@ -33,11 +34,17 @@ enum LibrarySearch {
         return !hues.isEmpty && hues.contains(color.color.hueCategory)
     }
 
+    private static func hueMatches(_ palette: PaletteViewModel, query: String) -> Bool {
+        let hues = hueCategories(forWord: query)
+        return !hues.isEmpty && palette.colors.contains { hues.contains($0.hueCategory) }
+    }
+
     static func paletteMatches(_ palette: PaletteViewModel, query: String, hexQuery: String) -> Bool {
         guard !query.isEmpty else { return false }
         return palette.name.localizedCaseInsensitiveContains(query) ||
             palette.paletteColors.contains { $0.name.localizedCaseInsensitiveContains(query) } ||
             (!hexQuery.isEmpty && palette.hexCodes.contains { $0.localizedCaseInsensitiveContains(hexQuery) }) ||
+            hueMatches(palette, query: query) ||
             palette.paletteColors.contains { color in
                 guard let role = color.role, !role.isEmpty else { return false }
                 return role.localizedCaseInsensitiveContains(query)

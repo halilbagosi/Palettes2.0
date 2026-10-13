@@ -73,9 +73,8 @@ struct SearchView: View {
 
     /// A Search intent (Siri/Shortcuts/Spotlight) asked for a term: show it, then clear.
     private func consumePendingSearchTerm() {
-        guard let term = appData.pendingSearchTerm else { return }
+        guard let term = appData.takePendingSearchTerm() else { return }
         searchText = term
-        appData.pendingSearchTerm = nil
     }
 
     // MARK: - Recent Searches
@@ -133,8 +132,7 @@ struct SearchView: View {
                 Text(s.rawValue).tag(s)
             }
         }
-        .onAppear(perform: consumePendingSearchTerm)
-        .onReceive(appData.$pendingSearchTerm) { _ in consumePendingSearchTerm() }
+        .onChange(of: appData.pendingSearchTerm, initial: true) { _, _ in consumePendingSearchTerm() }
         .onSubmit(of: .search) {
             recordRecentSearch()
         }

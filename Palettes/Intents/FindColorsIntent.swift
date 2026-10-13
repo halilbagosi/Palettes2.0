@@ -18,20 +18,28 @@ struct FindColorsIntent: AppIntent {
         Summary("Find colors matching \(\.$searchTerm)")
     }
 
+    /// Injected so tests never touch the real store.
+    var library: AppData = .shared
+
     init() {}
 
-    init(searchTerm: String?) {
+    init(searchTerm: String?, library: AppData = .shared) {
         self.searchTerm = searchTerm
+        self.library = library
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[ColorEntity]> & ProvidesDialog & ShowsSnippetView {
-        await AppData.shared.waitUntilLoaded()
-        let matches = LibrarySearch.colors(matching: searchTerm, in: AppData.shared.colors)
+        await library.waitUntilLoaded()
+        let matches = LibrarySearch.colors(matching: searchTerm, in: library.colors)
         let shown = Array(matches.prefix(4))
+        let term = LibrarySearch.normalize(searchTerm).query
+        let dialog: IntentDialog = matches.isEmpty
+            ? (term.isEmpty ? "No colors yet" : "No colors match '\(term)'")
+            : "Found \(matches.count) \(matches.count == 1 ? "color" : "colors")"
         return .result(
             value: matches.map(ColorEntity.init),
-            dialog: "Found \(matches.count) \(matches.count == 1 ? "color" : "colors")",
+            dialog: dialog,
             view: VStack(spacing: 0) {
                 ForEach(shown) { ColorSnippetView(name: $0.name, hex: $0.HEX) }
             }

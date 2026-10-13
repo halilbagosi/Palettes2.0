@@ -44,24 +44,30 @@ struct PaletteEntity: AppEntity, IndexedEntity {
 
 @available(iOS 26.0, *)
 struct PaletteEntityQuery: EntityStringQuery {
+    /// Injected so tests never touch the real store.
+    var library: AppData = .shared
+
+    init() {}
+    init(library: AppData) { self.library = library }
+
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [PaletteEntity] {
-        await AppData.shared.waitUntilLoaded()
-        return AppData.shared.palettes
+        await library.waitUntilLoaded()
+        return library.palettes
             .filter { identifiers.contains($0.id) }
             .map(PaletteEntity.init)
     }
 
     @MainActor
     func entities(matching string: String) async throws -> [PaletteEntity] {
-        await AppData.shared.waitUntilLoaded()
-        return LibrarySearch.palettes(matching: string, in: AppData.shared.palettes)
+        await library.waitUntilLoaded()
+        return LibrarySearch.palettes(matching: string, in: library.palettes)
             .map(PaletteEntity.init)
     }
 
     @MainActor
     func suggestedEntities() async throws -> [PaletteEntity] {
-        await AppData.shared.waitUntilLoaded()
-        return AppData.shared.palettes.suffix(100).reversed().map(PaletteEntity.init)
+        await library.waitUntilLoaded()
+        return library.palettes.suffix(100).reversed().map(PaletteEntity.init)
     }
 }
