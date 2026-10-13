@@ -180,7 +180,7 @@ struct LazyMorphingCardGrid<Item: Identifiable, Content: View>: View {
         guard viewport.width > 0 else {
             return (0..<min(items.count, Self.initialCount)).map { Slot(index: $0, item: items[$0]) }
         }
-        let overscan = max(400, viewport.height / 2)
+        let overscan: CGFloat = 200
         let minY = viewport.minY - overscan
         let maxY = viewport.maxY + overscan
         var indices = IndexSet()
