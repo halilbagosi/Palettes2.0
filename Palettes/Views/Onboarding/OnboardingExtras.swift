@@ -423,7 +423,7 @@ private struct ExtrasCard<Content: View>: View {
                 Image(systemName: symbol)
                     .font(.system(size: 19, weight: .semibold))
                     .symbolRenderingMode(multicolor ? .multicolor : .monochrome)
-                    .foregroundStyle(GenerationResultView.ink(on: tint))
+                    .foregroundStyle(multicolor ? Color.white : GenerationResultView.ink(on: tint))
                     .frame(width: 44, height: 44)
                     .background(
                         multicolor ? AnyShapeStyle(Color.black) : AnyShapeStyle(tint.gradient),

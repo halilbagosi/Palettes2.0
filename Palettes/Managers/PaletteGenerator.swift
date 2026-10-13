@@ -240,7 +240,7 @@ enum PaletteGenerator {
                 return assemble(Naming(title: nil, colorNames: [:]))
             }
         } else {
-            names = await namingTask.value
+            names = await withTaskCancellationHandler { await namingTask.value } onCancel: { namingTask.cancel() }
         }
         try Task.checkCancellation()
         finished = true

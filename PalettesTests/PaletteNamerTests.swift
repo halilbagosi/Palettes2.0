@@ -146,9 +146,9 @@ final class PaletteNamerTests: XCTestCase {
 
     // MARK: - Titles follow the loudest color
 
-    /// The family word comes from the highest-chroma swatch (the brief for
-    /// Task 13), so a loud accent can name the title; the family is still a
-    /// color the palette really has.
+    /// The family word comes from the first chromatic swatch (a near-grey
+    /// first swatch defers to a louder one), so a later loud accent does not
+    /// name the title.
     func testTitleFamilyComesFromTheFirstChromaticColor() {
         let name = PaletteNamer.descriptiveName(
             forHexes: ["#2E5F8A", "#3E7FB0", "#1E3F5A", "#FF5A00"],
@@ -187,7 +187,7 @@ final class PaletteNamerTests: XCTestCase {
     }
 
     /// A near-grey first swatch next to a much louder one defers to the louder.
-    func testFamilyWordUsesTheHighestChromaSwatch() {
+    func testNearGreyFirstSwatchDefersToTheChromaticOne() {
         let dullFirst = PaletteNamer.descriptiveName(forHexes: ["#8E7F7A", "#1F5FFF"], existingNames: [])
         XCTAssertTrue(dullFirst.contains("Cornflower"), dullFirst)
     }

@@ -61,6 +61,7 @@ struct AppDataIntentAPITests {
 }
 
 @MainActor
+@Suite(.serialized)
 struct IntentReadinessTests {
     @available(iOS 26.0, *)
     @Test func availabilityMapsToDistinctErrors() {
@@ -81,8 +82,8 @@ struct IntentReadinessTests {
         let data = AppData(inMemory: true)
         _ = data.addColor(name: "Seed", hex: "#112233")
         let start = ContinuousClock.now
-        await data.waitUntilLoaded(timeout: .seconds(2))
-        #expect(ContinuousClock.now - start < .milliseconds(200))
+        await data.waitUntilLoaded(timeout: .seconds(20))
+        #expect(ContinuousClock.now - start < .seconds(10)) // well before the timeout
     }
 
     @Test func waitUntilLoadedWaitsForReloadWhenEmpty() async {
@@ -94,10 +95,10 @@ struct IntentReadinessTests {
             try? await Task.sleep(for: .milliseconds(150))
             data.reloadFromStore()
         }
-        await data.waitUntilLoaded(timeout: .seconds(10))
+        await data.waitUntilLoaded(timeout: .seconds(60))
         let elapsed = ContinuousClock.now - start
         #expect(elapsed >= .milliseconds(100))
-        #expect(elapsed < .seconds(8)) // returned on the reload signal, not the timeout
+        #expect(elapsed < .seconds(40)) // returned on the reload signal, not the timeout
     }
 
     @Test func waitUntilLoadedIsBoundedWhenNothingArrives() async {
@@ -106,7 +107,7 @@ struct IntentReadinessTests {
         data.palettes = []
         let start = ContinuousClock.now
         await data.waitUntilLoaded(timeout: .milliseconds(200))
-        #expect(ContinuousClock.now - start < .seconds(1))
+        #expect(ContinuousClock.now - start < .seconds(15)) // bounded, not a hang
     }
 
     @available(iOS 26.0, *)

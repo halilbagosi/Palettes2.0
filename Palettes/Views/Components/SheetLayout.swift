@@ -15,6 +15,9 @@ enum SheetLayout: Equatable {
     /// Visual and controls side by side.
     case split
 
+    /// The least width a split column can have and still be usable.
+    static let minColumnWidth: CGFloat = 300
+
     /// Decides the layout for a container of `size`.
     ///
     /// Split when the container is landscape-shaped, when it is regular-width
@@ -24,9 +27,6 @@ enum SheetLayout: Equatable {
     /// `@ScaledMetric`) AND wide enough for two usable columns
     /// (`2 * minColumnWidth`). A narrow, short container stays stacked and
     /// scrolls rather than squeezing into two cramped columns.
-    /// The least width a split column can have and still be usable.
-    static let minColumnWidth: CGFloat = 300
-
     static func resolve(size: CGSize, horizontal: UserInterfaceSizeClass?, minStackedHeight: CGFloat) -> SheetLayout {
         if size.width > size.height { return .split }
         if horizontal == .regular, size.width >= size.height * 0.75 { return .split }
