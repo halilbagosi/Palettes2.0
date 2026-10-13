@@ -64,7 +64,7 @@ struct GeneratedColorName {
     @Guide(description: "The number of the color in the list")
     var number: Int
 
-    @Guide(description: "A short, evocative name of one to three words that fits the color's description")
+    @Guide(description: "The color's name only: one to three words, centered on a noun such as terracotta, sage, cobalt, slate, plum or sand. No mood adjectives like gentle, soft, rich or calm. No commas. Never use the words muted, vivid, moderate, light or dark.")
     var name: String
 }
 
@@ -283,15 +283,21 @@ enum PaletteGenerator {
         let theme = vibe.map { " inspired by \"\($0)\"" } ?? ""
         let prompt = """
             Name each color in this palette\(theme), and give the palette a title. \
-            Each name must fit its description: never call a light color dark, a grey \
-            colorful, or one hue by another hue's name.
+            Each color is given as lightness, intensity and hue. Answer with the name \
+            only: one to three words built on a noun like terracotta, sage, cobalt or \
+            sand. Never put a mood adjective (gentle, soft, rich, calm), a comma, or \
+            the words muted, vivid, moderate, light or dark in a name. The name must \
+            fit: never name a pale color after a loud one, a grey after a hue, or one \
+            hue after another.
             \(list)
             """
         do {
             let session = LanguageModelSession(instructions: """
                 You name colors for a design app. Use concrete, evocative names drawn from \
                 materials, places, food and nature, one to three words each. Never repeat a \
-                name, and never use the words color, shade, tone or palette in a name.
+                name, and never use the words color, shade, tone or palette in a name. A color \
+                name is a noun like terracotta, sage or cobalt, never an adjective phrase, and \
+                never a comma-separated list.
                 """)
             let response = try await session.respond(to: prompt, generating: GeneratedNames.self)
             let proposals = response.content.colors.map { (number: $0.number, name: $0.name) }
@@ -321,6 +327,7 @@ enum PaletteGenerator {
             let name = proposal.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard needed.contains(index),
                   accepted[index] == nil,
+                  ColorVocabulary.isCleanModelName(name),
                   ColorVocabulary.isPlausible(name: name, forHex: hexes[index]),
                   used.insert(name.lowercased()).inserted else { continue }
             accepted[index] = name

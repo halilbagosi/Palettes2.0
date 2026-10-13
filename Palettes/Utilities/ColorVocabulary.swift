@@ -77,7 +77,36 @@ enum ColorVocabulary {
         "violet": 295, "purple": 310, "lavender": 300, "lilac": 310, "plum": 330,
         "amethyst": 305, "mauve": 330, "orchid": 330, "grape": 310, "periwinkle": 285,
         "magenta": 330, "fuchsia": 335, "pink": 0, "rose": 5, "blush": 10, "flamingo": 5,
-        "raspberry": 355,
+        "raspberry": 355, "aquamarine": 170,
+    ]
+
+    /// How much chroma and lightness a hue noun needs, and how far its own
+    /// hue may sit from the swatch's. The hue ring alone lets "tangerine"
+    /// name a beige and "aquamarine" a sky blue: a noun carries intensity
+    /// ("tangerine" is loud, "beige" is quiet) and a narrower hue than its
+    /// family. `hue` falls back to the noun's `hueWords` entry.
+    struct Envelope {
+        var minChroma = 0.0
+        var maxChroma = 1.0
+        var minLightness = 0.0
+        var maxLightness = 1.0
+        var hueTolerance: Double?
+    }
+
+    static let envelopes: [String: Envelope] = [
+        "tangerine": Envelope(minChroma: 0.10, hueTolerance: 30),
+        "aquamarine": Envelope(minChroma: 0.07, hueTolerance: 30),
+        "turquoise": Envelope(minChroma: 0.06, hueTolerance: 30),
+        "coral": Envelope(minChroma: 0.10, hueTolerance: 35),
+        "neon": Envelope(minChroma: 0.15),
+        "cerulean": Envelope(minChroma: 0.08, minLightness: 0.5, hueTolerance: 30),
+        "beige": Envelope(maxChroma: 0.07, minLightness: 0.7),
+        "tan": Envelope(maxChroma: 0.07),
+        "sand": Envelope(maxChroma: 0.07, minLightness: 0.6),
+        "taupe": Envelope(maxChroma: 0.07),
+        "khaki": Envelope(maxChroma: 0.13),
+        "navy": Envelope(maxLightness: 0.40),
+        "midnight": Envelope(maxLightness: 0.40),
     ]
 
     /// Places and moods that imply a hue. Only used to read a vibe — a
@@ -120,8 +149,10 @@ enum ColorVocabulary {
     // MARK: - Describing a color
 
     /// The plain description the model names a color from, e.g.
-    /// "dark, muted teal". Written by code from the actual swatch, so the
-    /// model never has to guess a color from its hex code.
+    /// "lightness=dark intensity=muted hue=teal". Written by code from the
+    /// actual swatch, so the model never has to guess a color from its hex
+    /// code. Deliberately not name-shaped ("dark, muted teal" got echoed
+    /// back as the name).
     static func describe(hex: String) -> String {
         guard let color = OKLCH(hex: hex) else { return "unknown" }
         let lightness: String
@@ -134,10 +165,11 @@ enum ColorVocabulary {
         }
         let family = family(forHue: color.h).name
         if color.C < 0.03 {
-            return color.C >= 0.012 ? "\(lightness) grey with a hint of \(family)" : "\(lightness) neutral grey"
+            let hue = color.C >= 0.012 ? "grey leaning \(family)" : "neutral grey"
+            return "lightness=\(lightness) intensity=none hue=\(hue)"
         }
         let chroma = color.C < 0.07 ? "muted" : (color.C < 0.14 ? "moderate" : "vivid")
-        return "\(lightness), \(chroma) \(family)"
+        return "lightness=\(lightness) intensity=\(chroma) hue=\(family)"
     }
 
     // MARK: - Checking a name
@@ -159,19 +191,61 @@ enum ColorVocabulary {
 
         let named = words.compactMap { hueWords[$0] }.map { family(forHue: $0) }
         let own = family(forHue: color.h)
+        for word in words {
+            guard let envelope = envelopes[word] else { continue }
+            guard color.C >= envelope.minChroma, color.C <= envelope.maxChroma,
+                  color.L >= envelope.minLightness, color.L <= envelope.maxLightness else { return false }
+            if let tolerance = envelope.hueTolerance, let hue = hueWords[word], color.C >= 0.02,
+               OKLCH.hueDistance(color.h, hue) > tolerance { return false }
+        }
         if color.C < 0.006 {
             // A true grey has no hue to name.
             if !named.isEmpty { return false }
-        } else if named.contains(where: { ringDistance($0, own) > 1 }) {
+        } else if named.allSatisfy({ ringDistance($0, own) > 1 }), !named.isEmpty {
+            // Every hue word is off: "Blue Lagoon" on an orange. One that
+            // fits is enough for a compound like "Rose Gold".
             return false
         }
         if named.isEmpty {
             if color.C >= 0.06, words.contains(where: greyWords.contains) { return false }
             if words.contains(where: whiteWords.contains), color.L < 0.8 || color.C >= 0.1 { return false }
         }
-        if color.L > 0.72, words.contains(where: darkWords.contains) { return false }
+        if color.L > 0.78, words.contains(where: darkWords.contains) { return false }
         if color.L < 0.40, words.contains(where: lightWords.contains) { return false }
         if color.C < 0.06, words.contains(where: vividWords.contains) { return false }
+        return true
+    }
+
+    // MARK: - Model-name hygiene
+
+    /// Adjectives about mood that models put in front of a color word
+    /// ("gentle, muted aquamarine"). They say nothing about the swatch.
+    static let moodAdjectives: Set<String> = [
+        "gentle", "steady", "soft", "rich", "mellow", "calm", "bold", "warm", "cool", "subtle",
+        "quiet", "lovely", "serene", "tranquil", "cozy", "lush", "radiant", "pure", "classic",
+        "delicate", "smooth", "bright", "crisp", "fresh", "elegant", "luxurious",
+    ]
+
+    /// Our own description words; a name that uses one is echoing the prompt.
+    static let descriptorWords: Set<String> = [
+        "muted", "vivid", "moderate", "light", "dark", "medium", "lightness", "intensity", "hue", "neutral",
+    ]
+
+    /// Whether a model-proposed name is a clean color name: one to three
+    /// words, no comma, no echo of our description words, and not a mood
+    /// adjective stuck in front of a bare hue word ("Gentle Aquamarine").
+    /// Stricter than `isPlausible`, which also vets dictionary names such
+    /// as "Dark Red" and "Warm Gray".
+    static func isCleanModelName(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.contains(","), !trimmed.contains(";"), !trimmed.contains("="), !trimmed.contains(":") else { return false }
+        let words = tokens(trimmed)
+        guard (1...3).contains(words.count) else { return false }
+        if words.contains(where: descriptorWords.contains) { return false }
+        if words.count > 1, let first = words.first, moodAdjectives.contains(first) {
+            let rest = words.dropFirst()
+            if rest.allSatisfy({ hueWords[$0] != nil || greyWords.contains($0) || whiteWords.contains($0) }) { return false }
+        }
         return true
     }
 

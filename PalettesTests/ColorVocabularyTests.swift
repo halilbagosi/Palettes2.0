@@ -25,9 +25,53 @@ final class ColorVocabularyTests: XCTestCase {
     }
 
     func testDescriptionsComeFromTheSwatch() {
-        XCTAssertEqual(ColorVocabulary.describe(hex: "#2F6BD8"), "medium, vivid blue")
-        XCTAssertEqual(ColorVocabulary.describe(hex: "#808080"), "medium neutral grey")
-        XCTAssertEqual(ColorVocabulary.describe(hex: "#021741"), "very dark, moderate blue")
+        XCTAssertEqual(ColorVocabulary.describe(hex: "#2F6BD8"), "lightness=medium intensity=vivid hue=blue")
+        XCTAssertEqual(ColorVocabulary.describe(hex: "#808080"), "lightness=medium intensity=none hue=neutral grey")
+        XCTAssertEqual(ColorVocabulary.describe(hex: "#021741"), "lightness=very dark intensity=moderate hue=blue")
+    }
+
+    /// The description fed to the model must not look like a color name, or
+    /// the model echoes it ("gentle, muted aquamarine").
+    func testDescriptionIsNotNameShaped() {
+        for hex in ["#57BBFF", "#658BA8", "#CBAA8E", "#808080"] {
+            let text = ColorVocabulary.describe(hex: hex)
+            XCTAssertFalse(text.contains(","), text)
+            XCTAssertFalse(ColorVocabulary.isCleanModelName(text), text)
+        }
+    }
+
+    func testCleanModelNames() {
+        for bad in ["gentle, muted aquamarine", "steady, muted cerulean", "soft, mellow tangerine", "rich, deep amber",
+                    "Gentle Aquamarine", "Soft Blue", "Muted Teal", "Vivid Orange", "Light Sage", "Dark Plum",
+                    "Four Word Name Here", ""] {
+            XCTAssertFalse(ColorVocabulary.isCleanModelName(bad), bad)
+        }
+        for good in ["Terracotta", "Sage", "Cobalt", "Sky Blue", "Harbor Mist", "Warm Hearth", "Dusty Denim"] {
+            XCTAssertTrue(ColorVocabulary.isCleanModelName(good), good)
+        }
+    }
+
+    func testNounEnvelopes() {
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Tangerine", forHex: "#CBAA8E"), "tangerine is loud, this is tan")
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Aquamarine", forHex: "#57BBFF"), "aquamarine is a green-cyan")
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Sky Blue", forHex: "#57BBFF"))
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Cerulean", forHex: "#658BA8"), "too dull for cerulean")
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Tangerine", forHex: "#FF9966"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Aquamarine", forHex: "#7FFFD4"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Turquoise", forHex: "#40E0D0"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Coral", forHex: "#FF7F50"))
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Coral", forHex: "#CBAA8E"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Tan", forHex: "#CBAA8E"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Beige", forHex: "#F5F5DC"))
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Beige", forHex: "#FF9966"), "beige is quiet")
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Taupe", forHex: "#E2683C"))
+        XCTAssertTrue(ColorVocabulary.isPlausible(name: "Navy", forHex: "#000080"))
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Navy", forHex: "#57BBFF"), "navy is dark")
+        XCTAssertFalse(ColorVocabulary.isPlausible(name: "Midnight Blue", forHex: "#9FC5FF"))
+    }
+
+    func testNamesWithCommasFail() {
+        XCTAssertFalse(ColorVocabulary.isCleanModelName("Sage, Green"))
     }
 
     func testPlausibleNamesPass() {

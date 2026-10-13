@@ -144,18 +144,18 @@ final class PaletteNamerTests: XCTestCase {
         XCTAssertFalse(name.contains("Generated"))
     }
 
-    // MARK: - Titles follow the main color
+    // MARK: - Titles follow the loudest color
 
-    /// Generated palettes list the main color first. The title must name
-    /// that family, not the loudest accent: a blue palette with one orange
-    /// accent was being titled after the orange.
-    func testTitleFamilyComesFromTheFirstColor() {
+    /// The family word comes from the highest-chroma swatch (the brief for
+    /// Task 13), so a loud accent can name the title; the family is still a
+    /// color the palette really has.
+    func testTitleFamilyComesFromTheHighestChromaColor() {
         let name = PaletteNamer.descriptiveName(
             forHexes: ["#2E5F8A", "#3E7FB0", "#1E3F5A", "#FF5A00"],
             existingNames: []
         )
         let warmFamilies = ["Garnet", "Coral", "Terracotta", "Ember", "Copper", "Apricot"]
-        XCTAssertFalse(warmFamilies.contains { name.contains($0) }, name)
+        XCTAssertTrue(warmFamilies.contains { name.contains($0) }, name)
     }
 
     func testTitlesDropFillerWords() {
@@ -184,5 +184,12 @@ final class PaletteNamerTests: XCTestCase {
         )
         XCTAssertNotEqual(name, "Crimson Tide")
         XCTAssertFalse(name.isEmpty)
+    }
+
+    /// The title's family word comes from the loudest swatch, not the
+    /// first one that clears the saturation floor.
+    func testFamilyWordUsesTheHighestChromaSwatch() {
+        let dullFirst = PaletteNamer.descriptiveName(forHexes: ["#8E7F7A", "#1F5FFF"], existingNames: [])
+        XCTAssertTrue(dullFirst.contains("Cornflower"), dullFirst)
     }
 }

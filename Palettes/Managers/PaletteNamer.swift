@@ -104,11 +104,9 @@ enum PaletteNamer {
     // MARK: - Traits
 
     private struct Traits {
-        /// Hue of the palette's first clearly colored swatch, never an
-        /// average (averaging opposing hues names a family that isn't in
-        /// the palette at all). Generated palettes list the user's colors
-        /// and the main color's family first, so this is the main color,
-        /// not the loudest accent.
+        /// Hue of the palette's highest-chroma swatch, never an average
+        /// (averaging opposing hues names a family that isn't in the
+        /// palette at all).
         var hue: Double
         /// Brightness of that same characteristic color, so the family word
         /// ("Terracotta" vs "Ember") describes a real color, not the mean.
@@ -123,7 +121,7 @@ enum PaletteNamer {
     }
 
     private static func traits(forHexes hexes: [String]) -> Traits {
-        var chromatic: [(h: Double, s: Double, b: Double)] = []
+        var chromatic: [(h: Double, s: Double, b: Double, c: Double)] = []
         var sats: [Double] = []
         var brights: [Double] = []
 
@@ -132,7 +130,7 @@ enum PaletteNamer {
             sats.append(hsb.s)
             brights.append(hsb.b)
             // Only colors with real chroma can name a family; grays can't.
-            if hsb.s > 0.12 { chromatic.append(hsb) }
+            if hsb.s > 0.12 { chromatic.append((hsb.h, hsb.s, hsb.b, OKLCH(hex: hex)?.C ?? 0)) }
         }
 
         guard !brights.isEmpty else {
@@ -141,10 +139,12 @@ enum PaletteNamer {
                           seed: deterministicSeed(hexes))
         }
 
-        // The palette's "signature" color: its first clearly colored swatch.
-        // Its hue names the family, so the title always points at a color
-        // that is genuinely present — and at the main one.
-        let signature = chromatic.first
+        // The palette's "signature" color: its highest-chroma swatch (the
+        // earliest on a tie). Its hue names the family, so the title points
+        // at a color that is genuinely present and that reads as the
+        // palette's color, not at a dull first swatch beside a loud one.
+        var signature: (h: Double, s: Double, b: Double, c: Double)?
+        for entry in chromatic where entry.c > (signature?.c ?? -1) { signature = entry }
 
         // How spread out the hues are — a wide spread means "no single family
         // describes this", which the character words can acknowledge.
