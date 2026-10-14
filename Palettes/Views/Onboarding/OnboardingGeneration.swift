@@ -65,7 +65,9 @@ enum OnboardingPaletteMaker {
         size: Int = paletteSize,
         existingNames: [String],
         revealDelay: Duration = .zero,
-        onColors: @escaping @MainActor ([Color]) -> Void
+        onColors: @escaping @MainActor ([Color]) -> Void,
+        onLatePalette: (@MainActor (PaletteViewModel) -> Void)? = nil,
+        onLateTask: (@MainActor (Task<Void, Never>) -> Void)? = nil
     ) async throws -> Made {
         if usesAI, #available(iOS 26.0, *), modelAvailable {
             let palette = try await PaletteGenerator.generate(
@@ -73,7 +75,9 @@ enum OnboardingPaletteMaker {
                 size: size,
                 vibe: nil,
                 existingNames: existingNames,
-                onPartialColors: onColors
+                onPartialColors: onColors,
+                onLateNaming: onLatePalette,
+                onLateNamingTask: onLateTask
             )
             var generated = palette
             generated.isGenerated = true
@@ -83,9 +87,9 @@ enum OnboardingPaletteMaker {
         let palette = try deterministicPalette(anchorHex: anchorHex, size: size, existingNames: existingNames)
         let colors = palette.colors
         if revealDelay > .zero {
-            for count in 2...max(2, colors.count) {
-                try await Task.sleep(for: revealDelay)
-                onColors(Array(colors.prefix(count)))
+            for step in revealSteps(total: colors.count, shown: 1) {
+                if step.waitsFirst { try await Task.sleep(for: revealDelay) }
+                onColors(Array(colors.prefix(step.count)))
             }
         } else {
             onColors(colors)
@@ -104,20 +108,28 @@ enum OnboardingPaletteMaker {
         onColors: @escaping @MainActor ([Color]) -> Void
     ) async throws -> Made {
         // The photo is already downscaled and the extractor samples 160 px,
-        // so this is quick enough on the main actor (as in ColorInputView).
+        // so this is quick enough on the main actor (as in ColorComposer).
         let extracted = try ImageColorExtractor.extractColors(from: image, count: size)
         try Task.checkCancellation()
         let palette = try photoPalette(hexes: extracted.map(\.hex), existingNames: existingNames)
         let colors = palette.colors
         if revealDelay > .zero {
-            for count in 1...colors.count {
-                try await Task.sleep(for: revealDelay)
-                onColors(Array(colors.prefix(count)))
+            for step in revealSteps(total: colors.count, shown: 0) {
+                if step.waitsFirst { try await Task.sleep(for: revealDelay) }
+                onColors(Array(colors.prefix(step.count)))
             }
         } else {
             onColors(colors)
         }
         return Made(palette: palette, usedAI: false, anchorHex: nil)
+    }
+
+    /// The reveal schedule: each step shows `count` colors, after a pause
+    /// unless it is the very first color on screen. `shown` is how many are
+    /// already visible before the first step (the picked anchor, or none).
+    static func revealSteps(total: Int, shown: Int) -> [(count: Int, waitsFirst: Bool)] {
+        guard total > shown else { return [] }
+        return ((shown + 1)...total).map { count in (count: count, waitsFirst: count > 1) }
     }
 
     /// Colors, hexes and names built together so they stay index-aligned.

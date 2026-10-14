@@ -59,3 +59,64 @@ struct AppDataIntentAPITests {
         #expect(stored.first?.hex == "#DC143C")
     }
 }
+
+@MainActor
+@Suite(.serialized)
+struct IntentReadinessTests {
+    @available(iOS 26.0, *)
+    @Test func availabilityMapsToDistinctErrors() {
+        #expect(PalettesIntentError.error(for: .available) == nil)
+        #expect(PalettesIntentError.error(for: .unavailable(.appleIntelligenceNotEnabled)) == .aiDisabled)
+        #expect(PalettesIntentError.error(for: .unavailable(.modelNotReady)) == .aiModelDownloading)
+        #expect(PalettesIntentError.error(for: .unavailable(.deviceNotEligible)) == .aiDeviceIneligible)
+    }
+
+    @available(iOS 26.0, *)
+    @Test func errorMessagesAreDistinct() {
+        let texts = [PalettesIntentError.aiDisabled, .aiModelDownloading, .aiDeviceIneligible]
+            .map { String(localized: $0.localizedStringResource) }
+        #expect(Set(texts).count == 3)
+    }
+
+    @Test func waitUntilLoadedReturnsImmediatelyWhenNonEmpty() async {
+        let data = AppData(inMemory: true)
+        _ = data.addColor(name: "Seed", hex: "#112233")
+        let start = ContinuousClock.now
+        await data.waitUntilLoaded(timeout: .seconds(20))
+        #expect(ContinuousClock.now - start < .seconds(10)) // well before the timeout
+    }
+
+    @Test func waitUntilLoadedWaitsForReloadWhenEmpty() async {
+        let data = AppData(inMemory: true)
+        data.colors = []
+        data.palettes = []
+        let start = ContinuousClock.now
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            data.reloadFromStore()
+        }
+        await data.waitUntilLoaded(timeout: .seconds(60))
+        let elapsed = ContinuousClock.now - start
+        #expect(elapsed >= .milliseconds(100))
+        #expect(elapsed < .seconds(40)) // returned on the reload signal, not the timeout
+    }
+
+    @Test func waitUntilLoadedIsBoundedWhenNothingArrives() async {
+        let data = AppData(inMemory: true)
+        data.colors = []
+        data.palettes = []
+        let start = ContinuousClock.now
+        await data.waitUntilLoaded(timeout: .milliseconds(200))
+        #expect(ContinuousClock.now - start < .seconds(15)) // bounded, not a hang
+    }
+
+    @available(iOS 26.0, *)
+    @Test func suggestedEntitiesCapAtHundredMostRecentFirst() {
+        let colors = (0..<150).map {
+            ColorViewModel(name: "C\($0)", color: .red, HEX: String(format: "#%06X", $0), usedInPalette: false)
+        }
+        let suggested = ColorEntityQuery.suggested(from: colors)
+        #expect(suggested.count == 100)
+        #expect(suggested.first?.hex == String(format: "#%06X", 149))
+    }
+}

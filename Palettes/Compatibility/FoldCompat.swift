@@ -76,7 +76,14 @@ extension View {
             GeometryReader { proxy in
                 let fold = proxy.activeFold?.dividing(proxy.size)
                 Color.clear
-                    .onAppear { action(fold) }
+                    .onAppear {
+                        // A fold already present at appear is applied without
+                        // animation, so it can't open an animated transaction
+                        // in the middle of a transition. Later changes animate.
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) { action(fold) }
+                    }
                     .onChange(of: fold) { _, newFold in action(newFold) }
             }
         }

@@ -61,13 +61,12 @@ private struct OrbDebugPanel: View {
 #endif
 
 /// An embeddable clear liquid glass orb. Colors materialize inside it as soft
-/// drops of liquid that drift and mingle; an optional prompt, photo, and
+/// drops of liquid that drift and mingle; an optional prompt and
 /// progress dots render inside the glass. Dragging stretches the orb toward
 /// the finger like pulled liquid and it springs back on release.
 struct GenerationOrbView: View {
     var colors: [Color] = []
     var promptText: String? = nil
-    var photo: UIImage? = nil
     var expectedCount: Int = 0
     var showsProgress: Bool = false
 
@@ -118,7 +117,7 @@ struct GenerationOrbView: View {
                     .frame(width: diameter, height: diameter)
             }
         }
-        // Text, photo and progress sit on top of the glass so they stay crisp;
+        // Text and progress sit on top of the glass so they stay crisp;
         // under it, the glass would frost them.
         .overlay { innerContent(diameter: diameter) }
         // Pulling deforms the drop itself (LiquidBubble's externalPull).
@@ -155,16 +154,6 @@ struct GenerationOrbView: View {
     @ViewBuilder
     private func innerContent(diameter: CGFloat) -> some View {
         VStack(spacing: 12) {
-            if let photo {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: diameter * 0.24, height: diameter * 0.24)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1))
-                    .transition(.pop)
-            }
-
             if let promptText, !promptText.isEmpty {
                 Text(promptText)
                     .font(.callout.weight(.medium))
@@ -275,10 +264,11 @@ struct GenerationOrbView: View {
                     .opacity(Double(bloom))
             }
         }
+        .frame(width: diameter, height: diameter)
+        // Anchored in the drop: the colors move and stretch with it as it's pulled.
+        .followsBubble(diameter: diameter)
         .blur(radius: diameter * 0.07)
         .saturation(1.2)
-        // Slosh: the liquid lags slightly behind the glass while stretching
-        .offset(x: warpShift.width * -0.15, y: warpShift.height * -0.15)
         .frame(width: diameter, height: diameter)
     }
 

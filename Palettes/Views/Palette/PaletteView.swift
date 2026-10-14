@@ -1,8 +1,17 @@
 import SwiftUI
 
+enum OptionsTourGate {
+    /// The return tour starts only once the library is showing: flag armed,
+    /// stack empty, and the Palettes tab selected. Otherwise it stays armed.
+    nonisolated static func shouldPresent(flag: Bool, pathIsEmpty: Bool, selectedTabIsPalettes: Bool) -> Bool {
+        flag && pathIsEmpty && selectedTabIsPalettes
+    }
+}
+
 struct PaletteView: View {
 
     @State private var path = NavigationPath()
+    @Environment(\.selectedTab) private var selectedTab
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
     @State private var paletteToExport: PaletteViewModel?
@@ -55,8 +64,7 @@ struct PaletteView: View {
         var items = appData.palettes
         if favoritesOnly { items = items.filter(\.isFavorite) }
         items = items.filter { originFilter.includes(isGenerated: $0.isGenerated) }
-        if sort == .newestFirst { items.reverse() }
-        return items
+        return sort.ordered(items) { HueOrder.key(forHexes: $0.hexCodes) }
     }
 
     private var allVisibleSelected: Bool {
@@ -91,7 +99,7 @@ struct PaletteView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationTitle(isSelecting ? "\(selectedIDs.count) Selected" : "Palettes")
+                .libraryTitle("Palette", count: displayedPalettes.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .navigationDestination(for: PaletteViewModel.self) { palette in
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }
@@ -109,7 +117,7 @@ struct PaletteView: View {
                         .formPresentationSizing()
                 }
                 .sheet(item: $paletteToEdit) { palette in
-                    PaletteEditSheet(paletteName: palette.name, palette: palette)
+                    PaletteEditSheet(palette: palette)
                         .environmentObject(appData)
                         .formPresentationSizing()
                 }
@@ -158,11 +166,30 @@ struct PaletteView: View {
                 .onReceive(appData.$libraryOptionsTourPending) { pending in
                     if pending { beginOptionsTour() }
                 }
+                // Leaving the tab puts the stack away, so coming back (or the
+                // tab bar swapping chrome) never replays a pushed detail.
+                .onChange(of: selectedTab) { _, tab in
+                    if tab != .palettes {
+                        if !path.isEmpty { path = NavigationPath() }
+                    } else if OptionsTourGate.shouldPresent(
+                        flag: appData.libraryOptionsTourOnReturn,
+                        pathIsEmpty: path.isEmpty,
+                        selectedTabIsPalettes: true
+                    ) {
+                        appData.libraryOptionsTourOnReturn = false
+                        showOptionsTour(after: .milliseconds(450))
+                    }
+                }
                 .onChange(of: path.count) { _, count in
                     // Opening a palette puts the card away.
                     if count > 0, showsOptionsTour { endOptionsTour() }
                     // Back at the library after closing the extras sheet with ×.
-                    if count == 0, appData.libraryOptionsTourOnReturn {
+                    // Left armed while another tab is showing; it runs on return.
+                    if OptionsTourGate.shouldPresent(
+                        flag: appData.libraryOptionsTourOnReturn,
+                        pathIsEmpty: count == 0,
+                        selectedTabIsPalettes: selectedTab == .palettes
+                    ) {
                         appData.libraryOptionsTourOnReturn = false
                         showOptionsTour(after: .milliseconds(450))
                     }
@@ -379,11 +406,7 @@ struct PaletteView: View {
     private var toolbarContent: some ToolbarContent {
         if !isSelecting {
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    router.isShowingSettings = true
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                }
+                SettingsToolbarButton()
             }
         }
         if !appData.palettes.isEmpty {

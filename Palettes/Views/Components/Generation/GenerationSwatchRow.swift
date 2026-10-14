@@ -37,7 +37,7 @@ struct GenerationSwatchRow: View {
                 .aspectRatio(1, contentMode: .fit)
             }
         }
-        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.45, dampingFraction: 0.7), value: colors.count)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3, dampingFraction: 0.75), value: colors.count)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Palette colors")
         .accessibilityValue("\(colors.count) of \(slots)")

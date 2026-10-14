@@ -4,9 +4,9 @@
 //
 //  The Dynamic Island (or notch) to orb morph. The island, a stretching neck
 //  and a blob are drawn as a metaball in a `Canvas` (blur + alpha threshold),
-//  and the goo is masked so only the part near the island is black: it melts
-//  into the real, clear glass orb, which is drawn at the blob's frame from the
-//  first point of the pull. Nothing about the orb is ever black or grey.
+//  and the goo is masked so only the part near the island is black. The drop
+//  stays island-black (both schemes) until it separates from the island, then
+//  dissolves into the real, clear glass orb drawn at the blob's frame.
 //
 //  On devices without a centered cutout (iPad, iPhone Duo) the island is the
 //  top bezel: the edge dips under the finger as a flared U, which pinches off
@@ -61,9 +61,9 @@ final class IslandMorphController: ObservableObject {
     static let pullTravelRatio: CGFloat = 0.85
     /// Width of the neck rod when the blob touches the island, and the width below
     /// which the blurred rod falls under the alpha threshold: the neck has snapped.
-    static let neckWidth: CGFloat = 34
+    nonisolated static let neckWidth: CGFloat = 34
     static let neckBreakWidth: CGFloat = 12
-    static let neckReach: CGFloat = 52
+    nonisolated static let neckReach: CGFloat = 52
     /// An island's or notch's neck is short: it snaps soon after the drop
     /// clears the cutout, rather than stretching into a long thread.
     static let cutoutNeckReach: CGFloat = 22
@@ -253,13 +253,13 @@ final class IslandMorphController: ObservableObject {
         }
     }
 
-    /// Dark stage only: how far the island-black drop has turned into clear
+    /// How far the island-black drop has turned into clear
     /// glass. It stays black while joined (the glass rim would read as a
     /// circle against the black neck) and from the moment it separates eases
     /// into glass: while still held, over the next stretch of the pull, and
     /// after release from wherever that left it over most of the remaining
     /// travel, so the change is one long, even dissolve rather than a swap.
-    var darkGlassReveal: Double {
+    var glassReveal: Double {
         guard mode == .morph, placement.island.kind != .none else { return 1 }
         switch phase {
         case .idle, .dragging:
@@ -273,7 +273,7 @@ final class IslandMorphController: ObservableObject {
         }
     }
 
-    /// Before release: clear from the snap over `darkRevealSpan` of pull, and
+    /// Before release: glass appears from the snap over `darkRevealSpan` of pull, and
     /// back to black if the drop is pushed back into the island.
     private var pullGlassReveal: Double {
         let snap = Self.snapGap(base: neckBase, reach: currentNeckReach)
@@ -416,29 +416,27 @@ struct IslandMorphStage<Orb: View>: View {
         let t = detach.value
         let fadeScale = fade && !reduceMotion ? Easing.lerp(0.9, 1, Easing.clamp01(t)) : 1
         let fadeBlur = fade && !reduceMotion ? (1 - Easing.smoothstep(0, 0.7, t)) * 8 : 0
-        // Dark stage: the black drop dissolves into glass after it separates.
-        // Light mode blends on its own.
-        let dark = colorScheme == .dark && !fade
-        let glassReveal = dark ? controller.darkGlassReveal : 1
+        // Both schemes: the black drop dissolves into glass after it separates.
+        let morph = !fade
+        let glassReveal = morph ? controller.glassReveal : 1
         // The glass comes into focus as it appears, so the handoff reads as
         // the drop clearing rather than one circle swapped for another.
-        let revealBlur = dark && !reduceMotion ? (1 - glassReveal) * 5 : 0
+        let revealBlur = morph && !reduceMotion ? (1 - glassReveal) * 5 : 0
         // The black fades a beat behind the glass: the two never both sit at
         // half strength, which would read as a grey disc mid-fade.
-        let gooOpacity = dark ? 1 - Easing.smoothstep(0.15, 1, glassReveal) : 1
+        let gooOpacity = morph ? 1 - Easing.smoothstep(0.15, 1, glassReveal) : 1
         ZStack {
             orb(frame.diameter, controller.settle)
                 .scaleEffect(fadeScale)
                 .blur(radius: fadeBlur + revealBlur)
-                .opacity(controller.orbOpacity * (dark ? Easing.smoothstep(0, 0.85, glassReveal) : 1))
+                .opacity(controller.orbOpacity * (morph ? Easing.smoothstep(0, 0.85, glassReveal) : 1))
                 .position(frame.center)
             // The goo sits above the glass: the island's black covers the part of
             // the orb still tucked behind it (so clear glass is never drawn over the
-            // cutout, where it would read dark), and the neck's fade overlaps the
-            // orb's top as black melting into glass.
+            // cutout, where it would read dark).
             if controller.showsGoo {
                 IslandGooCanvas(controller: controller, frame: frame)
-                    // Dark: the black drop and neck fade out just behind the glass
+                    // The black drop and neck fade out just behind the glass
                     // coming in, one dissolve with no seam between them.
                     .opacity(gooOpacity)
                     .allowsHitTesting(false)
@@ -449,19 +447,17 @@ struct IslandMorphStage<Orb: View>: View {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var colorScheme
 }
 
 // MARK: - Goo
 
-/// Island + neck + blob as a metaball (blur and threshold), faded from black at
-/// the island to clear at the blob so the orb never reads as black. An island's
+/// Island + neck + blob as a metaball (blur and threshold), black at the
+/// island and through the drop (the stage turns the drop to glass once it separates). An island's
 /// or notch's neck is a smooth hourglass going in, and the drop is drawn crisp
 /// on top so the black meets the orb's edge exactly.
 struct IslandGooCanvas: View {
     let controller: IslandMorphController
     let frame: IslandMorphController.Frame
-    @Environment(\.colorScheme) private var colorScheme
 
     /// Room above the screen so the blur and the notch overhang are not cut off.
     private static let topMargin: CGFloat = 60
@@ -593,27 +589,8 @@ struct IslandGooCanvas: View {
             waist: neckWaist,
             reach: island.drawnFlatHalfWidth + Self.filletCurveAllowance
         )
-        // Solid black through the neck's fillets before the fade begins, so
-        // the join reads as one shape with the cutout; a point or two of
-        // mismatch with the hardware then shows as more neck, not as grey.
-        // Follows the rod (continuous through the snap) and how far the drop
-        // is out of the cutout, never the drawn outline, which hands over to
-        // the remnants at the snap: the fade's top must not jump with it.
-        let protrusion = frame.center.y + frame.diameter / 2 - island.drawnBottom
-        let solidDepth = isBezel ? 0
-            : (Self.maxFilletRadius * min(1, rodWidth / IslandMorphController.neckWidth) + 4)
-                * min(1, max(0, protrusion) / max(frame.diameter / 2, 1))
-        let fadeStart = island.drawnBottom + solidDepth
-        // Clear by the blob's upper third while the neck holds, over a stretch
-        // long enough to read as a melt; as the neck thins and snaps the fade
-        // pulls up to the blob's top so no gray wedge of blob is left on the orb.
-        // Dark stage: the whole drop is island-black (the stage cross-fades it
-        // into the glass as the neck thins).
-        let fadeEnd = colorScheme == .dark
-            ? blobTop + frame.diameter * 3
-            : max(blobTop + frame.diameter / 3 * CGFloat(connected),
-                  fadeStart + max(14, frame.diameter * 0.35))
-
+        // The whole drop and neck are island-black until the drop separates;
+        // the stage then dissolves them into the glass via gooOpacity.
         GeometryReader { geo in
             let height = geo.size.height + margin
             Canvas { ctx, size in
@@ -686,12 +663,6 @@ struct IslandGooCanvas: View {
                 }
             }
             .frame(width: geo.size.width, height: height)
-            .mask(
-                LinearGradient(
-                    stops: Self.fadeStops(from: (fadeStart + margin) / height, to: (fadeEnd + margin) / height),
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
             .offset(y: -margin)
         }
         .allowsHitTesting(false)
@@ -711,20 +682,5 @@ struct IslandGooCanvas: View {
     static func thresholdShrink(radius: CGFloat) -> CGFloat {
         let blur = IslandMorphController.cutoutBlur
         return min(blur * blur / (2 * max(radius, 1)), blur / 2)
-    }
-
-    /// Solid to `start`, clear from `end`, eased in between (smoothstep) so the
-    /// black melts away without the hard bands a linear ramp shows at its ends.
-    static func fadeStops(from start: CGFloat, to end: CGFloat) -> [Gradient.Stop] {
-        let start = Double(start), end = max(Double(end), Double(start) + 0.0001)
-        let steps = 8
-        var stops: [Gradient.Stop] = [.init(color: .black, location: 0)]
-        for i in 0...steps {
-            let t = Double(i) / Double(steps)
-            stops.append(.init(color: .black.opacity(1 - Easing.smoothstep(0, 1, t)),
-                               location: start + (end - start) * t))
-        }
-        stops.append(.init(color: .clear, location: max(1, end)))
-        return stops
     }
 }

@@ -20,6 +20,7 @@ struct GetColorHexIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog & ShowsSnippetView {
+        await AppData.shared.waitUntilLoaded()
         guard let stored = AppData.shared.colors.first(where: { $0.id == color.id }) else {
             throw PalettesIntentError.colorNotFound
         }

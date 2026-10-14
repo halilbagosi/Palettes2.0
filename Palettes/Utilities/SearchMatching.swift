@@ -8,13 +8,7 @@ enum SearchMatching {
     /// name/colorName/hex predicate and additionally matches a color's tagged role
     /// (e.g. searching "primary" surfaces palettes containing a color tagged Primary).
     static func paletteMatchesQuery(_ palette: PaletteViewModel, query: String, hexQuery: String) -> Bool {
-        palette.name.localizedCaseInsensitiveContains(query) ||
-        palette.colorNames.contains(where: { $0.localizedCaseInsensitiveContains(query) }) ||
-        (!hexQuery.isEmpty && palette.hexCodes.contains(where: { $0.localizedCaseInsensitiveContains(hexQuery) })) ||
-        palette.paletteColors.contains(where: { color in
-            guard let role = color.role, !role.isEmpty else { return false }
-            return role.localizedCaseInsensitiveContains(query)
-        })
+        LibrarySearch.paletteMatches(palette, query: query, hexQuery: hexQuery)
     }
 
     /// Any-of, case-insensitive match against a palette's tagged color roles.

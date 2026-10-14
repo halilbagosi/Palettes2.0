@@ -32,6 +32,10 @@ struct SelectableCardChrome: ViewModifier {
     var cornerRadius: CGFloat = 28
     let onToggle: () -> Void
 
+    /// The modifier chain stays structurally identical in both modes (so the
+    /// card keeps its identity and the exit animation can run), but every layer
+    /// is an empty conditional outside select mode: no stroke, hit-test layer,
+    /// or checkmark is mounted while browsing.
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .topTrailing) {
@@ -41,10 +45,12 @@ struct SelectableCardChrome: ViewModifier {
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: 3)
-                    .opacity(isSelecting && isSelected ? 1 : 0)
-                    .allowsHitTesting(false)
+                if isSelecting && isSelected {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: 3)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
             }
             .overlay {
                 if isSelecting {

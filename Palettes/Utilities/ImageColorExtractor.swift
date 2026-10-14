@@ -9,31 +9,6 @@ enum ImageColorExtractor {
 
     // MARK: - Public API
 
-    /// Extract the single dominant color from an image.
-    static func extractDominantRGB(from image: UIImage) throws -> (r: Double, g: Double, b: Double) {
-        let size = 80
-        var pixels = getPixels(from: image, width: size, height: size)
-        guard !pixels.isEmpty else { throw AppError.imageProcessingFailed }
-
-        // Filter out near-black and near-white pixels for better extraction
-        let filtered = filterExtremes(pixels)
-        if filtered.isEmpty {
-            // Fall back to unfiltered if everything got removed
-            pixels = getPixels(from: image, width: size, height: size)
-        } else {
-            pixels = filtered
-        }
-
-        let clusters = kMeansPP(points: pixels.map { ($0.r, $0.g, $0.b) }, k: 6, iterations: 30)
-        guard let dominant = clusters.first?.centroid else { throw AppError.colorExtractionFailed }
-
-        return (
-            Double(clamped(Int(round(dominant.0)), 0, 255)),
-            Double(clamped(Int(round(dominant.1)), 0, 255)),
-            Double(clamped(Int(round(dominant.2)), 0, 255))
-        )
-    }
-
     /// Extract multiple distinct colors from an image for palette creation.
     ///
     /// Clusters in CIELAB space so small-but-vivid accents (a bright logo

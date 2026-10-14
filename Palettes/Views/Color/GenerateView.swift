@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 import FoundationModels
 import Foundation
 
@@ -14,17 +13,13 @@ struct GenerateView: View {
     @Namespace private var orbNamespace
 
     // Form state
-    @State private var paletteSize = 4
+    @State private var paletteSize: Int? = nil  // nil = Auto
     @State private var colorsFadeLeading = false
     @State private var colorsFadeTrailing = true
     @State private var selectedColorIDs: Set<UUID> = []
     @State private var scheme: HarmonyScheme = .auto
     @State private var vibeDescription = ""
     @State private var glowPhase: CGFloat = 0
-    @State private var selectedImage: UIImage?
-    @State private var photosPickerItem: PhotosPickerItem?
-    @State private var showCamera = false
-    @State private var showPhotoPicker = false
     @FocusState private var vibeFocused: Bool
     /// The stage's size, for its orientation and the generating orb's size.
     @State private var stageSize: CGSize = .zero
@@ -35,6 +30,12 @@ struct GenerateView: View {
     // Generation state
     @State private var arrivedColors: [Color] = []
     @State private var generationTask: Task<Void, Never>?
+    /// The model's names, arriving after the result is shown on fallback
+    /// names. Owned here so a new generation or leaving the result stops it.
+    @State private var lateNamingTask: Task<Void, Never>?
+    /// The palette as the result was first shown, so late names replace
+    /// only what the user hasn't edited since.
+    @State private var shownResult: PaletteViewModel?
 
     // Result state (editable draft). A single `PaletteColor` array is the
     // sole source of truth here — no parallel colors/hexCodes/colorNames
@@ -117,6 +118,15 @@ struct GenerateView: View {
             .navigationBarTitleDisplayMode(fold == nil ? .automatic : .inline)
             // Kept in landscape: bringing the bar back for the result moved the
             // side insets a moment after the result appeared, so it jumped over.
+            .toolbar {
+                // The bar is hidden while generating in portrait, and the
+                // result view has its own controls.
+                if phase == .form {
+                    ToolbarItem(placement: .topBarLeading) {
+                        SettingsToolbarButton()
+                    }
+                }
+            }
             .toolbar(phase == .generating && isPortrait ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
@@ -135,7 +145,15 @@ struct GenerateView: View {
 
     private var stage: some View {
         stageContent
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            // Measured without the keyboard: with it up, an iPhone's stage is
+            // wider than tall, which read as landscape and swapped the form
+            // for the split layout, rebuilding the vibe field and dropping its
+            // focus (so the keyboard never stayed up).
+            .background {
+                Color.clear
+                    .ignoresSafeArea(.keyboard)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            }
             .onFoldChange { newFold in
                 withAnimation(.smooth(duration: 0.35)) { fold = newFold }
             }
@@ -163,7 +181,10 @@ struct GenerateView: View {
                 GenerationResultView(
                     name: $resultName,
                     paletteColors: $resultPaletteColors,
-                    onBack: { withAnimation(.smooth(duration: 0.5)) { phase = .form } },
+                    onBack: {
+                        cancelLateNaming()
+                        withAnimation(.smooth(duration: 0.5)) { phase = .form }
+                    },
                     onRegenerate: {
                         pendingRefinement = ""
                         startGeneration()
@@ -219,7 +240,6 @@ struct GenerateView: View {
     private func generationOrb(diameter: CGFloat) -> some View {
         GenerationOrbView(
             colors: arrivedColors,
-            photo: selectedImage,
             showsProgress: true
         )
         .matchedGeometryEffect(id: "orb", in: orbNamespace)
@@ -231,7 +251,7 @@ struct GenerateView: View {
     private var generationCopy: some View {
         VStack(spacing: 20) {
             OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
-            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize)
+            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize ?? 6)
                 .frame(maxWidth: 360)
         }
         .padding(.horizontal, 24)
@@ -391,7 +411,7 @@ struct GenerateView: View {
         .frame(width: diameter, height: diameter)
     }
 
-    /// The photo chip, the vibe field and Generate, pinned above the keyboard
+    /// The vibe field and Generate, pinned above the keyboard
     /// and home indicator, like the result view's describe-change field.
     /// `compact` puts Generate beside the field, for short stages.
     private func pinnedControls(compact: Bool) -> some View {
@@ -505,7 +525,7 @@ struct GenerateView: View {
     /// on both compact phones and wider iPad layouts. Menus avoid the
     /// six-segment squeeze that made the previous size control hard to use.
     /// Side by side normally; stacked above the colors on the controls side
-    /// of a landscape split. The photo button sits beside them either way.
+    /// of a landscape split.
     private func generationOptions(axis: Axis) -> some View {
         let layout = axis == .horizontal
             ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
@@ -513,6 +533,15 @@ struct GenerateView: View {
         return HStack(alignment: .top, spacing: 12) {
             layout {
                 Menu {
+                    Button {
+                        paletteSize = nil
+                    } label: {
+                        if paletteSize == nil {
+                            Label("Auto", systemImage: "checkmark")
+                        } else {
+                            Text("Auto")
+                        }
+                    }
                     ForEach(sizeOptions, id: \.self) { size in
                         Button {
                             paletteSize = size
@@ -526,16 +555,16 @@ struct GenerateView: View {
                     }
                 } label: {
                     generationOptionLabel(
-                        title: "Palette Size",
-                        value: "\(paletteSize) colors",
+                        title: "Size",
+                        value: paletteSize.map { "\($0) colors" } ?? "Auto",
                         systemImage: "square.stack.3d.up"
                     )
                 }
-                .accessibilityLabel("Palette size")
+                .accessibilityLabel("Size")
 
                 if canChooseMode {
                     Menu {
-                        ForEach(HarmonyScheme.allCases) { option in
+                        ForEach(modeOptions) { option in
                             Button {
                                 scheme = option
                             } label: {
@@ -558,9 +587,6 @@ struct GenerateView: View {
                 }
             }
             .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
-
-            // The photo source sits with the other inputs, matching their height.
-            imageMenuButton(axis: axis)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -767,7 +793,8 @@ struct GenerateView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
             .liquidGlass(.interactive, in: .capsule)
-
+            .contentShape(Capsule())
+            .onTapGesture { vibeFocused = true }
         }
     }
 
@@ -782,10 +809,12 @@ struct GenerateView: View {
         }
     }
 
+    /// Modes offered in the menu.
+    private let modeOptions: [HarmonyScheme] = [.auto, .uiLight, .uiDark]
+
     private var hasInput: Bool {
         !selectedColorIDs.isEmpty
             || !vibeDescription.trimmingCharacters(in: .whitespaces).isEmpty
-            || selectedImage != nil
     }
 
     /// Modes shape every generation now, including one from a vibe alone.
@@ -794,13 +823,12 @@ struct GenerateView: View {
     }
 
     private var canGenerateFromSource: Bool {
-        !selectedColorIDs.isEmpty || selectedImage != nil
+        !selectedColorIDs.isEmpty
     }
 
     private var generationStatusText: String {
         let vibe = vibeDescription.trimmingCharacters(in: .whitespaces)
         if !vibe.isEmpty { return "“\(vibe)”" }
-        if selectedImage != nil { return "Pulling colors out of your photo." }
         if !selectedColorIDs.isEmpty { return "Building around your colors." }
         return "Composing something new."
     }
@@ -840,104 +868,11 @@ struct GenerateView: View {
         .fixedSize()
     }
 
-    /// Square: as tall as the menus beside it, or as one of them when they're
-    /// stacked (`axis` is the menus' axis). With a photo picked it widens to
-    /// show it and say what it's for.
-    @ViewBuilder
-    private func imageMenuButton(axis: Axis) -> some View {
-        Menu {
-            Button {
-                showCamera = true
-            } label: {
-                Label("Take Photo", systemImage: "camera")
-            }
-
-            // A PhotosPicker nested directly in a Menu never presents, so the
-            // menu item just flips a flag and the picker is driven by the
-            // `.photosPicker(isPresented:)` modifier below.
-            Button {
-                showPhotoPicker = true
-            } label: {
-                Label("Choose Photo", systemImage: "photo.on.rectangle")
-            }
-        } label: {
-            // Picked, the button widens to show the photo, outlined, and what
-            // it's for; tapping it again replaces the photo.
-            HStack(spacing: 8) {
-                if let selectedImage {
-                    Image(uiImage: selectedImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 42, height: 42)
-                        .clipShape(.rect(cornerRadius: 10))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(.tint, lineWidth: 2.5)
-                        }
-
-                    Text("Colors will be pulled from this photo")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.85)
-                        .frame(width: 78, alignment: .leading)
-                        .transition(.opacity)
-                } else {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
-                        .frame(width: 52)
-                        .transition(.opacity)
-                }
-            }
-            .padding(selectedImage == nil ? 0 : 5)
-            .padding(.trailing, selectedImage == nil ? 0 : 5)
-            .frame(minHeight: 52, maxHeight: axis == .horizontal ? .infinity : 52)
-            .contentShape(.rect(cornerRadius: 14))
-            .liquidGlass(.interactive, in: .rect(cornerRadius: 14))
-        }
-        .accessibilityLabel(selectedImage == nil ? "Add photo" : "Replace photo")
-        .overlay(alignment: .topTrailing) {
-            if selectedImage != nil {
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        selectedImage = nil
-                        photosPickerItem = nil
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.body)
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, .black.opacity(0.6))
-                        // A larger target than the glyph.
-                        .padding(6)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .offset(x: 10, y: -10)
-                .accessibilityLabel("Remove photo")
-                .transition(.pop)
-            }
-        }
-        .animation(.spring(response: 0.3), value: selectedImage != nil)
-        .photosPicker(isPresented: $showPhotoPicker, selection: $photosPickerItem, matching: .images)
-        .onChange(of: photosPickerItem) { _, newItem in
-            Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    selectedImage = image
-                }
-            }
-        }
-        .fullScreenCover(isPresented: $showCamera) {
-            CameraPicker(image: $selectedImage, didCapture: .constant(false), isPresented: $showCamera)
-        }
-    }
-
     // MARK: - Generation
 
     private func startGeneration() {
         guard generationTask == nil else { return }
+        cancelLateNaming()
         vibeFocused = false
         arrivedColors = selectedColors
         withAnimation(.smooth(duration: 0.6)) { phase = .generating }
@@ -945,11 +880,17 @@ struct GenerateView: View {
         generationTask = Task {
             defer { generationTask = nil }
             do {
-                let palette = try await performGeneration { colors in
-                    arrivedColors = colors
-                }
+                let palette = try await performGeneration(
+                    onColors: { colors in arrivedColors = colors },
+                    onLateNaming: applyLateNaming,
+                    onLateNamingTask: { task in
+                        // A run cancelled meanwhile must not leave its model call running.
+                        if Task.isCancelled { task.cancel() } else { lateNamingTask = task }
+                    }
+                )
                 resultName = palette.name
                 resultPaletteColors = palette.paletteColors
+                shownResult = palette
                 #if DEBUG
                 // `-generateHold YES` keeps the waiting moment up for screenshots.
                 if UserDefaults.standard.bool(forKey: "generateHold") {
@@ -966,6 +907,26 @@ struct GenerateView: View {
                 withAnimation(.smooth(duration: 0.5)) { phase = .form }
             }
         }
+    }
+
+    /// The model's names, once they arrive: swapped in for whatever the user
+    /// hasn't changed.
+    private func applyLateNaming(_ late: PaletteViewModel) {
+        guard let shown = shownResult else { return }
+        let merged = GeneratedResultNaming.merge(
+            name: resultName, colors: resultPaletteColors, shown: shown, late: late)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            resultName = merged.name
+            resultPaletteColors = merged.colors
+        }
+        shownResult = nil
+        lateNamingTask = nil
+    }
+
+    private func cancelLateNaming() {
+        lateNamingTask?.cancel()
+        lateNamingTask = nil
+        shownResult = nil
     }
 
     private func saveResult() {
@@ -985,6 +946,8 @@ struct GenerateView: View {
     }
 
     private func performSave() {
+        // The saved title must match the one on screen.
+        cancelLateNaming()
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
         appData.palettes.append(PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
@@ -1004,18 +967,20 @@ struct GenerateView: View {
     /// Result state is left alone so the outgoing result view doesn't blank
     /// mid-transition; it's overwritten by the next generation anyway.
     private func resetForm() {
-        paletteSize = 4
+        paletteSize = nil
         selectedColorIDs = []
         scheme = .auto
         vibeDescription = ""
-        selectedImage = nil
-        photosPickerItem = nil
         pendingRefinement = ""
         arrivedColors = []
     }
 
-    private func performGeneration(onColors: @escaping @MainActor ([Color]) -> Void) async throws -> PaletteViewModel {
-        var baseColors: [PaletteGenerator.BaseColor] = appData.colors
+    private func performGeneration(
+        onColors: @escaping @MainActor ([Color]) -> Void,
+        onLateNaming: @escaping @MainActor (PaletteViewModel) -> Void,
+        onLateNamingTask: @escaping @MainActor (Task<Void, Never>) -> Void
+    ) async throws -> PaletteViewModel {
+        let baseColors: [PaletteGenerator.BaseColor] = appData.colors
             .filter { selectedColorIDs.contains($0.id) }
             .map { PaletteGenerator.BaseColor(hex: $0.HEX, name: $0.name) }
 
@@ -1023,37 +988,17 @@ struct GenerateView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: ". ")
-        let hasVibe = !combinedVibe.isEmpty
-
-        if let image = selectedImage {
-            // Pull enough colors straight from the image to fill the whole
-            // palette (not a fixed handful), so an image-based palette is
-            // built FROM the image rather than seeded with a few colors and
-            // padded out with synthesized harmony colors.
-            let needed = max(1, paletteSize - baseColors.count)
-            let extracted = try ImageColorExtractor.extractColors(from: image, count: needed)
-            baseColors += extracted.map { PaletteGenerator.BaseColor(hex: $0.hex, name: "") }
-        }
-
-        // Without a vibe, an image (or hand-picked colors + image) must yield
-        // ONLY the colors actually supplied — never invented ones. Clamping
-        // the target to what we have makes the generator lock them verbatim
-        // and synthesize nothing; an image with few distinct colors simply
-        // produces a smaller palette. With a vibe, keep the full requested
-        // size so the AI may expand to fill whatever the image didn't cover.
-        // The pure color-seed path (colors selected, no image) is unchanged:
-        // it still builds a harmony palette around the seeds.
-        let targetSize = (selectedImage != nil && !hasVibe)
-            ? min(paletteSize, baseColors.count)
-            : paletteSize
 
         return try await PaletteGenerator.generate(
             baseColors: baseColors,
-            size: targetSize,
+            size: paletteSize,
             vibe: combinedVibe,
             scheme: canChooseMode ? scheme : .auto,
             existingNames: appData.palettes.map { $0.name },
-            onPartialColors: onColors
+            onPartialColors: onColors,
+            // The result shows once the colors land; names follow.
+            onLateNaming: onLateNaming,
+            onLateNamingTask: onLateNamingTask
         )
     }
 }
@@ -1066,7 +1011,7 @@ private struct GenerateHeaderView: View {
     let colors: [Color]
     let orbNamespace: Namespace.ID
 
-    static let description = "Describe a vibe, start from your colors, or pull them from a photo — Apple Intelligence composes the palette."
+    static let description = "Describe a vibe, or start from your colors — Apple Intelligence composes the palette."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -1096,5 +1041,6 @@ private struct GenerateHeaderView: View {
     if #available(iOS 26.0, *) {
         GenerateView()
             .environmentObject(AppData())
+            .environmentObject(SceneRouter())
     }
 }
