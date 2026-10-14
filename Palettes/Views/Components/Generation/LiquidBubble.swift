@@ -205,6 +205,33 @@ struct BubbleStageGlow: View {
     }
 }
 
+// MARK: - Following the drop
+
+extension View {
+    /// Moves content inside a `LiquidBubble` with the drop: it shifts with the
+    /// drop's center and stretches with its oval, so colors stay anchored in
+    /// the water as it is pulled or wobbles instead of being left behind.
+    func followsBubble(diameter: CGFloat) -> some View {
+        modifier(FollowsBubble(diameter: diameter))
+    }
+}
+
+private struct FollowsBubble: ViewModifier {
+    var diameter: CGFloat
+    @Environment(\.bubbleWobble) private var wobble
+
+    func body(content: Content) -> some View {
+        let a = 1 + wobble.oval
+        let angle = Angle.radians(wobble.ovalAngle)
+        content
+            // Stretch along the oval's axis without turning the content.
+            .rotationEffect(-angle)
+            .scaleEffect(x: a, y: 1 / a)
+            .rotationEffect(angle)
+            .offset(x: wobble.drift.width * diameter, y: wobble.drift.height * diameter)
+    }
+}
+
 // MARK: - Bubble
 
 struct LiquidBubble<Content: View>: View {
@@ -224,6 +251,10 @@ struct LiquidBubble<Content: View>: View {
     /// continuously while a drop settles, so its shadow gathers under it
     /// rather than appearing when it lands.
     var glow: Double = 1
+    /// False when the content hosts a UIKit view (e.g. the live camera
+    /// preview): a shader can't rasterize one and draws SwiftUI's yellow
+    /// "unsupported" placeholder instead.
+    var distortsContent: Bool = true
     @ViewBuilder var content: () -> Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -296,7 +327,8 @@ struct LiquidBubble<Content: View>: View {
                         // Real Liquid Glass refracts on its own; the drawn lens is the fallback.
                         .float(Float(!Self.hasLiquidGlass && colorScheme == .dark ? lensStrength : 0))
                     ),
-                    maxSampleOffset: CGSize(width: r, height: r)
+                    maxSampleOffset: CGSize(width: r, height: r),
+                    isEnabled: distortsContent
                 )
                 .clipShape(shape)
 
