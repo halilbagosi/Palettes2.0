@@ -443,3 +443,27 @@ private final class OnceBox<Value: Sendable>: @unchecked Sendable {
         pending?.resume(returning: value)
     }
 }
+
+/// The Generate tab shows its result on fallback names; the model's names
+/// follow. They replace only what the user hasn't changed since.
+enum GeneratedResultNaming {
+    /// - Parameters:
+    ///   - name, colors: the result as it is now, possibly edited.
+    ///   - shown: the palette the result was first shown with.
+    ///   - late: the same palette with the model's names.
+    static func merge(name: String, colors: [PaletteColor],
+                      shown: PaletteViewModel, late: PaletteViewModel) -> (name: String, colors: [PaletteColor]) {
+        let original = shown.paletteColors
+        let named = late.paletteColors
+        let merged = colors.map { color in
+            guard let index = original.firstIndex(where: { $0.id == color.id }),
+                  index < named.count,
+                  color.name == original[index].name,
+                  color.hex == original[index].hex else { return color }
+            var renamed = color
+            renamed.name = named[index].name
+            return renamed
+        }
+        return (name == shown.name ? late.name : name, merged)
+    }
+}

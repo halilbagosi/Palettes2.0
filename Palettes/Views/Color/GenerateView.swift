@@ -30,6 +30,12 @@ struct GenerateView: View {
     // Generation state
     @State private var arrivedColors: [Color] = []
     @State private var generationTask: Task<Void, Never>?
+    /// The model's names, arriving after the result is shown on fallback
+    /// names. Owned here so a new generation or leaving the result stops it.
+    @State private var lateNamingTask: Task<Void, Never>?
+    /// The palette as the result was first shown, so late names replace
+    /// only what the user hasn't edited since.
+    @State private var shownResult: PaletteViewModel?
 
     // Result state (editable draft). A single `PaletteColor` array is the
     // sole source of truth here — no parallel colors/hexCodes/colorNames
@@ -139,7 +145,15 @@ struct GenerateView: View {
 
     private var stage: some View {
         stageContent
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            // Measured without the keyboard: with it up, an iPhone's stage is
+            // wider than tall, which read as landscape and swapped the form
+            // for the split layout, rebuilding the vibe field and dropping its
+            // focus (so the keyboard never stayed up).
+            .background {
+                Color.clear
+                    .ignoresSafeArea(.keyboard)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+            }
             .onFoldChange { newFold in
                 withAnimation(.smooth(duration: 0.35)) { fold = newFold }
             }
@@ -167,7 +181,10 @@ struct GenerateView: View {
                 GenerationResultView(
                     name: $resultName,
                     paletteColors: $resultPaletteColors,
-                    onBack: { withAnimation(.smooth(duration: 0.5)) { phase = .form } },
+                    onBack: {
+                        cancelLateNaming()
+                        withAnimation(.smooth(duration: 0.5)) { phase = .form }
+                    },
                     onRegenerate: {
                         pendingRefinement = ""
                         startGeneration()
@@ -855,6 +872,7 @@ struct GenerateView: View {
 
     private func startGeneration() {
         guard generationTask == nil else { return }
+        cancelLateNaming()
         vibeFocused = false
         arrivedColors = selectedColors
         withAnimation(.smooth(duration: 0.6)) { phase = .generating }
@@ -862,11 +880,17 @@ struct GenerateView: View {
         generationTask = Task {
             defer { generationTask = nil }
             do {
-                let palette = try await performGeneration { colors in
-                    arrivedColors = colors
-                }
+                let palette = try await performGeneration(
+                    onColors: { colors in arrivedColors = colors },
+                    onLateNaming: applyLateNaming,
+                    onLateNamingTask: { task in
+                        // A run cancelled meanwhile must not leave its model call running.
+                        if Task.isCancelled { task.cancel() } else { lateNamingTask = task }
+                    }
+                )
                 resultName = palette.name
                 resultPaletteColors = palette.paletteColors
+                shownResult = palette
                 #if DEBUG
                 // `-generateHold YES` keeps the waiting moment up for screenshots.
                 if UserDefaults.standard.bool(forKey: "generateHold") {
@@ -883,6 +907,26 @@ struct GenerateView: View {
                 withAnimation(.smooth(duration: 0.5)) { phase = .form }
             }
         }
+    }
+
+    /// The model's names, once they arrive: swapped in for whatever the user
+    /// hasn't changed.
+    private func applyLateNaming(_ late: PaletteViewModel) {
+        guard let shown = shownResult else { return }
+        let merged = GeneratedResultNaming.merge(
+            name: resultName, colors: resultPaletteColors, shown: shown, late: late)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            resultName = merged.name
+            resultPaletteColors = merged.colors
+        }
+        shownResult = nil
+        lateNamingTask = nil
+    }
+
+    private func cancelLateNaming() {
+        lateNamingTask?.cancel()
+        lateNamingTask = nil
+        shownResult = nil
     }
 
     private func saveResult() {
@@ -902,6 +946,8 @@ struct GenerateView: View {
     }
 
     private func performSave() {
+        // The saved title must match the one on screen.
+        cancelLateNaming()
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
         appData.palettes.append(PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
@@ -929,7 +975,11 @@ struct GenerateView: View {
         arrivedColors = []
     }
 
-    private func performGeneration(onColors: @escaping @MainActor ([Color]) -> Void) async throws -> PaletteViewModel {
+    private func performGeneration(
+        onColors: @escaping @MainActor ([Color]) -> Void,
+        onLateNaming: @escaping @MainActor (PaletteViewModel) -> Void,
+        onLateNamingTask: @escaping @MainActor (Task<Void, Never>) -> Void
+    ) async throws -> PaletteViewModel {
         let baseColors: [PaletteGenerator.BaseColor] = appData.colors
             .filter { selectedColorIDs.contains($0.id) }
             .map { PaletteGenerator.BaseColor(hex: $0.HEX, name: $0.name) }
@@ -945,7 +995,10 @@ struct GenerateView: View {
             vibe: combinedVibe,
             scheme: canChooseMode ? scheme : .auto,
             existingNames: appData.palettes.map { $0.name },
-            onPartialColors: onColors
+            onPartialColors: onColors,
+            // The result shows once the colors land; names follow.
+            onLateNaming: onLateNaming,
+            onLateNamingTask: onLateNamingTask
         )
     }
 }

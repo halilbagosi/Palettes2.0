@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import SwiftUI
 @testable import Palettes
 
 final class GenerationPacingTests: XCTestCase {
@@ -195,5 +196,49 @@ final class LateNamingTests: XCTestCase {
                 XCTAssertTrue(value == 7 || value == nil)
             }
         }
+    }
+}
+
+// MARK: - Generate tab late naming
+
+final class GeneratedResultLateNamingTests: XCTestCase {
+
+    private func color(_ hex: String, _ name: String) -> PaletteColor {
+        PaletteColor(color: Color(hex: hex) ?? .gray, hex: hex, name: name)
+    }
+
+    private let shown = PaletteViewModel(name: "Fallback", colors: [.red, .blue, .green],
+                                         hexCodes: ["#FF0000", "#0000FF", "#00FF00"],
+                                         colorNames: ["Red", "Blue", "Green"])
+    private let late = PaletteViewModel(name: "Harbor Dusk", colors: [.red, .blue, .green],
+                                        hexCodes: ["#FF0000", "#0000FF", "#00FF00"],
+                                        colorNames: ["Ember", "Cobalt", "Fern"])
+
+    func testUntouchedResultTakesEveryLateName() {
+        let merged = GeneratedResultNaming.merge(
+            name: "Fallback", colors: shown.paletteColors, shown: shown, late: late)
+        XCTAssertEqual(merged.name, "Harbor Dusk")
+        XCTAssertEqual(merged.colors.map(\.name), ["Ember", "Cobalt", "Fern"])
+        // Identity is kept so the result list doesn't rebuild its rows.
+        XCTAssertEqual(merged.colors.map(\.id), shown.paletteColors.map(\.id))
+    }
+
+    func testUserEditsSurvive() {
+        var colors = shown.paletteColors
+        colors[1].name = "My Blue"          // renamed
+        colors.remove(at: 2)                // removed
+        colors.append(color("#123456", "Added"))  // added by the user
+        let merged = GeneratedResultNaming.merge(
+            name: "My Title", colors: colors, shown: shown, late: late)
+        XCTAssertEqual(merged.name, "My Title")
+        XCTAssertEqual(merged.colors.map(\.name), ["Ember", "My Blue", "Added"])
+    }
+
+    func testRecoloredSwatchKeepsItsName() {
+        var colors = shown.paletteColors
+        colors[0].hex = "#EE0000"
+        let merged = GeneratedResultNaming.merge(
+            name: "Fallback", colors: colors, shown: shown, late: late)
+        XCTAssertEqual(merged.colors[0].name, "Red")
     }
 }

@@ -315,22 +315,30 @@ struct LiquidBubble<Content: View>: View {
             // Before iOS 26 there's no real glass, so light mode draws a body.
             if !Self.hasLiquidGlass && colorScheme != .dark { lightBody(shape) }
 
-            content()
-                // Content can move with the water (e.g. a feathered window).
-                .environment(\.bubbleWobble, w)
-                .frame(width: diameter, height: diameter)
-                .distortionEffect(
-                    ShaderLibrary.bubbleLens(
-                        .float2(Float(center.x), Float(center.y)),
-                        .float2(Float(radii.width), Float(radii.height)),
-                        .float(Float(lensAngle)),
-                        // Real Liquid Glass refracts on its own; the drawn lens is the fallback.
-                        .float(Float(!Self.hasLiquidGlass && colorScheme == .dark ? lensStrength : 0))
-                    ),
-                    maxSampleOffset: CGSize(width: r, height: r),
-                    isEnabled: distortsContent
-                )
-                .clipShape(shape)
+            Group {
+                let body = content()
+                    // Content can move with the water (e.g. a feathered window).
+                    .environment(\.bubbleWobble, w)
+                    .frame(width: diameter, height: diameter)
+                // Left out of the tree entirely, not just disabled: a disabled
+                // shader still rasterizes its content, and a UIKit view still
+                // comes out as the yellow placeholder.
+                if distortsContent {
+                    body.distortionEffect(
+                        ShaderLibrary.bubbleLens(
+                            .float2(Float(center.x), Float(center.y)),
+                            .float2(Float(radii.width), Float(radii.height)),
+                            .float(Float(lensAngle)),
+                            // Real Liquid Glass refracts on its own; the drawn lens is the fallback.
+                            .float(Float(!Self.hasLiquidGlass && colorScheme == .dark ? lensStrength : 0))
+                        ),
+                        maxSampleOffset: CGSize(width: r, height: r)
+                    )
+                } else {
+                    body
+                }
+            }
+            .clipShape(shape)
 
             glass(shape)
 
