@@ -64,8 +64,7 @@ struct PaletteView: View {
         var items = appData.palettes
         if favoritesOnly { items = items.filter(\.isFavorite) }
         items = items.filter { originFilter.includes(isGenerated: $0.isGenerated) }
-        if sort == .newestFirst { items.reverse() }
-        return items
+        return sort.ordered(items) { HueOrder.key(forHexes: $0.hexCodes) }
     }
 
     private var allVisibleSelected: Bool {
@@ -100,7 +99,7 @@ struct PaletteView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationTitle(isSelecting ? "\(selectedIDs.count) Selected" : "Palettes")
+                .libraryTitle("Palette", count: displayedPalettes.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .navigationDestination(for: PaletteViewModel.self) { palette in
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }

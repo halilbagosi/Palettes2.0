@@ -5,8 +5,9 @@
 //  The add panel's Library source: the user's saved colors, newest first and
 //  searchable, as a multi-select grid of cards (about three to a row).
 //  Colors already in the palette show checked and can't be picked again.
-//  "+ Add N" hands the picked colors to the editor. Tap-only, so it may
-//  scroll.
+//  "+ Add N" hands the picked colors to the editor; it stays at the bottom
+//  of the panel (the editor keeps the panel at the sheet's bottom) while the
+//  grid scrolls and fades out above it.
 //
 
 import SwiftUI
@@ -44,7 +45,8 @@ struct LibraryPickerView: View {
             VStack(spacing: 8) {
                 searchField
 
-                FadingScrollView {
+                // Stops above the Add button, fading out under it as it scrolls.
+                FadingScrollView(fadeLength: 32) {
                     if colors.isEmpty {
                         Text("No colors match \u{201C}\(search)\u{201D}")
                             .font(.subheadline)
@@ -62,6 +64,7 @@ struct LibraryPickerView: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
+                .frame(maxHeight: .infinity)
 
                 Button(action: add) {
                     Label(pickable.isEmpty ? "Add" : "Add \(pickable.count)", systemImage: "plus")

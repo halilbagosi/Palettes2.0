@@ -61,9 +61,9 @@ final class IslandMorphController: ObservableObject {
     static let pullTravelRatio: CGFloat = 0.85
     /// Width of the neck rod when the blob touches the island, and the width below
     /// which the blurred rod falls under the alpha threshold: the neck has snapped.
-    static let neckWidth: CGFloat = 34
+    nonisolated static let neckWidth: CGFloat = 34
     static let neckBreakWidth: CGFloat = 12
-    static let neckReach: CGFloat = 52
+    nonisolated static let neckReach: CGFloat = 52
     /// An island's or notch's neck is short: it snaps soon after the drop
     /// clears the cutout, rather than stretching into a long thread.
     static let cutoutNeckReach: CGFloat = 22

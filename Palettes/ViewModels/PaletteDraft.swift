@@ -13,6 +13,8 @@ struct PaletteDraft: Equatable {
     var colors: [PaletteColor]
 
     static let minimumColors = 2
+    /// A palette holds at most this many colors; adds past it are dropped.
+    static let maximumColors = 20
 
     init(name: String = "", colors: [PaletteColor] = []) {
         self.name = name
@@ -25,6 +27,8 @@ struct PaletteDraft: Equatable {
 
     var canSave: Bool { colors.count >= Self.minimumColors }
 
+    var isFull: Bool { colors.count >= Self.maximumColors }
+
     var hexes: Set<String> { Set(colors.map { $0.hex.uppercased() }) }
 
     func contains(hex: String) -> Bool { hexes.contains(hex.uppercased()) }
@@ -33,7 +37,7 @@ struct PaletteDraft: Equatable {
     mutating func append(_ new: [PaletteColor]) -> Int {
         var seen = hexes
         var added = 0
-        for color in new where !seen.contains(color.hex.uppercased()) {
+        for color in new where !isFull && !seen.contains(color.hex.uppercased()) {
             seen.insert(color.hex.uppercased())
             colors.append(color)
             added += 1
@@ -41,8 +45,9 @@ struct PaletteDraft: Equatable {
         return added
     }
 
-    /// Swaps the colors in `ids` for `new` (duplicates by hex skipped), placed
-    /// where the first of them was; appended when none of them are left.
+    /// Swaps the colors in `ids` for `new` (duplicates by hex skipped, and
+    /// any past `maximumColors` dropped), placed where the first of them was;
+    /// appended when none of them are left.
     /// Returns where the new colors start and how many went in.
     @discardableResult
     mutating func replace(_ ids: Set<UUID>, with new: [PaletteColor]) -> (index: Int, added: Int) {
@@ -52,7 +57,8 @@ struct PaletteDraft: Equatable {
         let at = index ?? colors.count
         var seen = hexes
         var inserted: [PaletteColor] = []
-        for color in new where !seen.contains(color.hex.uppercased()) {
+        let room = Self.maximumColors - colors.count
+        for color in new where inserted.count < room && !seen.contains(color.hex.uppercased()) {
             seen.insert(color.hex.uppercased())
             inserted.append(color)
         }
@@ -67,11 +73,11 @@ struct PaletteDraft: Equatable {
     }
 
     /// Undo of a removal: puts `color` back at `index` (clamped). Returns false
-    /// if its hex is back in the palette. If another color has taken its role
+    /// if its hex is back in the palette or the palette is full. If another color has taken its role
     /// since, it comes back untagged, so a role keeps one holder.
     @discardableResult
     mutating func reinsert(_ color: PaletteColor, at index: Int) -> Bool {
-        guard !contains(hex: color.hex) else { return false }
+        guard !isFull, !contains(hex: color.hex) else { return false }
         var color = color
         if let role = color.role,
            colors.contains(where: { $0.role?.caseInsensitiveCompare(role) == .orderedSame }) {
@@ -82,9 +88,10 @@ struct PaletteDraft: Equatable {
     }
 
     /// Inserts a copy right after the original. A palette can't hold the same
-    /// hex twice, so the copy's blue channel steps until it's unique.
+    /// hex twice, so the copy's blue channel steps until it's unique. Does
+    /// nothing in a full palette.
     mutating func duplicate(id: UUID) {
-        guard let index = colors.firstIndex(where: { $0.id == id }) else { return }
+        guard !isFull, let index = colors.firstIndex(where: { $0.id == id }) else { return }
         let source = colors[index]
         let rgb = source.color.rgbComponents
         let baseBlue = Int(rgb.b.rounded())

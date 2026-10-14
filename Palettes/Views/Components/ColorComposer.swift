@@ -450,12 +450,13 @@ struct ColorComposer: View {
     }
 
     /// The Pick tab's values: HEX, R, G and B in one compact row. A tap
-    /// copies (HEX, or all three RGB values); press and hold to type.
+    /// opens a field for typing; press and hold copies (HEX, or all three
+    /// RGB values).
     private var valuesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Values")
 
-            HStack(spacing: 6) {
+            ValuesRow {
                 HStack(spacing: 2) {
                     Text("#")
                         .font(.system(size: 15, weight: .bold, design: .monospaced))
@@ -474,8 +475,8 @@ struct ColorComposer: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
                 .copyOrEdit(isEditing: focusedField == .hex, copy: copyHex, edit: { focusedField = .hex })
-                // Just wide enough for six characters; R, G and B share the rest.
-                .fixedSize(horizontal: true, vertical: false)
+                // ValuesRow makes HEX a little wider than each channel.
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .liquidGlass(.regular, in: .rect(cornerRadius: 10))
 
                 compactChannel("R", text: $redText, field: .red, spoken: "Red")
@@ -483,11 +484,11 @@ struct ColorComposer: View {
                 compactChannel("B", text: $blueText, field: .blue, spoken: "Blue")
             }
 
-            if focusedField == .hex, hexText.count < 6 {
-                Text("HEX codes have six characters, like FF5D00.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            Text(focusedField == .hex && hexText.count < 6
+                 ? "HEX codes have six characters, like FF5D00."
+                 : ValuesHelp.text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

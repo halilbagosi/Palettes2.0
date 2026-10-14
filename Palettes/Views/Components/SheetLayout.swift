@@ -17,10 +17,20 @@ enum SheetLayout: Equatable {
 
     /// The least width a split column can have and still be usable.
     static let minColumnWidth: CGFloat = 300
+    /// The widest container (width ÷ height) that still stacks when it is
+    /// tall enough. iPhone landscape (~2.2) and full-width iPad landscape
+    /// sheets (~1.4) are wider and split.
+    static let maxStackedAspect: CGFloat = 1.25
 
     /// Decides the layout for a container of `size`.
     ///
-    /// Split when the container is landscape-shaped, when it is regular-width
+    /// A container that is roughly square or taller (width at most
+    /// `maxStackedAspect` times its height) and tall enough to stack stays
+    /// stacked. That covers iPhone Duo unfolded in both orientations, where
+    /// the sheet is a near-square card, so turning the device doesn't
+    /// rearrange it. Size alone decides: inside a sheet the size classes
+    /// don't tell Duo landscape from portrait. A half-open fold is handled
+    /// by `SheetLayoutReader` before this. Otherwise split when the container is landscape-shaped, when it is regular-width
     /// with room for two columns (width at least 0.75 of height; a ratio, not
     /// points), or when it is too short for the stacked layout
     /// (`size.height < minStackedHeight`, computed from content with
@@ -28,6 +38,7 @@ enum SheetLayout: Equatable {
     /// (`2 * minColumnWidth`). A narrow, short container stays stacked and
     /// scrolls rather than squeezing into two cramped columns.
     static func resolve(size: CGSize, horizontal: UserInterfaceSizeClass?, minStackedHeight: CGFloat) -> SheetLayout {
+        if size.width <= size.height * maxStackedAspect, size.height >= minStackedHeight { return .stacked }
         if size.width > size.height { return .split }
         if horizontal == .regular, size.width >= size.height * 0.75 { return .split }
         if size.height < minStackedHeight, size.width >= minColumnWidth * 2 { return .split }

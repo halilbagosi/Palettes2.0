@@ -6,11 +6,13 @@
 //  `PaletteDraft`: nothing reaches AppData until the confirm button; the
 //  wrapper that presents the editor decides what that does.
 //
-//  Stacked (a tall container): the palette strip, its name, the source switch
-//  (Pick · Scan · Library · Harmony) and the add panel, in one vertical scroll
-//  view; the panel takes the room left over, never less than it needs.
-//  Split (landscape, regular-width, or too short to stack): the strip, name
-//  and subtext on one side, the switch and add panel on the other, each side
+//  Stacked (a tall container): the palette strip (a preview), its name, the
+//  row of color tiles (tap to edit, "−" to remove, hold to reorder), the
+//  source switch (Pick · Scan · Library · Harmony) and the add panel, in one
+//  vertical scroll view; the panel takes the room left over, never less than
+//  it needs.
+//  Split (landscape, regular-width, or too short to stack): the strip and
+//  caption on one side, the switch and add panel on the other, each side
 //  scrolling by itself. With an active fold the sides sit either side of the
 //  crease, so controls never land on it.
 //
@@ -25,25 +27,28 @@ enum PaletteEditorRoute: Hashable {
 /// The editor's copy and the sums its layout is made from, kept apart from
 /// the view so they can be tested.
 enum PaletteEditorCopy {
-    /// Under the strip, once there is something to tap or hold.
-    static func subtext(colorCount: Int) -> String? {
-        colorCount > 0 ? "Tap to edit \u{00B7} long press to remove" : nil
-    }
+    /// Shown when an add would take the palette past `PaletteDraft.maximumColors`.
+    static let fullMessage = "Palettes hold up to \(PaletteDraft.maximumColors) colors"
 
     static func caption(colorCount: Int) -> String {
-        colorCount == 1 ? "1 color \u{00B7} add one more to create" : "\(colorCount) colors"
+        switch colorCount {
+        case 1: "1 color \u{00B7} add one more to create"
+        case PaletteDraft.maximumColors...: "\(colorCount) colors \u{00B7} full"
+        default: "\(colorCount) colors"
+        }
     }
 
-    /// Split layout: New Palette keeps the name under the strip; Edit Palette
-    /// puts it on the controls side, so the strip alone fills the left half
-    /// (like Edit Color's swatch).
+    /// Split layout: New Palette keeps the name (and the color row under it)
+    /// under the strip; Edit Palette puts them on the controls side, so the
+    /// strip alone fills the left half (like Edit Color's swatch).
     static func nameBelongsToVisualColumn(isCreating: Bool) -> Bool { isCreating }
 
     /// Vertical padding around the stacked content (8 above, 20 below).
     static let stackedPadding: CGFloat = 28
 
     /// What the stacked layout's non-scrolling top block needs: the strip, the
-    /// name field, the source switch, the gaps and the padding. The add panel
+    /// name field (with the color row, when there are colors), the source
+    /// switch, the gaps and the padding. The add panel
     /// is left out on purpose: stacked scrolls, so the panel's floor never
     /// forces split. Callers pass `@ScaledMetric` heights.
     static func minStackedHeight(strip: CGFloat, name: CGFloat, picker: CGFloat, spacing: CGFloat) -> CGFloat {
@@ -84,11 +89,11 @@ struct PaletteEditor: View {
 
     // Content-based sizes (scaled with Dynamic Type) the stacked/split
     // decision and the panel's floor are made from.
-    /// The strip with its caption and subtext.
-    @ScaledMetric(relativeTo: .body) private var stripBlockHeight: CGFloat = 120
-    @ScaledMetric(relativeTo: .body) private var nameHeight: CGFloat = 56
+    /// The strip with its caption.
+    @ScaledMetric(relativeTo: .body) private var stripBlockHeight: CGFloat = 100
+    @ScaledMetric(relativeTo: .body) private var nameHeight: CGFloat = 44
     /// The name field's text size, scaled so the field and `nameHeight` agree.
-    @ScaledMetric(relativeTo: .body) private var nameFontSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .body) private var nameFontSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var pickerHeight: CGFloat = 32
     /// What the add panel needs to stay usable (Library's search, a few cards
     /// and the Add button).
@@ -110,7 +115,9 @@ struct PaletteEditor: View {
 
     private var minStackedHeight: CGFloat {
         PaletteEditorCopy.minStackedHeight(
-            strip: stripBlockHeight, name: nameHeight, picker: pickerHeight,
+            strip: stripBlockHeight,
+            name: nameHeight + (draft.colors.isEmpty ? 0 : PaletteColorRow.height + Self.blockSpacing),
+            picker: pickerHeight,
             spacing: Self.blockSpacing
         )
     }
@@ -121,6 +128,11 @@ struct PaletteEditor: View {
             set: { sourceRaw = $0.rawValue }
         )
     }
+
+    /// Library keeps its Add button at the bottom of the sheet: the column
+    /// holding the panel stays the sheet's height and the grid scrolls inside
+    /// it, instead of the whole column scrolling the button away.
+    private var panelFitsViewport: Bool { source.wrappedValue == .library }
 
     private var nameHint: String {
         suggestedName.isEmpty ? "Names the palette" : "Leave blank to use \(suggestedName)"
@@ -146,10 +158,10 @@ struct PaletteEditor: View {
                 } else {
                     switch layout {
                     case .stacked:
-                        FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused) {
+                        FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused, fitsViewport: panelFitsViewport) {
                             VStack(spacing: Self.blockSpacing) {
                                 stripBlock(fillsHeight: false)
-                                nameField
+                                nameAndColors
                                 sourcePicker
                                 addPanel
                             }
@@ -207,12 +219,12 @@ struct PaletteEditor: View {
     // MARK: - Columns
 
     /// Split's first side: the strip (as tall as the side allows) with its
-    /// caption and subtext, and the name when creating. Scrolls when a short container can't fit them.
+    /// caption, and the name and color row when creating. Scrolls when a short container can't fit them.
     private var visualColumn: some View {
         FillingScroll {
             VStack(spacing: Self.blockSpacing) {
                 stripBlock(fillsHeight: true)
-                if PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: isCreating) { nameField }
+                if PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: isCreating) { nameAndColors }
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -220,12 +232,12 @@ struct PaletteEditor: View {
         }
     }
 
-    /// Split's second side: the name (when editing), the source switch and the
+    /// Split's second side: the name and color row (when editing), the source switch and the
     /// add panel.
     private var controlsColumn: some View {
-        FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused) {
+        FillingScroll(revealID: Self.panelID, revealWhen: panelFieldFocused, fitsViewport: panelFitsViewport) {
             VStack(spacing: Self.blockSpacing) {
-                if !PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: isCreating) { nameField }
+                if !PaletteEditorCopy.nameBelongsToVisualColumn(isCreating: isCreating) { nameAndColors }
                 sourcePicker
                 addPanel
             }
@@ -268,15 +280,34 @@ struct PaletteEditor: View {
             .submitLabel(.done)
             .focused($nameFocused)
             .onSubmit { nameFocused = false }
-            .padding()
+            .padding(.horizontal)
+            .padding(.vertical, 10)
             .liquidGlass(.regular, in: .rect(cornerRadius: 16))
             .accessibilityLabel("Palette name")
             .accessibilityHint(nameHint)
     }
 
+    /// The name with the palette's color tiles under it.
+    private var nameAndColors: some View {
+        VStack(spacing: Self.blockSpacing) {
+            nameField
+            if !draft.colors.isEmpty {
+                PaletteColorRow(
+                    draft: $draft,
+                    selection: $selection,
+                    entrance: entrance,
+                    onEdit: { path.append(.edit($0)) },
+                    onTag: { path.append(.tag($0)) },
+                    onRemove: { index, color in showUndo(for: color, at: index) }
+                )
+                .transition(.opacity)
+            }
+        }
+    }
+
     // MARK: - Strip
 
-    /// The palette as it will look, with its caption and subtext.
+    /// The palette as it will look, with its caption.
     /// `fillsHeight`: take whatever height the column has (split), else the
     /// strip's own.
     private func stripBlock(fillsHeight: Bool) -> some View {
@@ -284,35 +315,26 @@ struct PaletteEditor: View {
             if draft.colors.isEmpty {
                 emptyPreview(fillsHeight: fillsHeight)
             } else {
-                PaletteStripEditor(
-                    draft: $draft,
-                    selection: $selection,
-                    entrance: entrance,
-                    fillsHeight: fillsHeight,
-                    onEdit: { path.append(.edit($0)) },
-                    onTag: { path.append(.tag($0)) },
-                    onRemove: { index, color in showUndo(for: color, at: index) }
-                )
+                PaletteStripPreview(colors: draft.colors, entrance: entrance, fillsHeight: fillsHeight)
                 // On a first fill the bands fade in themselves; the strip's own
                 // fade would multiply with band 0's.
                 .transition(entrance.isEmpty ? .opacity : .identity)
             }
 
             // The caption is always laid out, so the first color doesn't move
-            // the list; the subtext appears with the first color.
-            VStack(alignment: .leading, spacing: 2) {
-                Text(PaletteEditorCopy.caption(colorCount: draft.colors.count))
-                    .font(.caption)
-                    .opacity(draft.colors.isEmpty ? 0 : 1)
-                    .accessibilityHidden(draft.colors.isEmpty)
-                if let subtext = PaletteEditorCopy.subtext(colorCount: draft.colors.count) {
-                    Text(subtext)
-                        .font(.footnote)
-                }
-            }
+            // the list.
+            captionText
+            .font(.footnote)
+            .lineLimit(1)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var captionText: some View {
+        Text(PaletteEditorCopy.caption(colorCount: draft.colors.count))
+            .opacity(draft.colors.isEmpty ? 0 : 1)
+            .accessibilityHidden(draft.colors.isEmpty)
     }
 
     private func emptyPreview(fillsHeight: Bool) -> some View {
@@ -325,7 +347,7 @@ struct PaletteEditor: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .frame(minHeight: PaletteStripEditor.height, maxHeight: fillsHeight ? .infinity : PaletteStripEditor.height)
+        .frame(minHeight: PaletteStripPreview.height, maxHeight: fillsHeight ? .infinity : PaletteStripPreview.height)
         .liquidGlass(.regular, in: .rect(cornerRadius: 16))
         // Vanish instantly when the first color arrives, so a fading glass
         // rim doesn't read as a stray hairline over the strip.
@@ -371,6 +393,8 @@ struct PaletteEditor: View {
     /// Scan photo's colors take the place of the previous photo's (`replacing`).
     private func add(_ colors: [PaletteColor], replacing ids: Set<UUID> = []) {
         let kept = draft.colors.count(where: { !ids.contains($0.id) })
+        let keptHexes = Set(draft.colors.filter { !ids.contains($0.id) }.map { $0.hex.uppercased() })
+        let novel = Set(colors.map { $0.hex.uppercased() }).subtracting(keptHexes).count
         var result = (index: 0, added: 0)
         var staggered: [UUID: Int] = [:]
         if let selection, ids.contains(selection) { self.selection = nil }
@@ -383,11 +407,12 @@ struct PaletteEditor: View {
             // add doesn't cut a running entrance short.
             if !staggered.isEmpty { entrance = staggered }
         }
-        if result.added == 0 {
+        if result.added < novel {
+            ToastManager.shared.show(PaletteEditorCopy.fullMessage, icon: "info.circle")
+        } else if result.added == 0 {
             ToastManager.shared.show("Already in this palette", icon: "info.circle")
-        } else if !staggered.isEmpty {
-            clearEntrance(staggered)
         }
+        if !staggered.isEmpty { clearEntrance(staggered) }
     }
 
     /// Scan's Remove: the photo's colors come out too; Undo puts both back.
@@ -564,6 +589,9 @@ private struct FillingScroll<Content: View>: View {
     /// the top so a focused field in it clears the keyboard.
     var revealID: String?
     var revealWhen = false
+    /// The content is exactly as tall as the view (it doesn't scroll), so a
+    /// child with its own scroll view keeps whatever sits below it in view.
+    var fitsViewport = false
     @ViewBuilder var content: Content
 
     @State private var viewport: CGFloat = 0
@@ -572,7 +600,7 @@ private struct FillingScroll<Content: View>: View {
         ScrollViewReader { proxy in
             ScrollView {
                 content
-                    .frame(minHeight: viewport)
+                    .frame(minHeight: viewport, maxHeight: fitsViewport ? viewport : nil)
             }
             .onChange(of: revealWhen) { _, now in
                 guard now, let revealID else { return }

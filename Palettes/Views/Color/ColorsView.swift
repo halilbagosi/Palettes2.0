@@ -87,8 +87,7 @@ struct ColorsView: View {
         var items = colors
         if favoritesOnly { items = items.filter(\.isFavorite) }
         items = items.filter { origin.includes(isGenerated: $0.isGenerated) }
-        if sort == .newestFirst { items.reverse() }
-        return items
+        return sort.ordered(items) { HueOrder.key(forHex: $0.HEX) }
     }
 
     private func refreshDisplayed(from colors: [ColorViewModel]? = nil) {
@@ -143,7 +142,7 @@ struct ColorsView: View {
                 .onChange(of: sortRaw) { refreshDisplayed() }
                 .onChange(of: originFilterRaw) { refreshDisplayed() }
                 .onChange(of: favoritesOnly) { refreshDisplayed() }
-                .navigationTitle(isSelecting ? "\(selectedIDs.count) Selected" : "Colors")
+                .libraryTitle("Color", count: displayedColors.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .featureIntro(.colors)
                 .navigationDestination(for: ColorViewModel.self) { color in
                     ColorDetailView(colorItem: color)

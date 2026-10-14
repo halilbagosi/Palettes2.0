@@ -44,11 +44,13 @@ struct PaletteEntity: AppEntity, IndexedEntity {
 
 @available(iOS 26.0, *)
 struct PaletteEntityQuery: EntityStringQuery {
-    /// Injected so tests never touch the real store.
-    var library: AppData = .shared
+    /// Injected so tests never touch the real store; nil means `AppData.shared`,
+    /// resolved on the main actor rather than in a nonisolated default value.
+    private var injectedLibrary: AppData?
+    @MainActor private var library: AppData { injectedLibrary ?? .shared }
 
     init() {}
-    init(library: AppData) { self.library = library }
+    init(library: AppData) { self.injectedLibrary = library }
 
     @MainActor
     func entities(for identifiers: [UUID]) async throws -> [PaletteEntity] {

@@ -178,6 +178,8 @@ struct PaletteDetailView: View {
                         colorName: $appData.palettes[paletteIdx].paletteColors[wrapper.id].name,
                         hexCode: $appData.palettes[paletteIdx].paletteColors[wrapper.id].hex,
                         colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
+                        tag: (current: appData.palettes[paletteIdx].paletteColors[wrapper.id].role,
+                              save: { assignRole($0, at: wrapper.id) }),
                         onSave: { syncEditedPaletteColor(at: wrapper.id) }
                     )
                     .environmentObject(appData)
@@ -428,6 +430,22 @@ struct PaletteDetailView: View {
 
     private func openTagging(for index: Int) {
         taggingColorIndex = index
+    }
+
+    /// Gives the color at `index` its tag, taking it from any other color in
+    /// the palette that held it (one holder per tag).
+    private func assignRole(_ role: String?, at index: Int) {
+        guard let paletteIdx = paletteIndex,
+              index < appData.palettes[paletteIdx].paletteColors.count else { return }
+        withAnimation(.spring(duration: 0.35, bounce: 0.25)) {
+            if let role {
+                for j in appData.palettes[paletteIdx].paletteColors.indices where j != index
+                    && appData.palettes[paletteIdx].paletteColors[j].role?.caseInsensitiveCompare(role) == .orderedSame {
+                    appData.palettes[paletteIdx].paletteColors[j].role = nil
+                }
+            }
+            appData.palettes[paletteIdx].paletteColors[index].role = role
+        }
     }
 
     /// A color edited from a palette changes only that palette. If its new hex

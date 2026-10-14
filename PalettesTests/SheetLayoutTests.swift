@@ -20,7 +20,7 @@ final class SheetLayoutTests: XCTestCase {
         XCTAssertEqual(resolve(820, 1180, .regular), .stacked)
         XCTAssertEqual(resolve(1024, 1366, .regular), .stacked)
     }
-    func testRegularNearSquareIsSplit() { XCTAssertEqual(resolve(900, 1000, .regular), .split) }
+    func testRegularNearSquareIsStacked() { XCTAssertEqual(resolve(900, 1000, .regular), .stacked) }
     func testNarrowShortStaysStackedEvenWhenContentDoesNotFit() {
         XCTAssertEqual(resolve(380, 430, .compact, min: 520), .stacked)
         XCTAssertEqual(resolve(393, 852, .compact, min: 2000), .stacked)
@@ -36,9 +36,22 @@ final class SheetLayoutTests: XCTestCase {
         XCTAssertEqual(resolve(380, 430, .compact, min: 300), .stacked)
     }
     func testHeightExactlyMinStackedHeightIsStacked() { XCTAssertEqual(resolve(393, 500, .compact, min: 500), .stacked) }
-    func testRegularRatioExactlyThreeQuartersIsSplit() { XCTAssertEqual(resolve(750, 1000, .regular), .split) }
+    func testRegularPortraitTooShortToStackIsSplit() { XCTAssertEqual(resolve(750, 1000, .regular, min: 1100), .split) }
     func testNilSizeClassPortraitIsStacked() { XCTAssertEqual(resolve(393, 852, nil), .stacked) }
     func testSquareIsStacked() { XCTAssertEqual(resolve(500, 500, .compact), .stacked) }
+    // iPhone Duo unfolded: the sheet is a near-square card in landscape and
+    // stacks like portrait whenever stacked fits.
+    func testNearSquareTallEnoughIsStackedWhateverTheSizeClass() {
+        XCTAssertEqual(resolve(690, 680, .regular, min: 500), .stacked)
+        XCTAssertEqual(resolve(690, 680, .compact, min: 500), .stacked)
+        XCTAssertEqual(resolve(850, 690, .regular, min: 500), .stacked)
+    }
+    func testNearSquareTooShortStillSplits() {
+        XCTAssertEqual(resolve(690, 450, .regular, min: 500), .split)
+    }
+    func testClearlyWideStillSplits() {
+        XCTAssertEqual(resolve(880, 690, .regular, min: 300), .split)
+    }
     func testLargerMinStackedHeightFlipsBorderlineToSplit() {
         XCTAssertEqual(resolve(650, 700, .compact, min: 600), .stacked)
         XCTAssertEqual(resolve(650, 700, .compact, min: 800), .split)

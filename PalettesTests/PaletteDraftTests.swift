@@ -158,4 +158,34 @@ struct PaletteDraftTests {
         draft.clearRole("brand")
         #expect(draft.colors.map(\.role) == [nil, "Accent", nil])
     }
+
+    // MARK: - Maximum colors
+
+    private func distinct(_ count: Int, from start: Int = 0) -> [PaletteColor] {
+        (start..<start + count).map { pc(String(format: "#%06X", $0 * 4099 + 1)) }
+    }
+
+    @Test func appendStopsAtTheMaximum() {
+        var draft = PaletteDraft(colors: distinct(18))
+        let added = draft.append(distinct(5, from: 100))
+        #expect(added == 2)
+        #expect(draft.colors.count == PaletteDraft.maximumColors)
+        #expect(draft.isFull)
+    }
+
+    @Test func replaceCountsTheRemovedColorsAsRoom() {
+        var draft = PaletteDraft(colors: distinct(20))
+        let old: Set<UUID> = [draft.colors[0].id, draft.colors[1].id]
+        let result = draft.replace(old, with: distinct(4, from: 100))
+        #expect(result.added == 2)
+        #expect(draft.colors.count == PaletteDraft.maximumColors)
+    }
+
+    @Test func duplicateAndReinsertDoNothingWhenFull() {
+        var draft = PaletteDraft(colors: distinct(20))
+        draft.duplicate(id: draft.colors[0].id)
+        #expect(draft.colors.count == PaletteDraft.maximumColors)
+        let reinserted = draft.reinsert(pc("#ABCDEF"), at: 0)
+        #expect(!reinserted)
+    }
 }

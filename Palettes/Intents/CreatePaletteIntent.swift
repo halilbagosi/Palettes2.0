@@ -17,14 +17,16 @@ struct CreatePaletteIntent: AppIntent {
         Summary("Create a palette named \(\.$name)")
     }
 
-    /// Injected so tests never touch the real store.
-    var library: AppData = .shared
+    /// Injected so tests never touch the real store; nil means `AppData.shared`,
+    /// resolved on the main actor rather than in a nonisolated default value.
+    private var injectedLibrary: AppData?
+    @MainActor private var library: AppData { injectedLibrary ?? .shared }
 
     init() {}
 
-    init(name: String, library: AppData = .shared) {
+    init(name: String, library: AppData? = nil) {
         self.name = name
-        self.library = library
+        self.injectedLibrary = library
     }
 
     @MainActor

@@ -264,10 +264,11 @@ struct GenerationOrbView: View {
                     .opacity(Double(bloom))
             }
         }
+        .frame(width: diameter, height: diameter)
+        // Anchored in the drop: the colors move and stretch with it as it's pulled.
+        .followsBubble(diameter: diameter)
         .blur(radius: diameter * 0.07)
         .saturation(1.2)
-        // Slosh: the liquid lags slightly behind the glass while stretching
-        .offset(x: warpShift.width * -0.15, y: warpShift.height * -0.15)
         .frame(width: diameter, height: diameter)
     }
 

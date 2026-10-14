@@ -49,6 +49,8 @@ enum LibraryOriginFilter: String, CaseIterable, Identifiable {
 enum LibrarySort: String, CaseIterable, Identifiable {
     case newestFirst
     case oldestFirst
+    /// Around the color wheel; see `HueOrder`.
+    case hue
 
     var id: String { rawValue }
 
@@ -56,6 +58,7 @@ enum LibrarySort: String, CaseIterable, Identifiable {
         switch self {
         case .newestFirst: "Newest First"
         case .oldestFirst: "Oldest First"
+        case .hue: "Hue"
         }
     }
 
@@ -63,6 +66,37 @@ enum LibrarySort: String, CaseIterable, Identifiable {
         switch self {
         case .newestFirst: "arrow.down"
         case .oldestFirst: "arrow.up"
+        case .hue: "rainbow"
         }
     }
+
+    /// `items` (in creation order) in this sort's order. `hueKey` is read
+    /// once per item, and only for `.hue`.
+    func ordered<Item>(_ items: [Item], hueKey: (Item) -> HueOrder.Key) -> [Item] {
+        switch self {
+        case .newestFirst:
+            return items.reversed()
+        case .oldestFirst:
+            return items
+        case .hue:
+            return items.map { (key: hueKey($0), item: $0) }
+                .sorted { $0.key < $1.key }
+                .map(\.item)
+        }
+    }
+}
+
+/// The library's title. Before iOS 26 the number of items on screen goes in
+/// front: "12 Palettes", "1 Color"; just the plural when there are none.
+/// From iOS 26 the count sits in a capsule beside the plural (LargeTitleCompat).
+enum LibraryTitle {
+    static func text(_ noun: String, count: Int) -> String {
+        switch count {
+        case 0: "\(noun)s"
+        case 1: "1 \(noun)"
+        default: "\(count) \(noun)s"
+        }
+    }
+
+    static func plural(_ noun: String) -> String { "\(noun)s" }
 }

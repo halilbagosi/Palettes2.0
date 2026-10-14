@@ -18,14 +18,16 @@ struct FindPalettesIntent: AppIntent {
         Summary("Find palettes matching \(\.$searchTerm)")
     }
 
-    /// Injected so tests never touch the real store.
-    var library: AppData = .shared
+    /// Injected so tests never touch the real store; nil means `AppData.shared`,
+    /// resolved on the main actor rather than in a nonisolated default value.
+    private var injectedLibrary: AppData?
+    @MainActor private var library: AppData { injectedLibrary ?? .shared }
 
     init() {}
 
-    init(searchTerm: String?, library: AppData = .shared) {
+    init(searchTerm: String?, library: AppData? = nil) {
         self.searchTerm = searchTerm
-        self.library = library
+        self.injectedLibrary = library
     }
 
     @MainActor

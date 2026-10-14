@@ -41,7 +41,7 @@ struct PalettePickSource: View {
         FadingScrollView {
             VStack(spacing: 14) {
                 preview
-                    .frame(height: PaletteStripEditor.height)
+                    .frame(height: PaletteStripPreview.height)
 
                 nameRow
 
@@ -122,15 +122,15 @@ struct PalettePickSource: View {
 
     // MARK: - Values
 
-    /// HEX, R, G and B in one compact row. A tap copies (HEX, or all three
-    /// RGB values); press and hold to type in a field.
+    /// HEX, R, G and B in one compact row. A tap opens a field for typing;
+    /// press and hold copies (HEX, or all three RGB values).
     private var values: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Values")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 6) {
+            ValuesRow {
                 HStack(spacing: 2) {
                     Text("#")
                         .font(.system(size: 15, weight: .bold, design: .monospaced))
@@ -150,8 +150,8 @@ struct PalettePickSource: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
                 .copyOrEdit(isEditing: focus == .hex, copy: copyHex, edit: { focus = .hex })
-                // Just wide enough for six characters; R, G and B share the rest.
-                .fixedSize(horizontal: true, vertical: false)
+                // ValuesRow makes HEX a little wider than each channel.
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .liquidGlass(.regular, in: .rect(cornerRadius: 10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
@@ -167,6 +167,10 @@ struct PalettePickSource: View {
                 Text("Invalid HEX code. Use 6-character format like FF5D00.")
                     .font(.caption)
                     .foregroundStyle(.red)
+            } else {
+                Text(ValuesHelp.text)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
