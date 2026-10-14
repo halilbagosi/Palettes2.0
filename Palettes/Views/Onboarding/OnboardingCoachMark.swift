@@ -57,7 +57,13 @@ private struct OnboardingCoachMarkModifier: ViewModifier {
                 presentTask?.cancel()
                 // Left before the hint showed: drop the target so the hint
                 // can't appear on a later visit. Replay sets it again.
-                if visible { dismiss(arm: false) } else { appData.coachMarkPaletteID = nil }
+                // Only write when set: any write republishes AppData, and a
+                // redraw of the tab view mid tab switch flashes this screen back.
+                if visible {
+                    dismiss(arm: false)
+                } else if appData.coachMarkPaletteID != nil {
+                    appData.coachMarkPaletteID = nil
+                }
             }
     }
 
