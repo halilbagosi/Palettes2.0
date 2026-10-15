@@ -39,9 +39,10 @@ private struct LibraryLargeTitle: View {
     let count: Int
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .opticalCenter, spacing: 10) {
             Text(LibraryTitle.plural(noun))
                 .font(.largeTitle.bold())
+                .alignmentGuide(.opticalCenter) { center($0, .largeTitle, \.xHeight) }
             if count > 0 {
                 Text("\(count)")
                     .font(.title3.weight(.semibold))
@@ -52,6 +53,7 @@ private struct LibraryLargeTitle: View {
                     .padding(.vertical, 3)
                     .frame(minWidth: 32)
                     .background(Color(.tertiarySystemFill), in: Capsule())
+                    .alignmentGuide(.opticalCenter) { center($0, .title3, \.capHeight) }
                     .transition(.scale.combined(with: .opacity))
             }
         }
@@ -62,4 +64,20 @@ private struct LibraryLargeTitle: View {
         .accessibilityLabel(LibraryTitle.text(noun, count: count))
         .accessibilityAddTraits(.isHeader)
     }
+
+    /// Height `metric` (x-height or cap height) halved, above the first
+    /// baseline. The title centers on its x-height: most of a lowercase word's
+    /// weight sits there, so the line-box or cap-height center reads high. The
+    /// count, all digits, centers on its cap height.
+    private func center(_ d: ViewDimensions, _ style: UIFont.TextStyle, _ metric: KeyPath<UIFont, CGFloat>) -> CGFloat {
+        d[.firstTextBaseline] - UIFont.preferredFont(forTextStyle: style)[keyPath: metric] / 2
+    }
+}
+
+private extension VerticalAlignment {
+    enum OpticalCenter: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+
+    static let opticalCenter = VerticalAlignment(OpticalCenter.self)
 }
