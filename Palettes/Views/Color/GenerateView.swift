@@ -652,19 +652,24 @@ struct GenerateView: View {
                     .foregroundStyle(.tint)
                     .lineLimit(1)
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
 
-                Button("Clear") {
+                Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         selectedColorIDs.removeAll()
                     }
+                } label: {
+                    Text("Clear")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.systemBackground))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(.tint, in: Capsule())
                 }
-                .font(.subheadline.weight(.medium))
                 .buttonStyle(.plain)
-                .foregroundStyle(.tint)
+            } else {
+                Spacer(minLength: 8)
             }
-
-            Spacer(minLength: 8)
         }
     }
 
@@ -701,16 +706,37 @@ struct GenerateView: View {
         // Soften the edges while there is off-screen content, so
         // swatches fade out instead of cutting off harshly.
         .mask {
-            HStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: colorsFadeLeading ? 28 : 0)
-                Rectangle()
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: colorsFadeTrailing ? 28 : 0)
-            }
-            .animation(.easeInOut(duration: 0.2), value: colorsFadeLeading)
-            .animation(.easeInOut(duration: 0.2), value: colorsFadeTrailing)
+            // Full-width mask with the fades cut out of it, so toggling a fade
+            // only animates opacity and the eased ramp stays smooth.
+            Rectangle()
+                .overlay(alignment: .leading) {
+                    Self.easedFade(leading: true)
+                        .opacity(colorsFadeLeading ? 1 : 0)
+                        .blendMode(.destinationOut)
+                }
+                .overlay(alignment: .trailing) {
+                    Self.easedFade(leading: false)
+                        .opacity(colorsFadeTrailing ? 1 : 0)
+                        .blendMode(.destinationOut)
+                }
+                .compositingGroup()
+                .animation(.easeInOut(duration: 0.35), value: colorsFadeLeading)
+                .animation(.easeInOut(duration: 0.35), value: colorsFadeTrailing)
         }
+    }
+
+    /// An opaque-to-clear ramp with smootherstep easing, so the fade has no
+    /// visible start or end line. Opaque at the outer edge.
+    private static func easedFade(leading: Bool) -> some View {
+        let stops: [Gradient.Stop] = (0...12).map { i in
+            let x = Double(i) / 12
+            let ease = x * x * x * (x * (x * 6 - 15) + 10)
+            return .init(color: .black.opacity(1 - ease), location: x)
+        }
+        return LinearGradient(stops: stops,
+                              startPoint: leading ? .leading : .trailing,
+                              endPoint: leading ? .trailing : .leading)
+            .frame(width: 56)
     }
 
     private func colorSwatch(_ colorItem: ColorViewModel, diameter: CGFloat = 54) -> some View {

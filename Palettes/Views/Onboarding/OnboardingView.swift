@@ -60,6 +60,11 @@ struct OnboardingView: View {
         /// along an edge): the safe area is off centre.
         var hasSideControls: Bool { abs(insets.leading - insets.trailing) > 8 }
 
+        /// Where Skip's centre sits below the top of the safe area on a Duo:
+        /// level with the camera (folded) or the status bar's clock (open).
+        /// Estimated from Duo simulator screenshots; there is no API for either.
+        var skipCenterY: CGFloat { centersOnSafeArea ? 48 : 44 }
+
         /// iPhone Duo's outer display: a small screen with its bars on one
         /// side. There the orb centres on the safe area, with the text, and is
         /// a little smaller. Bigger screens keep everything centred on the
@@ -207,9 +212,14 @@ struct OnboardingView: View {
                 }
 
                 OnboardingSkipButton { model.skip() }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 6 - 7)
-                    .padding(.trailing, 20 - 7)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: layout.hasSideControls ? .topLeading : .topTrailing)
+                    // iPhone Duo keeps its status bar (and, folded, the camera) on
+                    // the trailing side: Skip takes the leading edge instead, centred
+                    // on the camera when folded and on the status bar when open.
+                    .padding(.top, layout.hasSideControls ? layout.skipCenterY - 15 - 7 : 6 - 7)
+                    .padding(.leading, layout.hasSideControls ? 20 - 7 : 0)
+                    .padding(.trailing, layout.hasSideControls ? 0 : 20 - 7)
                     // Always reachable, except while the orb is travelling to its place.
                     .opacity(skipVisible ? 1 : 0)
                     .allowsHitTesting(skipVisible)
@@ -300,7 +310,9 @@ struct OnboardingView: View {
                 // Livelier while the camera is live or a palette is generating.
                 energy: orbEnergy,
                 kick: flow.scanCount,
-                glow: settle
+                // The shadow is there from the moment it becomes glass, so it
+                // grows with the drop as it morphs out.
+                glow: 1
             )
     }
 

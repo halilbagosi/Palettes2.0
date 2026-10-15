@@ -82,7 +82,9 @@ final class DropPhysics {
     ///   - pull: the finger's offset from where it grabbed, in points (zero when not held).
     ///   - held: whether a finger is on the drop.
     func step(to now: Date, pull: CGSize, held: Bool, diameter: CGFloat,
-              idleTime t: Double, energy: Double) -> BubbleWobble {
+              idleTime rawT: Double, energy: Double) -> BubbleWobble {
+        let tune = OrbTuning.live
+        let t = rawT * tune.wobbleSpeed
         let dt = min(1.0 / 30, max(0, last.map { now.timeIntervalSince($0) } ?? 0))
         last = now
 
@@ -91,11 +93,11 @@ final class DropPhysics {
         // The orb can be zero-sized while tucked into the island; never divide by it.
         let d = max(Double(diameter), 1)
         let phi = atan2(Double(pull.height), Double(pull.width))
-        let amount = 0.42 * (1 - exp(-len / (d * 0.9)))
-        let shift = 0.22 * (1 - exp(-len / (d * 1.1)))
+        let amount = tune.pullAmount * (1 - exp(-len / (d * 0.9)))
+        let shift = tune.pullShift * (1 - exp(-len / (d * 1.1)))
 
         // Held: track the finger tightly. Released: a bouncy water-drop spring.
-        let (resp, damp) = held ? (0.11, 1.0) : (0.42, 0.26)
+        let (resp, damp) = held ? (0.11, 1.0) : (tune.releaseResponse, tune.releaseDamping)
         let sub = 4
         for _ in 0..<sub {
             let h = dt / Double(sub)
@@ -108,7 +110,7 @@ final class DropPhysics {
         let swell = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * sin(t * 0.29)
         // Subtle but always there, a touch livelier when busy.
         let liveliness = 0.6 + 0.4 * energy
-        let idleOval = liveliness * (0.012 + 0.014 * swell) * sin(t * 1.3)
+        let idleOval = liveliness * (tune.idleOval + tune.idleOvalSwell * swell) * sin(t * 1.3)
         let idleAngle = t * 0.45 + 0.9 * sin(t * 0.31)
         let a = oval.x + idleOval * cos(2 * idleAngle)
         let b = oval.y + idleOval * sin(2 * idleAngle)
@@ -124,10 +126,10 @@ final class DropPhysics {
             ovalAngle: atan2(b, a) / 2,
             bulge: hypot(bulge.x, bulge.y),
             bulgeAngle: atan2(bulge.y, bulge.x),
-            lobe: liveliness * 0.005 * sin(t * 1.9 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
+            lobe: liveliness * tune.idleLobe * sin(t * 1.9 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
             lobeAngle: -t * 0.4,
-            drift: CGSize(width: center.x + liveliness * 0.004 * sin(t * 0.7 + 0.4),
-                          height: center.y + liveliness * 0.005 * sin(t * 0.55))
+            drift: CGSize(width: center.x + liveliness * tune.idleDrift * sin(t * 0.7 + 0.4),
+                          height: center.y + liveliness * tune.idleDrift * sin(t * 0.55))
         )
     }
 }
@@ -281,6 +283,7 @@ struct LiquidBubble<Content: View>: View {
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())
+        .orbDebugMenu()
         .simultaneousGesture(pullGesture, including: pullable ? .all : .none)
         .onChange(of: kick) { _, _ in
             guard !reduceMotion else { return }
@@ -329,8 +332,9 @@ struct LiquidBubble<Content: View>: View {
                             .float2(Float(center.x), Float(center.y)),
                             .float2(Float(radii.width), Float(radii.height)),
                             .float(Float(lensAngle)),
-                            // Real Liquid Glass refracts on its own; the drawn lens is the fallback.
-                            .float(Float(!Self.hasLiquidGlass && colorScheme == .dark ? lensStrength : 0))
+                            // Real Liquid Glass refracts on its own; this adds a stronger bend at the rim.
+                            .float(Float(Self.hasLiquidGlass ? OrbTuning.live.glassRefraction : (colorScheme == .dark ? lensStrength : 0))),
+                            .float(Float(OrbTuning.live.refractionPower))
                         ),
                         maxSampleOffset: CGSize(width: r, height: r)
                     )
@@ -372,15 +376,15 @@ struct LiquidBubble<Content: View>: View {
         return ZStack {
             shape
                 .stroke(.black.opacity(dark ? 0.4 : 0.06), lineWidth: diameter * 0.06)
-                .blur(radius: diameter * (0.045 + 0.06 * lift))
+                .blur(radius: diameter * (0.045 + 0.06 * lift) * OrbTuning.live.shadowBlur)
             // Faint spread so the ring sits on the surface rather than floating.
             shape
                 .stroke(.black.opacity(dark ? 0.18 : 0.025), lineWidth: diameter * 0.16)
-                .blur(radius: diameter * (0.1 + 0.08 * lift))
+                .blur(radius: diameter * (0.1 + 0.08 * lift) * OrbTuning.live.shadowBlur)
         }
         .frame(width: diameter, height: diameter)
         .scaleEffect(1 + 0.12 * lift)
-        .opacity(g)
+        .opacity(g * OrbTuning.live.shadowOpacity)
         .offset(y: diameter * (0.2 - 0.12 * lift))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
