@@ -207,9 +207,13 @@ struct OnboardingView: View {
                 }
 
                 OnboardingSkipButton { model.skip() }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: layout.hasSideControls ? .top : .topTrailing)
                     .padding(.top, 6 - 7)
-                    .padding(.trailing, 20 - 7)
+                    .padding(.trailing, layout.hasSideControls ? 0 : 20 - 7)
+                    // With the status bar on one side (iPhone Duo) a corner Skip
+                    // crowds the clock and camera; centre it on the orb's axis.
+                    .offset(x: layout.hasSideControls ? layout.centerX - layout.insets.leading - (layout.full.width - layout.insets.leading - layout.insets.trailing) / 2 : 0)
                     // Always reachable, except while the orb is travelling to its place.
                     .opacity(skipVisible ? 1 : 0)
                     .allowsHitTesting(skipVisible)
