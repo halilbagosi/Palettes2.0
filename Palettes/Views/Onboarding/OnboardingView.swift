@@ -300,7 +300,9 @@ struct OnboardingView: View {
                 // Livelier while the camera is live or a palette is generating.
                 energy: orbEnergy,
                 kick: flow.scanCount,
-                glow: settle
+                // The shadow is there from the moment it becomes glass, so it
+                // grows with the drop as it morphs out.
+                glow: 1
             )
     }
 

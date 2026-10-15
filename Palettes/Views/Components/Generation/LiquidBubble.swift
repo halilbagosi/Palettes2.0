@@ -108,7 +108,7 @@ final class DropPhysics {
         let swell = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * sin(t * 0.29)
         // Subtle but always there, a touch livelier when busy.
         let liveliness = 0.6 + 0.4 * energy
-        let idleOval = liveliness * (0.04 + 0.04 * swell) * sin(t * 1.3)
+        let idleOval = liveliness * (0.024 + 0.024 * swell) * sin(t * 1.3)
         let idleAngle = t * 0.45 + 0.9 * sin(t * 0.31)
         let a = oval.x + idleOval * cos(2 * idleAngle)
         let b = oval.y + idleOval * sin(2 * idleAngle)
@@ -124,10 +124,10 @@ final class DropPhysics {
             ovalAngle: atan2(b, a) / 2,
             bulge: hypot(bulge.x, bulge.y),
             bulgeAngle: atan2(bulge.y, bulge.x),
-            lobe: liveliness * 0.014 * sin(t * 1.9 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
+            lobe: liveliness * 0.008 * sin(t * 1.9 + 0.6) + 0.15 * hypot(oval.vx, oval.vy) * 0.02,
             lobeAngle: -t * 0.4,
-            drift: CGSize(width: center.x + liveliness * 0.012 * sin(t * 0.7 + 0.4),
-                          height: center.y + liveliness * 0.014 * sin(t * 0.55))
+            drift: CGSize(width: center.x + liveliness * 0.007 * sin(t * 0.7 + 0.4),
+                          height: center.y + liveliness * 0.008 * sin(t * 0.55))
         )
     }
 }
