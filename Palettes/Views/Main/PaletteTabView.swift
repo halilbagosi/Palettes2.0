@@ -74,7 +74,7 @@ struct PaletteTabView: View {
                 if !shown, onboardingWanted { presentOnboarding(after: .milliseconds(300)) }
             }
         )) {
-            OnboardingView { reason in
+            OnboardingEntryView { reason in
                 if case .completed(let id) = reason {
                     // PaletteView pushes the detail under the cover, so it is
                     // already in place when the cover finishes dismissing.
