@@ -377,7 +377,6 @@ struct OnboardingView: View {
             // Only reached when the orb does not travel from the island.
             return OnboardingStepContent(
                 key: "welcome",
-                eyebrow: .init(title: "Welcome", systemImage: "hand.wave.fill"),
                 title: "Welcome to Palettes",
                 subtitle: "Catch the colors you love and turn them into palettes.",
                 primary: .init(title: "Get started") { morph.beginFade() }
@@ -385,7 +384,6 @@ struct OnboardingView: View {
         case .orb:
             return OnboardingStepContent(
                 key: "orb",
-                eyebrow: .init(title: "Hello there", systemImage: "sparkles"),
                 title: "Colors are everywhere",
                 subtitle: "Find one that catches your eye, and we\u{2019}ll build a whole palette around it.",
                 primary: .init(title: "Let\u{2019}s go") { withAnimation(.easeInOut(duration: 0.4)) { model.advance() } }
@@ -485,9 +483,6 @@ struct OnboardingView: View {
         ZStack(alignment: .top) {
             VStack(spacing: 20) {
                 VStack(spacing: 14) {
-                    if let eyebrow = content.eyebrow {
-                        OnboardingEyebrow(title: eyebrow.title, systemImage: eyebrow.systemImage)
-                    }
                     if let title = content.title {
                         OnboardingStepText(title: title, subtitle: content.subtitle)
                     }

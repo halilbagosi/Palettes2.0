@@ -222,7 +222,6 @@ struct OnboardingExtrasView: View {
             SwatchFan(colors: palette.colors)
                 .accessibilityHidden(true)
             VStack(spacing: 14) {
-                OnboardingEyebrow(title: "You\u{2019}re all set", systemImage: "checkmark.seal.fill")
                 OnboardingStepText(
                     title: "What else you can do",
                     subtitle: "\(palette.name) is saved. A few ways to take it further."

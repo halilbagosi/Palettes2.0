@@ -95,28 +95,6 @@ struct OnboardingStepText: View {
     }
 }
 
-/// A small glass chip above a step's title naming the moment ("Welcome",
-/// "Look around"), so each step opens with a friendly cue in the same glass
-/// as the app's controls.
-struct OnboardingEyebrow: View {
-    var title: String
-    var systemImage: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .foregroundStyle(Color.accentColor)
-            Text(title)
-                .foregroundStyle(.secondary)
-        }
-        .font(.system(.footnote, design: .rounded).weight(.semibold))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .liquidGlass(.regular, in: Capsule())
-        .accessibilityHidden(true)
-    }
-}
-
 // MARK: - Step content
 
 /// Everything one step puts on screen below the orb. The coordinator lays it
@@ -137,14 +115,8 @@ struct OnboardingStepContent {
         }
     }
 
-    struct Eyebrow {
-        var title: String
-        var systemImage: String
-    }
-
     /// Changes when the step's text should cross-fade.
     var key: String
-    var eyebrow: Eyebrow? = nil
     var title: String? = nil
     var subtitle: String? = nil
     var body: AnyView? = nil
