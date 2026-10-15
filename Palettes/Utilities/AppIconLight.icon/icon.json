@@ -4,7 +4,7 @@
     "specular-location"
   ],
   "fill": {
-    "solid": "srgb:0.95686,0.94510,0.97255,1.00000"
+    "solid": "srgb:0.97647,0.97647,0.98039,1.00000"
   },
   "groups": [
     {
@@ -12,17 +12,73 @@
       "hidden": false,
       "layers": [
         {
-          "blend-mode": "multiply",
+          "blend-mode-specializations": [
+            {
+              "appearance": "light",
+              "value": "normal"
+            }
+          ],
+          "fill": "none",
+          "glass": false,
+          "image-name": "lens-center.svg",
+          "name": "lens-center",
+          "opacity": 0.76
+        },
+        {
+          "blend-mode-specializations": [
+            {
+              "value": "soft-light"
+            },
+            {
+              "appearance": "tinted",
+              "value": "multiply"
+            }
+          ],
+          "glass": true,
           "image-name": "circle-coral.svg",
           "name": "circle-coral"
         },
         {
-          "blend-mode": "multiply",
+          "glass": false,
+          "image-name": "lens-coral-violet.svg",
+          "name": "lens-coral-violet"
+        },
+        {
+          "glass": false,
+          "image-name": "lens-coral-amber.svg",
+          "name": "lens-coral-amber"
+        },
+        {
+          "blend-mode-specializations": [
+            {
+              "appearance": "light",
+              "value": "normal"
+            },
+            {
+              "appearance": "tinted",
+              "value": "multiply"
+            }
+          ],
+          "glass": false,
+          "image-name": "lens-amber-violet.svg",
+          "name": "lens-amber-violet",
+          "opacity": 0.57
+        },
+        {
+          "blend-mode-specializations": [
+            {
+              "value": "hard-light"
+            },
+            {
+              "appearance": "tinted",
+              "value": "hard-light"
+            }
+          ],
           "image-name": "circle-amber.svg",
           "name": "circle-amber"
         },
         {
-          "blend-mode": "multiply",
+          "blend-mode": "overlay",
           "image-name": "circle-violet.svg",
           "name": "circle-violet"
         }
@@ -43,6 +99,17 @@
         "enabled": true,
         "value": 0.4
       }
+    },
+    {
+      "layers": [],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
     }
   ],
   "supported-platforms": {
@@ -50,5 +117,18 @@
       "watchOS"
     ],
     "squares": "shared"
-  }
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "srgb:0.97647,0.97647,0.98039,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "srgb:0.97647,0.97647,0.98039,1.00000"
+      }
+    }
+  ]
 }

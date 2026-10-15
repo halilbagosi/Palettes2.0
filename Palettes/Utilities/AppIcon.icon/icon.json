@@ -10,13 +10,84 @@
       "hidden" : false,
       "layers" : [
         {
-          "blend-mode" : "soft-light",
+          "blend-mode-specializations" : [
+            {
+              "appearance" : "light",
+              "value" : "normal"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "hard-light"
+            }
+          ],
+          "fill" : "none",
+          "glass" : false,
+          "image-name" : "lens-center.svg",
+          "name" : "lens-center",
+          "opacity" : 0.76
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "value" : "soft-light"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "hard-light"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "multiply"
+            }
+          ],
           "glass" : true,
           "image-name" : "circle-coral.svg",
           "name" : "circle-coral"
         },
         {
-          "blend-mode" : "hard-light",
+          "glass" : false,
+          "image-name" : "lens-coral-violet.svg",
+          "name" : "lens-coral-violet"
+        },
+        {
+          "glass" : false,
+          "image-name" : "lens-coral-amber.svg",
+          "name" : "lens-coral-amber"
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "appearance" : "light",
+              "value" : "normal"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "darken"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "multiply"
+            }
+          ],
+          "glass" : false,
+          "image-name" : "lens-amber-violet.svg",
+          "name" : "lens-amber-violet",
+          "opacity" : 0.57
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "value" : "hard-light"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "hard-light"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "hard-light"
+            }
+          ],
           "image-name" : "circle-amber.svg",
           "name" : "circle-amber"
         },
@@ -41,6 +112,19 @@
       "translucency" : {
         "enabled" : true,
         "value" : 0.4
+      }
+    },
+    {
+      "layers" : [
+
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
       }
     }
   ],

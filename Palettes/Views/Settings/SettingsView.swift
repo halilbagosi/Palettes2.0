@@ -11,15 +11,16 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
-    @ObservedObject private var subscription = SubscriptionStatus.shared
-    #if DEBUG
-    @AppStorage(SubscriptionStatus.debugOverrideKey) private var debugPlan = ""
-    #endif
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
     @State private var showCustomize = false
+    @AppStorage(AppIconVersion.storageKey) private var iconStored = ""
+
+    private var iconVersion: AppIconVersion {
+        AppIconVersion(rawValue: iconStored) ?? AppIconVersion.current
+    }
 
     private var isSignedInToICloud: Bool {
         FileManager.default.ubiquityIdentityToken != nil
@@ -161,22 +162,6 @@ struct SettingsView: View {
                 } footer: {
                     Text("Permanently removes your library from this device and iCloud.")
                 }
-
-                #if DEBUG
-                Section {
-                    Picker("Plan", selection: $debugPlan) {
-                        Text("Automatic").tag("")
-                        ForEach(AppPlan.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                    .onChange(of: debugPlan) { _, _ in
-                        Task { await subscription.refresh() }
-                    }
-                } header: {
-                    Text("Debug")
-                } footer: {
-                    Text("Plan overrides the Free/Premium tag.")
-                }
-                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -188,13 +173,10 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showCustomize) {
                 CustomizeAppearanceView()
-                    .presentationDetents([.medium])
+                    .presentationDetents([.large])
             }
             .alert("Couldn't export your library.", isPresented: $showExportError) {
                 Button("OK", role: .cancel) {}
-            }
-            .task {
-                await subscription.refresh()
             }
         }
     }
@@ -203,15 +185,12 @@ struct SettingsView: View {
 
     private var header: some View {
         VStack(spacing: 10) {
-            AppIconPreview(version: AppIconVersion.current, size: 88)
+            AppIconPreview(version: iconVersion, size: 88, resolvesAuto: true)
                 .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
 
             VStack(spacing: 2) {
-                HStack(spacing: 8) {
-                    Text("Palettes")
-                        .font(.system(.title2, design: .rounded).weight(.bold))
-                    PlanBadge(plan: subscription.plan)
-                }
+                Text("Palettes")
+                    .font(.system(.title2, design: .rounded).weight(.bold))
                 Text(librarySummary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -220,7 +199,7 @@ struct SettingsView: View {
                     .foregroundStyle(.tertiary)
             }
 
-            Button("Customize", systemImage: "paintbrush") {
+            Button("Customize") {
                 showCustomize = true
             }
             .buttonStyle(.bordered)
@@ -258,41 +237,6 @@ struct SettingsView: View {
     }
 }
 
-/// The plan tag beside the app name: a quiet gray "Free", or "Premium" in a
-/// warm gradient with a crown.
-private struct PlanBadge: View {
-    let plan: AppPlan
-
-    var body: some View {
-        HStack(spacing: 4) {
-            if plan == .premium {
-                Image(systemName: "crown.fill")
-                    .imageScale(.small)
-            }
-            Text(plan.title)
-        }
-        .font(.caption.weight(.bold))
-        .textCase(.uppercase)
-        .tracking(0.6)
-        .foregroundStyle(plan == .premium ? Color.white : Color.secondary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background {
-            if plan == .premium {
-                Capsule().fill(LinearGradient(
-                    colors: [Color(red: 0.98, green: 0.62, blue: 0.20), Color(red: 0.91, green: 0.30, blue: 0.47)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-            } else {
-                Capsule().fill(Color(.tertiarySystemFill))
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(plan.title) plan")
-    }
-}
-
 /// A Settings row: a tinted icon tile, a title with an optional subtitle and,
 /// for links that leave the app, an outbound arrow. Reads in the primary
 /// color (not the accent tint buttons and links would otherwise get).
@@ -321,11 +265,11 @@ private struct SettingsRowLabel: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.primary)
                 if let subtitle {
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondary)
                 }
             }
 

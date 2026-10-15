@@ -53,6 +53,9 @@ struct PaletteAddPanel: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// How far past the panel's frame glass edges and shadows may draw.
+    static let glassOutset: CGFloat = 12
+
     // Kept here, not in the sources, so switching sources doesn't lose them.
     @State private var pickColor = Color(hex: ColorPickerModel.randomStarter()) ?? .blue
     @State private var pickName = ""
@@ -95,8 +98,10 @@ struct PaletteAddPanel: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            // Nothing draws outside the panel's area, whatever the type size.
-            .clipped()
+            // Nothing spills out of the panel's area, whatever the type size,
+            // but glass edges and shadows (drawn just outside their shapes)
+            // keep a little room so they aren't sliced off.
+            .clipShape(Rectangle().inset(by: -Self.glassOutset))
             .transition(.opacity)
         }
         // The content area is a fixed frame, so the swap is a crossfade with no

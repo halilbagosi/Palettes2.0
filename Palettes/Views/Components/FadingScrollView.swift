@@ -19,6 +19,9 @@ struct FadingScrollView<Content: View>: View {
         var bottom = false
     }
 
+    /// How far past the sides content may draw (glass edges, shadows).
+    private static var sideOutset: CGFloat { 12 }
+
     @State private var contentFrame: CGRect = .zero
     @State private var visibleHeight: CGFloat = 0
 
@@ -37,7 +40,10 @@ struct FadingScrollView<Content: View>: View {
                 .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .scrollView) }) { contentFrame = $0 }
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { visibleHeight = $0 }
-        .mask { mask(edges) }
+        // The fade mask does the vertical clipping; sideways, content's glass
+        // edges and shadows may draw a little past the scroll view's frame.
+        .scrollClipDisabled()
+        .mask { mask(edges).padding(.horizontal, -Self.sideOutset) }
         .animation(.easeOut(duration: 0.2), value: edges)
     }
 
