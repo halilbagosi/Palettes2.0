@@ -38,6 +38,38 @@ final class ColorNamerTests: XCTestCase {
         XCTAssertEqual(first, second)
     }
 
+    /// Every dictionary entry, taken at its own RGB, must pass the check
+    /// the model's names face: a mislabeled entry ("Vivid Tangerine" on a
+    /// salmon) would otherwise ship as a fallback name.
+    func testEveryDictionaryEntryFitsItsOwnColor() {
+        var failures: [String] = []
+        for entry in ColorNamer.namedColors {
+            let hex = String(format: "#%02X%02X%02X", Int(entry.r), Int(entry.g), Int(entry.b))
+            if !ColorVocabulary.isPlausible(name: entry.name, forHex: hex) { failures.append("\(entry.name) \(hex)") }
+        }
+        XCTAssertEqual(failures, [])
+    }
+
+    /// Entries that were mislabeled or duplicated another entry.
+    func testKnownBadEntriesAreFixed() {
+        XCTAssertNil(ColorNamer.hex(forName: "Vivid Tangerine"), "was a salmon")
+        XCTAssertNil(ColorNamer.hex(forName: "Antique Brass"), "was a pinkish tan")
+        let neonYellow = OKLCH(hex: ColorNamer.hex(forName: "Neon Yellow")!)!
+        XCTAssertLessThan(neonYellow.h, 115, "was a lime")
+        let shocking = ColorNamer.hex(forName: "Shocking Pink")!
+        let hot = ColorNamer.hex(forName: "Hot Magenta")!
+        XCTAssertGreaterThan(ColorNamer.perceptualDistance(hex1: shocking, hex2: hot), 12)
+    }
+
+    /// Picker and photo naming goes through the same family filter, so a
+    /// tan never takes a loud orange's name.
+    func testNameForHexAvoidsContradictingEntries() {
+        for hex in ["#57BBFF", "#658BA8", "#CBAA8E", "#8B5A2B", "#7FB8D8", "#C9B29B"] {
+            let name = ColorNamer.name(forHex: hex)
+            XCTAssertTrue(ColorVocabulary.isPlausible(name: name, forHex: hex), "\(name) for \(hex)")
+        }
+    }
+
     // MARK: - perceptualDistance
 
     func testDistanceBetweenIdenticalHexesIsZero() {

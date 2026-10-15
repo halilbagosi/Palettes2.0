@@ -46,7 +46,7 @@ enum ColorNamer {
     // curated design-palette additions for pastels, earth tones, neons,
     // and neutral shades.
 
-    private static let namedColors: [(name: String, r: Double, g: Double, b: Double)] = [
+    static let namedColors: [(name: String, r: Double, g: Double, b: Double)] = [
         // ── Whites & Near-Whites ──
         ("White",              255, 255, 255),
         ("Snow",               255, 250, 250),
@@ -286,7 +286,7 @@ enum ColorNamer {
         ("Royal Blue",          65, 105, 225),
         ("Cobalt Blue",          0,  71, 171),
         ("Ultramarine",         63,   0, 255),
-        ("Cerulean",            42, 82,  190),
+        ("Cerulean",             0, 123, 167),
         ("Sapphire",            15,  82, 186),
         ("Azure Blue",           0, 127, 255),
         ("Cornflower Blue",    100, 149, 237),
@@ -417,20 +417,19 @@ enum ColorNamer {
         // ── Metallics / Special ──
         ("Rose Gold",          183, 110, 121),
         ("Brass",              181, 166, 66),
-        ("Antique Brass",      205, 149, 117),
+        ("Dusty Copper",       205, 149, 117),
         ("Burnished Gold",     169, 137,  12),
 
         // ── Neons & Brights ──
         ("Neon Pink",          255,  16, 240),
         ("Neon Orange",        255,  95,  31),
-        ("Neon Yellow",        207, 255,   4),
+        ("Neon Yellow",        255, 247,   0),
         ("Neon Blue",           70, 102, 255),
         ("Neon Red",           255,  49,  49),
         ("Electric Lime",      206, 255,   0),
         ("Laser Lemon",        255, 255, 102),
         ("Radical Red",        255,  53,  94),
-        ("Vivid Tangerine",    255, 160, 137),
-        ("Shocking Pink",      252, 15,  192),
+        ("Shocking Pink",      251, 126, 253),
         ("Electric Violet",    143,   0, 255),
         ("Screaming Green",    118, 255,  60),
         ("Neon Coral",         255,  67,  95),
@@ -469,13 +468,15 @@ enum ColorNamer {
     }
 
     /// Whether a modifier is true of the color itself, not just of its
-    /// difference from the dictionary entry.
-    private static func modifierFits(_ word: String, color: OKLCH) -> Bool {
+    /// difference from the dictionary entry. Checked in CIELAB, the space
+    /// `candidates` derived the modifier in, so the test and the choice of
+    /// word can't disagree about what "light" or "vivid" means.
+    private static func modifierFits(_ word: String, lab: (L: Double, a: Double, b: Double)) -> Bool {
         switch word {
-        case "Pale", "Light": return color.L >= 0.62
-        case "Dark", "Deep": return color.L <= 0.6
-        case "Vivid": return color.C >= 0.12
-        case "Rich": return color.C >= 0.08
+        case "Pale", "Light": return lab.L >= 60
+        case "Dark", "Deep": return lab.L <= 52
+        case "Vivid": return labChroma(lab) >= 45
+        case "Rich": return labChroma(lab) >= 30
         default: return true
         }
     }
@@ -502,19 +503,28 @@ enum ColorNamer {
         let b = Double(number & 0xFF) / 255.0
 
         let lab = sRGBtoLab(r: r, g: g, b: b)
+        let color = OKLCH(r: r, g: g, b: b)
 
+        // Nearest entry in the color's own family (greys for greys), the
+        // same filter `uniqueNames` uses; the nearest overall only when
+        // nothing fits.
         var bestName = "Unknown"
         var bestDelta = Double.greatestFiniteMagnitude
-
-        for entry in namedColorsLab {
+        var nearestName = "Unknown"
+        var nearestDelta = Double.greatestFiniteMagnitude
+        for (index, entry) in namedColorsLab.enumerated() {
             let delta = ciede2000(lab, entry.lab)
-            if delta < bestDelta {
+            if delta < nearestDelta {
+                nearestDelta = delta
+                nearestName = entry.name
+            }
+            if delta < bestDelta, entryFits(index, color: color) {
                 bestDelta = delta
                 bestName = entry.name
             }
         }
 
-        return bestName
+        return bestDelta < Double.greatestFiniteMagnitude ? bestName : nearestName
     }
 
     /// Names an entire palette at once, guaranteeing every returned name is
@@ -589,7 +599,7 @@ enum ColorNamer {
             let entry = ranked[colorIndex][rank]
             let entryName = namedColorsLab[entry.index].name
             guard entry.delta >= modifierThreshold else { return [entryName] }
-            guard let color = oklch[colorIndex],
+            guard oklch[colorIndex] != nil,
                   !ColorVocabulary.tokens(entryName).contains(where: modifierWords.contains) else { return [entryName] }
 
             let entryLab = namedColorsLab[entry.index].lab
@@ -602,7 +612,7 @@ enum ColorNamer {
             var names: [String] = []
             for axis in [dominant, secondary] where !(axis == .chroma && entryIsGrey) {
                 let word = modifierWord(dL: dL, dC: dC, axis: axis)
-                guard modifierFits(word, color: color) else { continue }
+                guard modifierFits(word, lab: lab) else { continue }
                 let name = "\(word) \(entryName)"
                 if !names.contains(name) { names.append(name) }
             }

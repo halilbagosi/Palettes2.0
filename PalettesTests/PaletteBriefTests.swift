@@ -9,6 +9,19 @@ import XCTest
 @MainActor
 final class PaletteBriefTests: XCTestCase {
 
+    func testResolvedSize() {
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: nil), 6)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 3, suggested: 5), 5)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 8, suggested: nil), 8)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 20), 12)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: 4, locked: 6, suggested: nil), 6)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: 10, locked: 0, suggested: 5), 10)
+    }
+
+    func testHeuristicSuggestsNoSize() {
+        XCTAssertNil(PaletteBrief.heuristic(from: "calm forest").suggestedSize)
+    }
+
     func testColorWordSetsTheHue() {
         XCTAssertEqual(PaletteBrief.heuristic(from: "moody navy library").hue, 262)
         XCTAssertEqual(PaletteBrief.heuristic(from: "Cerulean").hue, 240)

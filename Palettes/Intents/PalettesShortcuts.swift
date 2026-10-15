@@ -47,5 +47,39 @@ struct PalettesShortcuts: AppShortcutsProvider {
             shortTitle: "Get Hex",
             systemImageName: "number"
         )
+        AppShortcut(
+            intent: FindPalettesIntent(),
+            phrases: [
+                "Find palettes in \(.applicationName)",
+                "Search my palettes in \(.applicationName)"
+            ],
+            shortTitle: "Find Palettes",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: FindColorsIntent(),
+            phrases: [
+                "Find colors in \(.applicationName)",
+                "Search my colors in \(.applicationName)"
+            ],
+            shortTitle: "Find Colors",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: SearchLibraryIntent(),
+            phrases: [
+                "Search \(.applicationName)"
+            ],
+            shortTitle: "Search Library",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: CreatePaletteIntent(),
+            phrases: [
+                "New empty palette in \(.applicationName)"
+            ],
+            shortTitle: "Create Palette",
+            systemImageName: "plus.square.on.square"
+        )
     }
 }
