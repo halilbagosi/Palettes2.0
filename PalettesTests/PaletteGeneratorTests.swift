@@ -229,6 +229,53 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertEqual(accepted, [3: "Fern", 2: "Morning Frost"])
     }
 
+    /// The names from the bug report: the model echoed our description
+    /// format. Every one of them must be rejected for its swatch, and clean
+    /// names for the same swatches must still land.
+    @available(iOS 26.0, *)
+    func testEchoedDescriptorNamesAreRejected() {
+        let hexes = ["#57BBFF", "#658BA8", "#CBAA8E", "#8B5A2B"]
+        let bad = PaletteGenerator.acceptedNames(
+            [
+                (number: 1, name: "gentle, muted aquamarine"),
+                (number: 2, name: "steady, muted cerulean"),
+                (number: 3, name: "soft, mellow tangerine"),
+                (number: 4, name: "rich, deep amber"),
+                (number: 1, name: "Aquamarine"),
+                (number: 3, name: "Tangerine"),
+                (number: 2, name: "Muted Blue"),
+            ],
+            hexes: hexes,
+            unnamed: [0, 1, 2, 3]
+        )
+        XCTAssertEqual(bad, [:])
+
+        let good = PaletteGenerator.acceptedNames(
+            [
+                (number: 1, name: "Sky Blue"),
+                (number: 2, name: "Dusty Denim"),
+                (number: 3, name: "Sand"),
+                (number: 4, name: "Walnut"),
+            ],
+            hexes: hexes,
+            unnamed: [0, 1, 2, 3]
+        )
+        XCTAssertEqual(good.count, 4)
+    }
+
+    /// The fallback that names a rejected color is a plain dictionary noun
+    /// that passes the same check, never an echoed descriptor.
+    func testFallbackNamesForTheReportedSwatchesAreCleanAndPlausible() {
+        let hexes = ["#57BBFF", "#658BA8", "#CBAA8E", "#8B5A2B"]
+        let names = ColorNamer.uniqueNames(forHexes: hexes)
+        for (hex, name) in zip(hexes, names) {
+            XCTAssertTrue(ColorVocabulary.isPlausible(name: name, forHex: hex), "\(name) for \(hex)")
+            XCTAssertFalse(name.contains(","), name)
+            XCTAssertLessThanOrEqual(ColorVocabulary.tokens(name).count, 2, name)
+            XCTAssertFalse(name.lowercased().contains("tangerine") || name.lowercased().contains("aquamarine"), name)
+        }
+    }
+
     /// A base color the builder can't use (short or alpha hex) must not
     /// count toward the palette: the result still reaches the requested size.
     @available(iOS 26.0, *)

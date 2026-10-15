@@ -9,6 +9,8 @@ import SwiftUI
 /// above the tab bar. Used on the Palettes and Colors tabs in place of a
 /// toolbar "+".
 struct FloatingAddButton: View {
+    /// Spoken by VoiceOver, and the pointer tooltip on iPad.
+    var title: String = "Add"
     var action: () -> Void
 
     var body: some View {
@@ -20,7 +22,8 @@ struct FloatingAddButton: View {
         .glassButton()
         .buttonBorderShape(.circle)
         .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 3)
-        .accessibilityLabel("Add")
+        .accessibilityLabel(title)
+        .help(title)
     }
 }
 

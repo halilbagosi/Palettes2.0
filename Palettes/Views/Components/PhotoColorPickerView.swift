@@ -11,10 +11,22 @@ struct PhotoColorPickerView: View {
     /// Seeds the preview before the user drags (e.g. the auto-extracted
     /// dominant color), so there is always a valid initial selection.
     var initialRGB: (r: Double, g: Double, b: Double)? = nil
+    /// Where the marker starts (normalized image coordinates), sampling the
+    /// color under it, ready to be dragged.
+    var initialPoint: CGPoint? = nil
+    /// Onboarding: a plain black (dark) or white (light) stage instead of the
+    /// always-dark viewer, with the photo centred in the space above the panel.
+    var adaptiveStage = false
+    /// Replaces `dismiss()` when the picker is shown as an overlay, not a cover.
+    var onClose: (() -> Void)? = nil
     let onUse: (_ rgb: (r: Double, g: Double, b: Double)) -> Void
+    /// Also called on Use, with where the color was sampled (normalized image
+    /// coordinates), or nil when the seed color was used untouched.
+    var onUseSample: ((_ rgb: (r: Double, g: Double, b: Double), _ point: CGPoint?) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var sampledPoint: CGPoint?
 
     @State private var currentRGB: (r: Double, g: Double, b: Double) = (128, 128, 128)
     @State private var currentName = ""
@@ -35,15 +47,15 @@ struct PhotoColorPickerView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geo in
-                let rect = PhotoLoupeGeometry.imageRect(imageSize: image.size, in: geo.size)
+                // The adaptive stage keeps the photo clear of the bottom panel.
+                let rect = PhotoLoupeGeometry.imageRect(
+                    imageSize: image.size,
+                    in: adaptiveStage ? CGSize(width: geo.size.width, height: max(0, geo.size.height - 130)) : geo.size)
 
                 ZStack {
-                    Color.black.ignoresSafeArea()
+                    (adaptiveStage && colorScheme == .light ? Color.white : Color.black).ignoresSafeArea()
 
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: geo.size.width, height: geo.size.height)
+                    photo(in: rect, container: geo.size)
                         .accessibilityLabel("Photo")
                         .accessibilityHint("Use the actions to pick the center or the suggested color, or double-tap and hold, then drag.")
                         .accessibilityAction(named: "Pick Color at Center") {
@@ -52,11 +64,12 @@ struct PhotoColorPickerView: View {
                             UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
                         }
                         .accessibilityActions {
-                            if let seed = initialRGB {
+                            if let seed = initialRGB, !hasSample {
                                 Button("Use Suggested Color") {
                                     currentRGB = seed
                                     hasSample = true
                                     marker = nil
+                                    sampledPoint = nil
                                     currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
                                     UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
                                 }
@@ -64,7 +77,8 @@ struct PhotoColorPickerView: View {
                         }
 
                     if let m = marker {
-                        markerView.position(m)
+                        PhotoSampleMarker(color: currentColor, dragVelocity: dragVelocity)
+                            .position(m)
                     }
 
                     VStack {
@@ -75,6 +89,9 @@ struct PhotoColorPickerView: View {
                     }
                 }
                 .contentShape(Rectangle())
+                // The first layout can be empty; place the marker once the photo has a size.
+                .onAppear { placeInitialMarker(in: rect) }
+                .onChange(of: rect.size) { _, _ in placeInitialMarker(in: rect) }
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
@@ -91,17 +108,17 @@ struct PhotoColorPickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").foregroundStyle(.white)
+                    Button { close() } label: {
+                        Label("Cancel", systemImage: "xmark").foregroundStyle(adaptiveStage ? Color.primary : .white)
                     }
-                    .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Use") {
+                    // Choosing a color, not adding one to a palette: a checkmark.
+                    SheetConfirmButton(kind: .save) {
                         onUse(currentRGB)
-                        dismiss()
+                        onUseSample?(currentRGB, sampledPoint)
+                        close()
                     }
-                    .fontWeight(.semibold)
                     .disabled(!hasSample)
                 }
             }
@@ -115,10 +132,36 @@ struct PhotoColorPickerView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(adaptiveStage ? nil : .dark)
+    }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
+
+    /// The photo, aspect-fit. On the adaptive stage it is drawn in its own rect.
+    @ViewBuilder
+    private func photo(in rect: CGRect, container: CGSize) -> some View {
+        if adaptiveStage {
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+        } else {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: container.width, height: container.height)
+        }
     }
 
     // MARK: - Sampling
+
+    private func placeInitialMarker(in rect: CGRect) {
+        guard let initialPoint, marker == nil, rect.width > 0, rect.height > 0 else { return }
+        sample(at: PhotoPinGeometry.position(of: initialPoint, in: rect), in: rect)
+        currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+    }
 
     private func sample(at location: CGPoint, in rect: CGRect) {
         let clamped = CGPoint(
@@ -127,17 +170,55 @@ struct PhotoColorPickerView: View {
         )
         marker = clamped
         let normalized = PhotoLoupeGeometry.normalizedPoint(in: rect, at: clamped)
+        sampledPoint = normalized
         let rgb = sampler?.color(at: normalized, radius: 2)
             ?? ImageColorExtractor.sampleColor(from: image, at: normalized, radius: 2)
         currentRGB = rgb
         hasSample = true
     }
 
-    // MARK: - Marker
+    // MARK: - Preview
 
-    /// A crosshair ring at the exact sample point, with a color bubble floating
-    /// above the fingertip so the finger doesn't cover the picked color.
-    private var markerView: some View {
+    private var previewPanel: some View {
+        HStack(spacing: 16) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(currentColor.gradient)
+                .frame(width: 56, height: 56)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(.white.opacity(0.3), lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(currentName.isEmpty ? "Drag on the photo" : currentName)
+                    .font(.headline)
+                    .foregroundStyle(currentName.isEmpty ? .secondary : .primary)
+                Text(currentHex)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(18)
+        .liquidGlass(.regular, in: .rect(cornerRadius: 24))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(hasSample ? "Selected color \(currentName.isEmpty ? currentHex : currentName), \(currentHex)" : "No color selected")
+    }
+}
+
+// MARK: - Marker
+
+/// A crosshair ring at the exact sample point, with a color bubble floating
+/// above the fingertip so the finger doesn't cover the picked color.
+struct PhotoSampleMarker: View {
+    let color: Color
+    /// Finger speed; the bubble squishes along the drag.
+    var dragVelocity: CGSize = .zero
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
         ZStack {
             Circle().stroke(.white, lineWidth: 2).frame(width: 20, height: 20)
             Circle().stroke(.black.opacity(0.4), lineWidth: 1).frame(width: 22, height: 22)
@@ -168,7 +249,7 @@ struct PhotoColorPickerView: View {
             // A plain (non-glass) disc of the color currently being picked,
             // sitting inside the glass so the exact color reads at a glance.
             Circle()
-                .fill(currentColor)
+                .fill(color)
                 .frame(width: 86, height: 86)
                 .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
         }
@@ -182,35 +263,6 @@ struct PhotoColorPickerView: View {
         // changes and when the finger lifts.
         .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.5), value: dragVelocity)
         .allowsHitTesting(false)
-    }
-
-    // MARK: - Preview
-
-    private var previewPanel: some View {
-        HStack(spacing: 16) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(currentColor.gradient)
-                .frame(width: 56, height: 56)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(.white.opacity(0.3), lineWidth: 1)
-                )
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(currentName.isEmpty ? "Drag on the photo" : currentName)
-                    .font(.headline)
-                    .foregroundStyle(currentName.isEmpty ? .secondary : .primary)
-                Text(currentHex)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding(18)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 24))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(hasSample ? "Selected color \(currentName.isEmpty ? currentHex : currentName), \(currentHex)" : "No color selected")
     }
 }
 

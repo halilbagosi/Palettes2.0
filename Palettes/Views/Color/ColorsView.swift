@@ -9,7 +9,6 @@ import SwiftUI
 
 struct ColorsView: View {
 
-    @State private var isCreatingColor = false
     @State private var path = NavigationPath()
     @State private var colorForNewPalette: ColorViewModel?
     @State private var colorToDelete: ColorViewModel?
@@ -25,7 +24,15 @@ struct ColorsView: View {
     @AppStorage("colorsSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("colorsOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
+    /// Filtered + sorted colours, cached so scrolling / unrelated `AppData`
+    /// publishes don't re-filter the library. nil until first computed.
+    @State private var cachedDisplayed: [ColorViewModel]?
+    /// True while a layout toggle animates, so the grid keeps cards for both
+    /// layouts mounted only for that window.
+    @State private var isMorphing = false
+    @State private var morphToken = 0
     @EnvironmentObject var appData: AppData
+    @EnvironmentObject private var router: SceneRouter
 
     struct ColorBindingWrapper: Identifiable {
         let id = UUID()
@@ -42,27 +49,61 @@ struct ColorsView: View {
 
     private var layoutBinding: Binding<ListLayout> {
         Binding(get: { layout }, set: { newValue in
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                layoutRaw = newValue.rawValue
+            // Open the morph window first so the target layout's extra cards are
+            // already mounted (with a frame) when the animated change lands.
+            beginMorphWindow()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(60))
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                    layoutRaw = newValue.rawValue
+                }
             }
         })
     }
 
     private var sortBinding: Binding<LibrarySort> {
-        Binding(get: { sort }, set: { sortRaw = $0.rawValue })
+        Binding(get: { sort }, set: { sortRaw = $0.rawValue; refreshDisplayed() })
     }
 
     private var originFilterBinding: Binding<LibraryOriginFilter> {
-        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue })
+        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue; refreshDisplayed() })
+    }
+
+    private var favoritesOnlyBinding: Binding<Bool> {
+        Binding(get: { favoritesOnly }, set: { newValue in
+            favoritesOnly = newValue
+            refreshDisplayed()
+        })
     }
 
     /// Filtered + sorted for display only; the stored array keeps creation order.
     private var displayedColors: [ColorViewModel] {
-        var items = appData.colors
+        cachedDisplayed ?? Self.displayed(from: appData.colors, favoritesOnly: favoritesOnly,
+                                          origin: originFilter, sort: sort)
+    }
+
+    static func displayed(from colors: [ColorViewModel], favoritesOnly: Bool,
+                          origin: LibraryOriginFilter, sort: LibrarySort) -> [ColorViewModel] {
+        var items = colors
         if favoritesOnly { items = items.filter(\.isFavorite) }
-        items = items.filter { originFilter.includes(isGenerated: $0.isGenerated) }
-        if sort == .newestFirst { items.reverse() }
-        return items
+        items = items.filter { origin.includes(isGenerated: $0.isGenerated) }
+        return sort.ordered(items) { HueOrder.key(forHex: $0.HEX) }
+    }
+
+    private func refreshDisplayed(from colors: [ColorViewModel]? = nil) {
+        cachedDisplayed = Self.displayed(from: colors ?? appData.colors, favoritesOnly: favoritesOnly,
+                                         origin: originFilter, sort: sort)
+    }
+
+    /// Keeps both layouts' cards mounted just long enough for the morph.
+    private func beginMorphWindow() {
+        isMorphing = true
+        morphToken += 1
+        let token = morphToken
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.0))
+            if token == morphToken { isMorphing = false }
+        }
     }
 
     private var allVisibleSelected: Bool {
@@ -97,7 +138,12 @@ struct ColorsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationTitle(isSelecting ? "\(selectedIDs.count) Selected" : "Colors")
+                .onReceive(appData.$colors) { refreshDisplayed(from: $0) }
+                .onChange(of: sortRaw) { refreshDisplayed() }
+                .onChange(of: originFilterRaw) { refreshDisplayed() }
+                .onChange(of: favoritesOnly) { refreshDisplayed() }
+                .libraryTitle("Color", count: displayedColors.count, selectedCount: isSelecting ? selectedIDs.count : nil)
+                .featureIntro(.colors)
                 .navigationDestination(for: ColorViewModel.self) { color in
                     ColorDetailView(colorItem: color)
                 }
@@ -105,8 +151,10 @@ struct ColorsView: View {
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
+                .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
+                .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
-                .sheet(isPresented: $isCreatingColor) {
+                .sheet(isPresented: $router.isCreatingColor) {
                     NewColorView()
                         .environmentObject(appData)
                         .presentationDetents([.large])
@@ -163,24 +211,25 @@ struct ColorsView: View {
         if appData.colors.isEmpty {
             PaletteEmptyView(
                 imageName: "circle.grid.cross.fill",
-                message: "You currently have no colors. Create one!",
-                actionTitle: "Create Color",
-                action: { isCreatingColor = true }
+                title: "No colors yet",
+                message: "Pick one, scan it from the world around you, or pull it from a photo.",
+                actionTitle: "Add Color",
+                action: { router.isCreatingColor = true }
             )
             .transition(.opacity)
         } else {
             libraryContent
                 .overlay(alignment: .bottomTrailing) {
                     if !isSelecting {
-                        FloatingAddButton { isCreatingColor = true }
-                            .keyboardShortcut("n", modifiers: [.command, .shift])
+                        // ⇧⌘N lives in the menu bar (PalettesCommands).
+                        FloatingAddButton(title: "New Color") { router.isCreatingColor = true }
                             .padding(20)
                     }
                 }
         }
     }
 
-    private static func gridLayout(for layout: ListLayout) -> MorphingCardGrid {
+    fileprivate static func gridLayout(for layout: ListLayout) -> MorphingCardGrid {
         switch layout {
         case .compact:
             MorphingCardGrid(minColumnWidth: 160, maxColumnWidth: 280, rowHeight: 118, spacing: 12)
@@ -193,23 +242,31 @@ struct ColorsView: View {
     private var libraryContent: some View {
         let colors = displayedColors
         if colors.isEmpty {
-            ContentUnavailableView(
-                filteredEmptyTitle,
-                systemImage: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
-                description: Text(filteredEmptyMessage)
-            )
-        } else {
-            ScrollView {
-                LazyMorphingCardGrid(
-                    items: colors,
-                    grid: Self.gridLayout(for: layout),
-                    morphTargets: [Self.gridLayout(for: layout == .compact ? .normal : .compact)]
-                ) { color in
-                    colorCard(color)
+            PaletteEmptyView(
+                imageName: originFilter == .generated ? "sparkles" : (originFilter == .created ? "plus.circle" : "star"),
+                title: filteredEmptyTitle,
+                message: filteredEmptyMessage,
+                actionTitle: "Show All Colors",
+                actionImage: "line.3.horizontal.decrease.circle",
+                compact: true
+            ) {
+                withAnimation(.spring(response: 0.3)) {
+                    favoritesOnly = false
+                    originFilterRaw = LibraryOriginFilter.all.rawValue
+                    refreshDisplayed()
                 }
-                .padding()
-                .padding(.bottom, 88)
             }
+            .frame(maxHeight: .infinity)
+        } else {
+            ColorsGrid(
+                colors: colors,
+                layout: layout,
+                isMorphing: isMorphing,
+                isSelecting: isSelecting,
+                selectedIDs: selectedIDs,
+                card: { colorCard($0) }
+            )
+            .equatable()
         }
     }
 
@@ -231,29 +288,19 @@ struct ColorsView: View {
             onView: { if !isSelecting { path.append(color) } },
             onCopy: { copyToClipboard(color.HEX, label: "Copied HEX") }
         )
+        .equatable()
         .hoverEffect(.lift)
-        .overlay(alignment: .topTrailing) {
-            if isSelecting {
-                SelectionCheckmark(isSelected: selectedIDs.contains(color.id))
-            }
-        }
-        .overlay {
-            if isSelecting {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: selectedIDs.contains(color.id) ? 3 : 0)
-            }
-        }
-        .overlay {
-            if isSelecting {
-                Color.white.opacity(0.001)
-                    .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .onTapGesture { toggleSelection(color.id) }
-            }
-        }
+        .selectableCardChrome(
+            isSelecting: isSelecting,
+            isSelected: selectedIDs.contains(color.id),
+            onToggle: { toggleSelection(color.id) }
+        )
         .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .onTapGesture {
             if !isSelecting { path.append(color) }
         }
+        // Drag the hex into another app or window.
+        .draggable(color.HEX)
         .contextMenu { colorContextMenu(color) } preview: {
             ColorMorphCard(
                 colorName: color.name,
@@ -271,6 +318,12 @@ struct ColorsView: View {
 
     @ViewBuilder
     private func colorContextMenu(_ color: ColorViewModel) -> some View {
+        Button {
+            beginSelection(with: color.id)
+        } label: {
+            Label("Select", systemImage: "checkmark.circle")
+        }
+
         Button {
             colorToEdit = ColorBindingWrapper(color: color)
         } label: {
@@ -305,7 +358,7 @@ struct ColorsView: View {
         }
 
         Button {
-            presentShare(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+            ShareSheetPresenter.present(items: ["Check out this color: \(color.name) (\(color.HEX))"])
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -322,18 +375,21 @@ struct ColorsView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if !isSelecting {
+            ToolbarItem(placement: .topBarLeading) {
+                SettingsToolbarButton()
+            }
+        }
         if !appData.colors.isEmpty {
             if isSelecting {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(allVisibleSelected ? "Deselect All" : "Select All") {
-                        toggleSelectAll()
-                    }
+                    SelectAllButton(allSelected: allVisibleSelected, action: toggleSelectAll)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         exitSelection()
                     } label: {
-                        Image(systemName: "xmark")
+                        Label("Done Selecting", systemImage: "xmark")
                     }
                     optionsMenu
                 }
@@ -349,9 +405,7 @@ struct ColorsView: View {
                 )
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Select") {
-                        withAnimation { isSelecting = true }
-                    }
+                    SelectButton { withAnimation { isSelecting = true } }
                 }
                 if #available(iOS 26.0, *) {
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -368,11 +422,11 @@ struct ColorsView: View {
             LibraryOptionsMenu(
                 layout: layoutBinding,
                 sort: sortBinding,
-                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                favoritesOnly: favoritesOnlyBinding.animation(.spring(response: 0.3)),
                 originFilter: originFilterBinding.animation(.spring(response: 0.3))
             )
         } label: {
-            Image(systemName: "ellipsis")
+            LibraryOptionsLabel()
         }
     }
 
@@ -409,6 +463,14 @@ struct ColorsView: View {
         } else {
             selectionOrder.append(contentsOf: displayedColors.map(\.id).filter { !selectedIDs.contains($0) })
             selectedIDs.formUnion(visibleIDs)
+        }
+    }
+
+    private func beginSelection(with id: UUID) {
+        withAnimation {
+            isSelecting = true
+            selectedIDs = [id]
+            selectionOrder = [id]
         }
     }
 
@@ -462,14 +524,52 @@ struct ColorsView: View {
         let selected = appData.colors.filter { selectedIDs.contains($0.id) }
         guard !selected.isEmpty else { return }
         let text = selected.map { "\($0.name) (\($0.HEX))" }.joined(separator: "\n")
-        presentShare(items: [text])
+        ShareSheetPresenter.present(items: [text])
     }
 
-    private func presentShare(items: [Any]) {
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityVC, animated: true)
+}
+
+
+// MARK: - Grid
+
+/// The scrolling card grid, split out and `Equatable` so `ColorsView` body
+/// re-runs caused by unrelated `AppData` publishes (tab changes, coach marks)
+/// don't re-evaluate it. Closures are ignored in `==`: `card` only reads state
+/// that is also a field here (`layout`, `isSelecting`, `selectedIDs`) or boxed
+/// `@State`, so equal fields render identically.
+private struct ColorsGrid<Card: View>: View, Equatable {
+    let colors: [ColorViewModel]
+    let layout: ListLayout
+    let isMorphing: Bool
+    let isSelecting: Bool
+    let selectedIDs: Set<UUID>
+    let card: (ColorViewModel) -> Card
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.layout == rhs.layout && lhs.isMorphing == rhs.isMorphing
+            && lhs.isSelecting == rhs.isSelecting && lhs.selectedIDs == rhs.selectedIDs
+            && lhs.colors.count == rhs.colors.count
+            && zip(lhs.colors, rhs.colors).allSatisfy { $0.hasSameContent(as: $1) }
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyMorphingCardGrid(
+                items: colors,
+                grid: ColorsView.gridLayout(for: layout),
+                morphTargets: isMorphing ? [ColorsView.gridLayout(for: layout == .compact ? .normal : .compact)] : [],
+                content: card
+            )
+            .padding()
+            .padding(.bottom, 88)
         }
+    }
+}
+
+private extension ColorViewModel {
+    /// `==` is identity-only; rendering depends on these fields too.
+    func hasSameContent(as other: ColorViewModel) -> Bool {
+        id == other.id && name == other.name && HEX == other.HEX && color == other.color
+            && isFavorite == other.isFavorite && isGenerated == other.isGenerated
     }
 }

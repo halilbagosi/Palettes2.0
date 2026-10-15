@@ -11,7 +11,7 @@
 
 import SwiftUI
 
-struct ColorMorphCard: View {
+struct ColorMorphCard: View, Equatable {
     let colorName: String
     let hexCode: String
     let color: Color
@@ -24,14 +24,27 @@ struct ColorMorphCard: View {
     /// Copies the HEX; wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
 
+    /// Closures are excluded: callers' closures only read state that is also
+    /// reflected in these value fields (e.g. `isSelecting`), so equal values
+    /// render and behave identically. Lets `.equatable()` skip body re-runs.
+    static func == (lhs: ColorMorphCard, rhs: ColorMorphCard) -> Bool {
+        lhs.colorName == rhs.colorName && lhs.hexCode == rhs.hexCode && lhs.color == rhs.color
+            && lhs.isCompact == rhs.isCompact && lhs.isGenerated == rhs.isGenerated
+            && lhs.isFavorite == rhs.isFavorite && lhs.isSelecting == rhs.isSelecting
+            && (lhs.onView == nil) == (rhs.onView == nil)
+            && (lhs.onCopy == nil) == (rhs.onCopy == nil)
+    }
+
     var body: some View {
         Rectangle()
             .fill(color.gradient)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .topLeading) {
-                namePill
-                    .padding(12)
-                    .opacity(isCompact ? 0 : 1)
+                if !isCompact {
+                    namePill
+                        .padding(12)
+                        .transition(.opacity)
+                }
             }
             .overlay(alignment: .topLeading) {
                 if isCompact && isFavorite && !isSelecting {
@@ -57,17 +70,19 @@ struct ColorMorphCard: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                regularBottomBar
-                    .padding(12)
-                    .opacity(isCompact ? 0 : 1)
-            }
-            .overlay(alignment: .bottomLeading) {
-                compactBar
-                    .opacity(isCompact ? 1 : 0)
+                // Only the active layout's glass bar is mounted; the layout
+                // toggle cross-fades them via the surrounding animation.
+                if isCompact {
+                    compactBar
+                        .frame(maxWidth: .infinity, alignment: .bottomLeading)
+                        .transition(.opacity)
+                } else {
+                    regularBottomBar
+                        .padding(12)
+                        .transition(.opacity)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .compositingGroup()
-            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 
     @ViewBuilder
@@ -111,7 +126,7 @@ struct ColorMorphCard: View {
 
                 Spacer(minLength: 0)
 
-                if let onView {
+                if let onView, !isSelecting {
                     Button(action: onView) {
                         Text("View")
                             .font(.subheadline.weight(.semibold))
