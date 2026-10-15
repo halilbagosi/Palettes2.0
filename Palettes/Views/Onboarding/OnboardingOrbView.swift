@@ -18,8 +18,7 @@ enum OrbWindowContent {
     case camera(OrbCameraController, AVCaptureDevice?)
     case photo(UIImage)
     case color(Color)
-    /// One blurred drop per color, drifting.
-    /// (`.color` is a still, feathered window instead.)
+    /// One blurred drop per color, drifting slowly.
     case drops([Color])
 
     /// Changes when the content swaps, so the window cross-fades with a blur bridge.
@@ -64,6 +63,7 @@ struct OnboardingOrbView: View {
 
     private var liquidColors: [Color] {
         switch content {
+        case .color(let color): [color]
         case .drops(let colors): colors
         default: []
         }
@@ -144,13 +144,7 @@ struct OnboardingOrbView: View {
                 .scaledToFill()
                 .frame(width: windowDiameter, height: windowDiameter)
                 .clipped()
-        case .color(let color):
-            // A still pane of color with blurred edges while it is being adjusted;
-            // generating turns it into drifting drops.
-            Circle()
-                .fill(color)
-                .frame(width: windowDiameter, height: windowDiameter)
-        case .drops:
+        case .color, .drops:
             // Drawn across the whole drop, outside the feathered window.
             Color.clear
         }
