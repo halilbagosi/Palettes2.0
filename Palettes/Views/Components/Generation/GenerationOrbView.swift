@@ -166,8 +166,10 @@ struct GenerationOrbView: View {
 
     // MARK: - Liquid
 
-    private func liquid(diameter: CGFloat, time t: Double, now: Date) -> some View {
-        ZStack {
+    private func liquid(diameter: CGFloat, time rawT: Double, now: Date) -> some View {
+        let tune = OrbTuning.live
+        let t = rawT * tune.dropSpeed
+        return ZStack {
             // Faint neutral swirl while the orb is still empty
             if colors.isEmpty {
                 Circle()
@@ -180,9 +182,9 @@ struct GenerationOrbView: View {
             ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
                 let bloom = bloomProgress(for: index, at: now)
                 Circle()
-                    .fill(color.opacity(0.7))
-                    .frame(width: diameter * 0.52, height: diameter * 0.52)
-                    .offset(drift(index: index, time: t, orbit: diameter * 0.28))
+                    .fill(color.opacity(tune.dropOpacity))
+                    .frame(width: diameter * tune.dropSize, height: diameter * tune.dropSize)
+                    .offset(drift(index: index, time: t, orbit: diameter * tune.dropOrbit))
                     .scaleEffect(bloom)
                     .opacity(Double(bloom))
             }
@@ -190,8 +192,8 @@ struct GenerationOrbView: View {
         .frame(width: diameter, height: diameter)
         // Anchored in the drop: the colors move and stretch with it as it's pulled.
         .followsBubble(diameter: diameter)
-        .blur(radius: diameter * 0.07)
-        .saturation(1.2)
+        .blur(radius: diameter * tune.dropBlur)
+        .saturation(tune.dropSaturation)
         .frame(width: diameter, height: diameter)
     }
 

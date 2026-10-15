@@ -58,7 +58,7 @@ struct OnboardingOrbView: View {
 
     /// Most of the drop: the ink feather fades out well inside this, so the
     /// image melts into the glass instead of stopping at a visible circle.
-    static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * 0.86 }
+    static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * CGFloat(OrbTuning.live.windowSize) }
 
     private var windowDiameter: CGFloat { Self.windowDiameter(for: diameter) }
 
@@ -112,13 +112,13 @@ struct OnboardingOrbView: View {
                     .transition(.windowSwap)
             }
             windowBody
-                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: 0.8))
+                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: CGFloat(OrbTuning.live.featherReach)))
                 .id(content.key)
                 .transition(.windowSwap)
             Circle()
                 .fill(.white)
                 .opacity(flash)
-                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: 0.8))
+                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: CGFloat(OrbTuning.live.featherReach)))
                 .allowsHitTesting(false)
         }
         .frame(width: windowDiameter, height: windowDiameter)
@@ -184,19 +184,19 @@ struct InkFeather: View {
     @Environment(\.bubbleWobble) private var wobble
 
     /// 1 at the center, easing (smootherstep) to 0 at the edge from 20% out.
-    private static let stops: [Gradient.Stop] = (0...12).map { i in
+    private static func stops(start: Double) -> [Gradient.Stop] { (0...12).map { i in
         let x = Double(i) / 12
-        let u = min(max((x - 0.2) / 0.8, 0), 1)
+        let u = min(max((x - start) / (1 - start), 0), 1)
         let fall = u * u * u * (u * (u * 6 - 15) + 10)
         return .init(color: .black.opacity(1 - fall), location: x)
-    }
+    } }
 
     var body: some View {
         // Same deformation as `BubbleShape`: an area-keeping ellipse along
         // the oval's angle, shifted with the drop's center.
         let a = 1 + wobble.oval
         Circle()
-            .fill(RadialGradient(stops: Self.stops, center: .center,
+            .fill(RadialGradient(stops: Self.stops(start: OrbTuning.live.featherStart), center: .center,
                                  startRadius: 0, endRadius: diameter / 2 * reach))
             .frame(width: diameter, height: diameter)
             .scaleEffect(x: a, y: 1 / a)
@@ -231,20 +231,21 @@ struct OrbLiquidDrops: View {
 
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { timeline in
-            let t = reduceMotion ? 0 : timeline.date.timeIntervalSince(start)
+            let tune = OrbTuning.live
+            let t = reduceMotion ? 0 : timeline.date.timeIntervalSince(start) * tune.dropSpeed
             ZStack {
                 ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
                     Circle()
-                        .fill(color.opacity(0.7))
-                        .frame(width: diameter * 0.52, height: diameter * 0.52)
-                        .offset(drift(index: index, time: t, orbit: diameter * 0.28))
+                        .fill(color.opacity(tune.dropOpacity))
+                        .frame(width: diameter * tune.dropSize, height: diameter * tune.dropSize)
+                        .offset(drift(index: index, time: t, orbit: diameter * tune.dropOrbit))
                         .transition(.scale(scale: 0.4).combined(with: .opacity))
                 }
             }
             .frame(width: diameter, height: diameter)
             .followsBubble(diameter: diameter)
-            .blur(radius: diameter * 0.07)
-            .saturation(1.2)
+            .blur(radius: diameter * tune.dropBlur)
+            .saturation(tune.dropSaturation)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: colors.count)
         }
     }
