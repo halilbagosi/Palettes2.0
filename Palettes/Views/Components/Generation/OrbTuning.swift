@@ -24,7 +24,7 @@ struct OrbTuning: Equatable {
     var releaseDamping = 0.26
     // Rim refraction
     var glassRefraction = 0.7
-    var refractionPower = 0.7
+    var refractionPower = 10.0
     // Shadow under the drop
     var shadowOpacity = 1.0
     var shadowBlur = 1.0
@@ -77,7 +77,7 @@ struct OrbDebugPanel: View {
                 }
                 Section("Rim refraction") {
                     row("Strength", \.glassRefraction, 0...1)
-                    row("Falloff power (low = wider)", \.refractionPower, 0.2...16)
+                    row("Falloff power (low = wider)", \.refractionPower, 1...16)
                 }
                 Section("Shadow") {
                     row("Opacity", \.shadowOpacity, 0...3)
