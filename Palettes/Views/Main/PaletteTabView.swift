@@ -17,8 +17,6 @@ struct PaletteTabView: View {
     /// requests to switch, which every window follows.
     @SceneStorage("selectedTab") private var selectedTab: TabValue = .palettes
     @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
-    /// DEBUG `-onboardingStart` presents onboarding regardless of the flag, once.
-    @State private var debugOnboardingFinished = false
     /// What the cover is actually bound to. It follows `showsOnboarding`, but
     /// a replay is presented a beat later: on iOS 17 a cover asked for while
     /// the Settings sheet is still finishing its dismissal is silently
@@ -26,16 +24,12 @@ struct PaletteTabView: View {
     @State private var isOnboardingPresented = false
     @State private var presentTask: Task<Void, Never>?
 
-    private var showsOnboarding: Bool {
-        OnboardingDebug.isLaunchArgument ? !debugOnboardingFinished : !didCompleteOnboarding
-    }
+    private var showsOnboarding: Bool { !didCompleteOnboarding }
 
     /// Read from the store rather than the `@AppStorage` copy, which can lag
     /// a write made elsewhere (the Settings replay resets the flag directly).
     private var onboardingWanted: Bool {
-        OnboardingDebug.isLaunchArgument
-            ? !debugOnboardingFinished
-            : !UserDefaults.standard.bool(forKey: OnboardingKeys.didComplete)
+        !UserDefaults.standard.bool(forKey: OnboardingKeys.didComplete)
     }
 
 
@@ -89,7 +83,6 @@ struct PaletteTabView: View {
                     appData.pendingOpenPaletteID = id
                 }
                 didCompleteOnboarding = true
-                debugOnboardingFinished = true
             }
             .environmentObject(appData)
             .toastOverlay()

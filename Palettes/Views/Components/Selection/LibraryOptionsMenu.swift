@@ -21,6 +21,7 @@ struct LibraryOptionsMenu: View {
     @Binding var sort: LibrarySort
     @Binding var favoritesOnly: Bool
     @Binding var originFilter: LibraryOriginFilter
+    var sorts: [LibrarySort] = LibrarySort.allCases
 
     var body: some View {
         Section {
@@ -46,8 +47,8 @@ struct LibraryOptionsMenu: View {
 
         Section("Sort By") {
             Picker("Sort By", selection: $sort) {
-                ForEach(LibrarySort.allCases) { option in
-                    Label(option.label, systemImage: option.systemImage).tag(option)
+                ForEach(sorts) { option in
+                    Label { Text(option.label) } icon: { option.icon }.tag(option)
                 }
             }
             .pickerStyle(.inline)

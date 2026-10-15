@@ -43,7 +43,8 @@ struct HueOrderTests {
         let key: (String) -> HueOrder.Key = { HueOrder.key(forHex: $0) }
         #expect(LibrarySort.oldestFirst.ordered(hexes, hueKey: key) == hexes)
         #expect(LibrarySort.newestFirst.ordered(hexes, hueKey: key) == ["#00FF00", "#FF0000", "#0000FF"])
-        #expect(LibrarySort.hue.ordered(hexes, hueKey: key) == ["#FF0000", "#00FF00", "#0000FF"])
+        #expect(LibrarySort.hueAscending.ordered(hexes, hueKey: key) == ["#FF0000", "#00FF00", "#0000FF"])
+        #expect(LibrarySort.hueDescending.ordered(hexes, hueKey: key) == ["#0000FF", "#00FF00", "#FF0000"])
     }
 
     @Test func libraryTitleCounts() {

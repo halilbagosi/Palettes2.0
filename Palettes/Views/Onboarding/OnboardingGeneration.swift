@@ -37,25 +37,19 @@ enum OnboardingPaletteMaker {
     }
 
     /// Whether onboarding takes the Apple Intelligence path on this device
-    /// (pick a color, generate around it). DEBUG can force it either way.
-    static var usesAI: Bool {
-        switch OnboardingDebug.aiOverride {
-        case .on: return true
-        case .off: return false
-        case .automatic: return deviceHasAI
-        }
-    }
+    /// (pick a color, generate around it).
+    static var usesAI: Bool { forcesAI || deviceHasAI }
 
-    /// For the DEBUG settings footer.
-    static var deviceAIStatus: String { deviceHasAI ? "available" : "unavailable" }
+    /// Set by "Replay with Apple Intelligence" in Settings: takes the Apple
+    /// Intelligence path even where the model can't run (the simulator), with
+    /// the palette built deterministically but presented as generated.
+    @MainActor static var forcesAI = false
 
     private static var deviceHasAI: Bool {
         if #available(iOS 26.0, *) { return modelAvailable }
         return false
     }
 
-    /// DEBUG forced the AI path on a device that can't run the model: the
-    /// palette is built deterministically but treated as generated.
     private static var simulatesAI: Bool { usesAI && !deviceHasAI }
 
     /// `onColors` receives the palette's colors as they arrive, for the orb.

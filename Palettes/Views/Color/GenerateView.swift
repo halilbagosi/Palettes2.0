@@ -891,12 +891,6 @@ struct GenerateView: View {
                 resultName = palette.name
                 resultPaletteColors = palette.paletteColors
                 shownResult = palette
-                #if DEBUG
-                // `-generateHold YES` keeps the waiting moment up for screenshots.
-                if UserDefaults.standard.bool(forKey: "generateHold") {
-                    try? await Task.sleep(for: .seconds(8))
-                }
-                #endif
                 // Let the last drop settle before revealing the result
                 try? await Task.sleep(for: .milliseconds(900))
                 withAnimation(.smooth(duration: 0.7)) { phase = .result }

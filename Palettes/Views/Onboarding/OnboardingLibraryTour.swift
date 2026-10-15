@@ -15,6 +15,7 @@ struct LibraryOptionsTourCard: View {
     @Binding var sort: LibrarySort
     @Binding var favoritesOnly: Bool
     @Binding var originFilter: LibraryOriginFilter
+    var sorts: [LibrarySort] = LibrarySort.allCases
     var onDone: () -> Void
 
     @AccessibilityFocusState private var titleFocused: Bool
@@ -34,7 +35,7 @@ struct LibraryOptionsTourCard: View {
             }
             segmentRow("Sort By") {
                 Picker("Sort By", selection: $sort) {
-                    ForEach(LibrarySort.allCases) { Text($0.label).tag($0) }
+                    ForEach(sorts) { Text($0.label).tag($0) }
                 }
             }
             Button(action: onDone) {
