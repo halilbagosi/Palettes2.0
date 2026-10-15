@@ -149,7 +149,7 @@ struct OnboardingExtrasView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
+                VStack(spacing: 24) {
                     header
                         .reveal(appeared, index: 0, reduceMotion: reduceMotion)
                     VStack(spacing: 14) {
@@ -215,12 +215,19 @@ struct OnboardingExtrasView: View {
 
     // MARK: - Header
 
-    /// The palette's own colors as a fanned row of drops over the closing
-    /// line, in the same rounded voice as the onboarding steps.
+    /// The app's icon, glowing in the palette's own colors, over the closing
+    /// line. The swatches sit under it as a row of drops.
     private var header: some View {
-        VStack(spacing: 16) {
-            SwatchFan(colors: palette.colors)
-                .accessibilityHidden(true)
+        VStack(spacing: 18) {
+            VStack(spacing: 14) {
+                AppIconPreview(version: .auto, size: 92, resolvesAuto: true)
+                    .shadow(color: (palette.colors.first ?? .accentColor).opacity(0.45), radius: 24, y: 10)
+                    .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+                    .scaleEffect(appeared || reduceMotion ? 1 : 0.8)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1), value: appeared)
+                SwatchFan(colors: palette.colors)
+                    .accessibilityHidden(true)
+            }
             VStack(spacing: 14) {
                 OnboardingEyebrow(title: "You\u{2019}re all set", systemImage: "checkmark.seal.fill")
                 OnboardingStepText(
@@ -230,7 +237,7 @@ struct OnboardingExtrasView: View {
                 .accessibilityFocused($titleFocused)
             }
         }
-        .padding(.top, 4)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -370,16 +377,16 @@ private struct SwatchFan: View {
 
     var body: some View {
         let shown = Array(colors.prefix(6))
-        HStack(spacing: -14) {
+        HStack(spacing: -8) {
             ForEach(Array(shown.enumerated()), id: \.offset) { index, color in
                 let middle = Double(shown.count - 1) / 2
                 let off = Double(index) - middle
                 Circle()
                     .fill(color)
-                    .frame(width: 46, height: 46)
-                    .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
+                    .frame(width: 30, height: 30)
+                    .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2.5))
                     .shadow(color: .black.opacity(0.14), radius: 6, y: 3)
-                    .offset(y: CGFloat(abs(off)) * 4)
+                    .offset(y: CGFloat(abs(off)) * 2.5)
                     .zIndex(-abs(off))
             }
         }
@@ -424,12 +431,13 @@ private struct ExtrasCard<Content: View>: View {
                     .font(.system(size: 19, weight: .semibold))
                     .symbolRenderingMode(multicolor ? .multicolor : .monochrome)
                     .foregroundStyle(multicolor ? Color.white : GenerationResultView.ink(on: tint))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 48, height: 48)
                     .background(
                         multicolor ? AnyShapeStyle(Color.black) : AnyShapeStyle(tint.gradient),
-                        in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .shadow(color: tint.opacity(0.35), radius: 8, y: 4)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
                             .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                     )
                     .accessibilityHidden(true)
@@ -447,11 +455,19 @@ private struct ExtrasCard<Content: View>: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .padding(20)
+        .background {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.regularMaterial)
+                // A breath of the tile's color from its corner.
+                RadialGradient(colors: [tint.opacity(0.22), .clear], center: .topLeading,
+                               startRadius: 0, endRadius: 190)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            }
+        }
         .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 1)
         )
         .accessibilityElement(children: .contain)
     }
