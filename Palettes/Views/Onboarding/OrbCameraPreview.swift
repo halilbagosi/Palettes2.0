@@ -36,28 +36,19 @@ nonisolated extension OnboardingCameraAccess {
     /// camera exists. Lets the UI start from the right state while the device
     /// lookup in `current()` finishes.
     static func quick() -> OnboardingCameraAccess {
-#if targetEnvironment(simulator)
-        return .unavailable
-#else
         OnboardingCameraAccess(status: AVCaptureDevice.authorizationStatus(for: .video), hasDevice: true)
-#endif
     }
 
     /// The device's current camera state. The device lookup can block, so it
-    /// runs off the main thread. The simulator has no camera, so it goes
-    /// straight to the photo/sample fallback without prompting.
+    /// runs off the main thread. The simulator uses the Mac's camera.
     static func current() async -> OnboardingCameraAccess {
-#if targetEnvironment(simulator)
-        return .unavailable
-#else
         await Task.detached(priority: .userInitiated) {
-            let hasDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
+            let hasDevice = OrbCameraEngine.captureDevice() != nil
             return OnboardingCameraAccess(
                 status: AVCaptureDevice.authorizationStatus(for: .video),
                 hasDevice: hasDevice
             )
         }.value
-#endif
     }
 }
 
@@ -243,10 +234,16 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
         }
     }
 
+    /// The back camera, or whichever camera there is (the Mac's, in the simulator).
+    static func captureDevice() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(for: .video)
+    }
+
     /// Runs on `queue`.
     private func configureIfNeeded() -> Bool {
         if isConfigured { return true }
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+        guard let device = Self.captureDevice(),
               let input = try? AVCaptureDeviceInput(device: device) else { return false }
         session.beginConfiguration()
         defer { session.commitConfiguration() }

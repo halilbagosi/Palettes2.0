@@ -38,7 +38,10 @@ struct PaletteView: View {
     // MARK: - Display state
 
     private var layout: ListLayout { ListLayout(rawValue: layoutRaw) ?? .normal }
-    private var sort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .newestFirst }
+    /// Hue order isn't offered here; a stored one falls back to newest first.
+    private var sort: LibrarySort {
+        LibrarySort(rawValue: sortRaw).flatMap { LibrarySort.paletteCases.contains($0) ? $0 : nil } ?? .newestFirst
+    }
     private var originFilter: LibraryOriginFilter {
         LibraryOriginFilter(rawValue: originFilterRaw) ?? .all
     }
@@ -153,6 +156,7 @@ struct PaletteView: View {
                             sort: sortBinding,
                             favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
                             originFilter: originFilterBinding.animation(.spring(response: 0.3)),
+                            sorts: LibrarySort.paletteCases,
                             onDone: endOptionsTour
                         )
                         .padding(.horizontal, 16)
@@ -452,7 +456,8 @@ struct PaletteView: View {
                 layout: layoutBinding,
                 sort: sortBinding,
                 favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
-                originFilter: originFilterBinding.animation(.spring(response: 0.3))
+                originFilter: originFilterBinding.animation(.spring(response: 0.3)),
+                sorts: LibrarySort.paletteCases
             )
         } label: {
             LibraryOptionsLabel()

@@ -3,6 +3,8 @@ import SwiftUI
 
 @main
 struct MyApp: App {
+    @AppStorage(AccentChoice.storageKey) private var accentStored = AccentChoice.default.rawValue
+
     init() {
         // Exports are deleted after each share; this catches any left behind
         // by a crash or a kill mid-share.
@@ -16,6 +18,7 @@ struct MyApp: App {
         WindowGroup(id: PalettesScene.libraryID) {
            PaletteTabView()
                 .toastOverlay()
+                .tint(AccentChoice(stored: accentStored).color)
         }
         .commands { PalettesCommands() }
     }

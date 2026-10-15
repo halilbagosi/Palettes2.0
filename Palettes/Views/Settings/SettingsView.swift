@@ -11,17 +11,15 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
+    @ObservedObject private var subscription = SubscriptionStatus.shared
     #if DEBUG
-    @State private var debugStart = "pull"
-    @AppStorage(OnboardingDebug.slowMoToggleKey) private var debugSlowMo = false
-    @AppStorage(OnboardingDebug.aiOverrideKey) private var debugAI = OnboardingDebug.AIOverride.automatic.rawValue
     @AppStorage(SubscriptionStatus.debugOverrideKey) private var debugPlan = ""
     #endif
-    @ObservedObject private var subscription = SubscriptionStatus.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
+    @State private var showCustomize = false
 
     private var isSignedInToICloud: Bool {
         FileManager.default.ubiquityIdentityToken != nil
@@ -48,15 +46,6 @@ struct SettingsView: View {
 
     private var libraryIsEmpty: Bool {
         appData.palettes.isEmpty && appData.colors.isEmpty
-    }
-
-    /// The most recent palette's colors stand in for an app icon in the
-    /// header, so Settings wears the user's own work; a spectrum until then.
-    private var headerColors: [Color] {
-        if let palette = appData.palettes.last, palette.colors.count >= 2 {
-            return Array(palette.colors.prefix(5))
-        }
-        return [0.0, 0.12, 0.3, 0.55, 0.75].map { Color(hue: $0, saturation: 0.65, brightness: 0.92) }
     }
 
     var body: some View {
@@ -127,6 +116,18 @@ struct SettingsView: View {
                             tint: .purple
                         )
                     }
+                    if AppleIntelligence.isDeviceSupported {
+                        Button {
+                            replayOnboarding(withAppleIntelligence: true)
+                        } label: {
+                            SettingsRowLabel(
+                                title: "Replay with Apple Intelligence",
+                                subtitle: "Pick a color and generate a palette around it",
+                                systemImage: "wand.and.stars",
+                                tint: .pink
+                            )
+                        }
+                    }
                     Link(destination: AppLinks.supportEmailURL) {
                         SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill", tint: .green, accessory: .external)
                     }
@@ -163,13 +164,6 @@ struct SettingsView: View {
 
                 #if DEBUG
                 Section {
-                    Picker("Start at", selection: $debugStart) {
-                        ForEach(OnboardingDebug.stepNames, id: \.self) { Text($0.capitalized).tag($0) }
-                    }
-                    Toggle("Slow motion (0.25×)", isOn: $debugSlowMo)
-                    Picker("Apple Intelligence", selection: $debugAI) {
-                        ForEach(OnboardingDebug.AIOverride.allCases) { Text($0.label).tag($0.rawValue) }
-                    }
                     Picker("Plan", selection: $debugPlan) {
                         Text("Automatic").tag("")
                         ForEach(AppPlan.allCases) { Text($0.title).tag($0.rawValue) }
@@ -177,31 +171,10 @@ struct SettingsView: View {
                     .onChange(of: debugPlan) { _, _ in
                         Task { await subscription.refresh() }
                     }
-                    Button {
-                        OnboardingDebug.requestFromSettings(start: debugStart)
-                        // Same path as Replay Onboarding: the presenter restarts it in onDismiss.
-                        replayOnboarding()
-                    } label: {
-                        Label("Try Onboarding", systemImage: "play.circle")
-                    }
-                    Button {
-                        debugAI = OnboardingDebug.AIOverride.on.rawValue
-                        OnboardingDebug.requestFromSettings(start: "pull")
-                        replayOnboarding()
-                    } label: {
-                        Label("Replay with Apple Intelligence", systemImage: "sparkles")
-                    }
-                    Button {
-                        debugAI = OnboardingDebug.AIOverride.off.rawValue
-                        OnboardingDebug.requestFromSettings(start: "pull")
-                        replayOnboarding()
-                    } label: {
-                        Label("Replay without Apple Intelligence", systemImage: "photo")
-                    }
                 } header: {
                     Text("Debug")
                 } footer: {
-                    Text("Plan overrides the Free/Premium tag. Starts onboarding at the chosen step with the sample image. Completing it behaves like a normal replay. Apple Intelligence picks the path: On picks a color and generates around it (simulated where the model can't run), Off makes the palette straight from the photo. This device: \(OnboardingPaletteMaker.deviceAIStatus).")
+                    Text("Plan overrides the Free/Premium tag.")
                 }
                 #endif
             }
@@ -212,6 +185,10 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showCustomize) {
+                CustomizeAppearanceView()
+                    .presentationDetents([.medium])
             }
             .alert("Couldn't export your library.", isPresented: $showExportError) {
                 Button("OK", role: .cancel) {}
@@ -226,21 +203,8 @@ struct SettingsView: View {
 
     private var header: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 0) {
-                ForEach(headerColors.indices, id: \.self) { index in
-                    Rectangle()
-                        .fill(headerColors[index])
-                        .padding(.horizontal, -0.5)
-                }
-            }
-            .frame(width: 76, height: 76)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
-            .accessibilityHidden(true)
+            AppIconPreview(version: AppIconVersion.current, size: 88)
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
 
             VStack(spacing: 2) {
                 HStack(spacing: 8) {
@@ -255,10 +219,15 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+
+            Button("Customize", systemImage: "paintbrush") {
+                showCustomize = true
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
     }
 
     private func plural(_ count: Int, _ noun: String) -> String {
@@ -275,9 +244,9 @@ struct SettingsView: View {
         }
     }
 
-    private func replayOnboarding() {
+    private func replayOnboarding(withAppleIntelligence: Bool = false) {
         // The presenter restarts onboarding in the sheet's onDismiss.
-        replay.request()
+        replay.request(withAppleIntelligence: withAppleIntelligence)
         dismiss()
     }
 

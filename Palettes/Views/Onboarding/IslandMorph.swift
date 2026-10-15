@@ -348,14 +348,7 @@ final class IslandMorphController: ObservableObject {
         detach.animate(to: 1, response: 0.6, dampingFraction: 1)
     }
 
-    /// Debug jump: already landed.
-    func landImmediately() {
-        mode = .fade
-        detach.jump(to: 1)
-        phase = .landed
-    }
-
-    /// DEBUG: holds the blob at a fixed stretch.
+    /// Holds the blob at a fixed stretch (a test seam).
     func debugHold(pull d: Double) {
         phase = .dragging
         pull.jump(to: d)

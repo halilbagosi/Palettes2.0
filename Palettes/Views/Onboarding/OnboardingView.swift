@@ -34,14 +34,10 @@ struct OnboardingView: View {
     private var skipVisible: Bool { landed || model.step == .pull }
 
     init(onFinish: @escaping (OnboardingFinishReason) -> Void) {
-        let start = OnboardingDebug.start
-        let model = OnboardingModel(startingAt: start.step, onFinish: onFinish)
-        start.prepare(model)
+        let model = OnboardingModel(onFinish: onFinish)
         _model = StateObject(wrappedValue: model)
         _flow = StateObject(wrappedValue: OnboardingCameraFlow(model: model))
         _interim = StateObject(wrappedValue: OnboardingInterimFlow(model: model))
-        _landed = State(initialValue: start.step != .pull)
-        _ambient = State(initialValue: start.step != .pull ? 1 : 0)
     }
 
     // MARK: Layout
@@ -161,15 +157,7 @@ struct OnboardingView: View {
     }
 
     var body: some View {
-        #if DEBUG
-        if OnboardingDebug.glassLab, #available(iOS 26.0, *) {
-            OnboardingGlassLab()
-        } else {
-            onboardingBody
-        }
-        #else
         onboardingBody
-        #endif
     }
 
     private var onboardingBody: some View {
@@ -259,21 +247,8 @@ struct OnboardingView: View {
                 model.advance()
             }
             morph.onLand = { withAnimation(.easeOut(duration: 0.4)) { landed = true } }
-            // A Settings-triggered debug start is single-use.
-            OnboardingDebug.clearSettingsRequest()
-            if landed { morph.landImmediately() }
-            if let hold = OnboardingDebug.pullHold { morph.debugHold(pull: hold) }
             if model.step == .camera { flow.refreshAccess() }
-            if model.step == .adjust || model.step == .generate { interim.beginAdjust() }
-            if model.step == .generate { interim.startGeneration(appData: appData, reduceMotion: reduceMotion) }
             flow.updateSession()
-            if OnboardingDebug.autoBegin, model.step == .pull {
-                Task {
-                    try? await Task.sleep(for: .seconds(1.5))
-                    morph.useFadeMode()
-                    morph.beginFade()
-                }
-            }
         }
         .onChange(of: model.step) { _, step in
             if step == .camera { flow.refreshAccess() }

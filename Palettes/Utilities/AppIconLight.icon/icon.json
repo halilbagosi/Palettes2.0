@@ -1,0 +1,54 @@
+{
+  "features": [
+    "refractivity",
+    "specular-location"
+  ],
+  "fill": {
+    "solid": "srgb:0.95686,0.94510,0.97255,1.00000"
+  },
+  "groups": [
+    {
+      "blur-material": 0.5,
+      "hidden": false,
+      "layers": [
+        {
+          "blend-mode": "multiply",
+          "image-name": "circle-coral.svg",
+          "name": "circle-coral"
+        },
+        {
+          "blend-mode": "multiply",
+          "image-name": "circle-amber.svg",
+          "name": "circle-amber"
+        },
+        {
+          "blend-mode": "multiply",
+          "image-name": "circle-violet.svg",
+          "name": "circle-violet"
+        }
+      ],
+      "lighting": "individual",
+      "opacity": 1,
+      "refractivity": {
+        "depth": 0.0981640625,
+        "enabled": true,
+        "strength": 0.1001171875
+      },
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.6
+      },
+      "specular": "inside",
+      "translucency": {
+        "enabled": true,
+        "value": 0.4
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

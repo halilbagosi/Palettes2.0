@@ -13,7 +13,10 @@ import Combine
 final class OnboardingReplayCoordinator: ObservableObject {
     private(set) var isRequested = false
 
-    func request() {
+    /// `withAppleIntelligence` replays down the Apple Intelligence path even
+    /// where the model can't run.
+    func request(withAppleIntelligence: Bool = false) {
+        OnboardingPaletteMaker.forcesAI = withAppleIntelligence
         isRequested = true
     }
 
