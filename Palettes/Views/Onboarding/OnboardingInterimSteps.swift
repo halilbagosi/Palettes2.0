@@ -307,7 +307,7 @@ private struct GenerateInterimBody: View {
 
     var body: some View {
         let made = self.made
-        // Kept short (no eyebrow, smaller swatches) so the row sits well clear
+        // Kept short (smaller swatches) so the row sits well clear
         // of the pinned "See my palette" button.
         VStack(spacing: 18) {
             ZStack {
