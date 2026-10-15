@@ -34,40 +34,122 @@ struct OnboardingView: View {
     private var skipVisible: Bool { landed || model.step == .pull }
 
     init(onFinish: @escaping (OnboardingFinishReason) -> Void) {
-        let start = OnboardingDebug.start
-        let model = OnboardingModel(startingAt: start.step, onFinish: onFinish)
-        start.prepare(model)
+        let model = OnboardingModel(onFinish: onFinish)
         _model = StateObject(wrappedValue: model)
         _flow = StateObject(wrappedValue: OnboardingCameraFlow(model: model))
         _interim = StateObject(wrappedValue: OnboardingInterimFlow(model: model))
-        _landed = State(initialValue: start.step != .pull)
-        _ambient = State(initialValue: start.step != .pull ? 1 : 0)
     }
 
     // MARK: Layout
 
     private struct Layout {
         let full: CGSize
-        let topInset: CGFloat
+        /// The safe area's insets from `full`.
+        let insets: EdgeInsets
         let island: IslandGeometry
         let compact: Bool
         /// The step needs more room below the orb (the sliders): the orb rises.
         var roomy = false
+        /// iPhone Duo half open, in `full`'s coordinates. The orb takes one
+        /// side of the crease and the text and buttons the other.
+        var fold: Fold? = nil
+
+        var topInset: CGFloat { insets.top }
+
+        /// Bars on one side only (iPhone Duo puts the status bar and controls
+        /// along an edge): the safe area is off centre.
+        var hasSideControls: Bool { abs(insets.leading - insets.trailing) > 8 }
+
+        /// iPhone Duo's outer display: a small screen with its bars on one
+        /// side. There the orb centres on the safe area, with the text, and is
+        /// a little smaller. Bigger screens keep everything centred on the
+        /// screen itself.
+        var centersOnSafeArea: Bool {
+            hasSideControls && min(full.width, full.height) < 600
+        }
+
+        /// The orb's and the text's shared centre line.
+        var centerX: CGFloat {
+            guard centersOnSafeArea else { return full.width / 2 }
+            return insets.leading + (full.width - insets.leading - insets.trailing) / 2
+        }
+
+        /// Padding that moves the text's centre from the safe area's to the
+        /// screen's, matching the orb, when bars sit on one side.
+        var textBalance: EdgeInsets {
+            guard !centersOnSafeArea else { return EdgeInsets() }
+            return EdgeInsets(top: 0, leading: max(0, insets.trailing - insets.leading),
+                              bottom: 0, trailing: max(0, insets.leading - insets.trailing))
+        }
+
+        private var baseOrbDiameter: CGFloat {
+            if compact { return min(240, full.width * 0.62) }
+            let phone = min(310, full.width * 0.76)
+            // iPad and iPhone Duo: grows with the screen, leaving room under it for the text.
+            guard full.width >= 600 else { return phone }
+            let shortSide = min(full.width, full.height)
+            return max(phone, min(460, shortSide * 0.5, full.height * 0.4))
+        }
+
+        /// A large screen in landscape (iPhone Duo's inner display fully open,
+        /// iPad): short for its width, so the orb gives way to the copy.
+        private var isWideLandscape: Bool { !compact && full.width > full.height }
+
+        /// Room the step needs under the orb: the gap, the copy (title,
+        /// subtitle and the step's body, like the generate step's swatches),
+        /// the pinned buttons and the bottom inset.
+        private var heightBelowOrb: CGFloat { 28 + 240 + 114 + insets.bottom }
+
+        /// The lowest the orb's centre may sit with everything under it fitting.
+        private var lowestCenterY: CGFloat { full.height - heightBelowOrb - orbDiameter / 2 }
 
         var orbDiameter: CGFloat {
-            compact ? min(240, full.width * 0.62) : min(310, full.width * 0.76)
+            var base = baseOrbDiameter * (centersOnSafeArea ? 0.85 : 1)
+            if fold == nil, isWideLandscape {
+                base = max(140, min(base, full.height - skipBottom - 12 - heightBelowOrb))
+            }
+            guard let fold else { return base }
+            if fold.isVertical {
+                let side = fold.frame.minX - insets.leading
+                let height = full.height - insets.top - insets.bottom
+                return max(120, min(base, side * 0.7, height * 0.62))
+            }
+            let above = fold.frame.minY - skipBottom - 12
+            return max(120, min(base, above * 0.78, full.width * 0.6))
         }
         /// Skip's pill: 6 below the top safe area, 30 tall.
         var skipBottom: CGFloat { topInset + 6 + 30 }
         var restCenter: CGPoint {
+            if let fold {
+                if fold.isVertical {
+                    // Centred in the side before the crease; the text takes the other.
+                    let x = (insets.leading + fold.frame.minX) / 2
+                    let y = insets.top + (full.height - insets.top - insets.bottom) / 2
+                    return CGPoint(x: x, y: y)
+                }
+                // Centred above the crease, below Skip.
+                return CGPoint(x: centerX, y: (skipBottom + 12 + fold.frame.minY) / 2)
+            }
             // 38% of the height; short screens keep the orb higher to leave room for the text.
             let highest = skipBottom + 12 + orbDiameter / 2
-            let y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
+            var y = max(full.height * (full.height < 700 ? 0.34 : 0.38), highest)
+            // Wide and short: high enough that the copy clears the buttons.
+            if isWideLandscape { y = max(highest, min(y, lowestCenterY)) }
             // Roomy: up to 64 pt higher, stopping short of Skip.
-            return CGPoint(x: full.width / 2, y: roomy ? max(highest, y - 64) : y)
+            return CGPoint(x: centerX, y: roomy ? max(highest, y - 64) : y)
         }
-        /// Safe-area-space top of the text region, under the orb.
-        var contentTop: CGFloat { restCenter.y + orbDiameter / 2 + 28 - topInset }
+        /// Safe-area-space top of the text region, under the orb (or, folded
+        /// horizontally, under the crease).
+        var contentTop: CGFloat {
+            if let fold, !fold.isVertical { return fold.frame.maxY + 16 - topInset }
+            return restCenter.y + orbDiameter / 2 + 28 - topInset
+        }
+        /// Folded vertically, the width the text and buttons keep to: the
+        /// side after the crease, up to the safe area's trailing edge.
+        var trailingColumnWidth: CGFloat? {
+            guard let fold, fold.isVertical else { return nil }
+            return max(0, full.width - insets.trailing - fold.frame.maxX)
+        }
         var placement: IslandMorphController.Placement {
             .init(island: island, screenWidth: full.width, restCenter: restCenter, restDiameter: orbDiameter)
         }
@@ -75,15 +157,7 @@ struct OnboardingView: View {
     }
 
     var body: some View {
-        #if DEBUG
-        if OnboardingDebug.glassLab, #available(iOS 26.0, *) {
-            OnboardingGlassLab()
-        } else {
-            onboardingBody
-        }
-        #else
         onboardingBody
-        #endif
     }
 
     private var onboardingBody: some View {
@@ -93,14 +167,15 @@ struct OnboardingView: View {
                               height: geo.size.height + insets.top + insets.bottom)
             let layout = Layout(
                 full: full,
-                topInset: insets.top,
+                insets: insets,
                 island: .make(topInset: insets.top, screenSize: full),
                 compact: dynamicTypeSize.isAccessibilitySize || full.height < 700,
                 // The generate step's name and swatches need the room too; the
                 // orb stays where adjust left it.
-                roomy: model.step == .adjust || model.step == .generate
+                roomy: model.step == .adjust || model.step == .generate,
+                fold: geo.activeFold?.dividing(geo.size)?.offsetBy(dx: insets.leading, dy: insets.top)
             )
-            // Reduce Motion, landscape and island-less phones fade the orb in at rest.
+            // Reduce Motion fades the orb in at rest.
             let travels = layout.island.hasMorph && !reduceMotion
             let _ = morph.placement = layout.placement
 
@@ -162,7 +237,7 @@ struct OnboardingView: View {
             }
             .animation(.easeOut(duration: 0.3), value: model.step == .pull)
             .onChange(of: travels, initial: true) { _, travels in
-                if !travels { morph.useFadeMode() }
+                if travels { morph.useMorphMode() } else { morph.useFadeMode() }
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: flow.scanCount)
@@ -172,21 +247,8 @@ struct OnboardingView: View {
                 model.advance()
             }
             morph.onLand = { withAnimation(.easeOut(duration: 0.4)) { landed = true } }
-            // A Settings-triggered debug start is single-use.
-            OnboardingDebug.clearSettingsRequest()
-            if landed { morph.landImmediately() }
-            if let hold = OnboardingDebug.pullHold { morph.debugHold(pull: hold) }
             if model.step == .camera { flow.refreshAccess() }
-            if model.step == .adjust || model.step == .generate { interim.beginAdjust() }
-            if model.step == .generate { interim.startGeneration(appData: appData, reduceMotion: reduceMotion) }
             flow.updateSession()
-            if OnboardingDebug.autoBegin, model.step == .pull {
-                Task {
-                    try? await Task.sleep(for: .seconds(1.5))
-                    morph.useFadeMode()
-                    morph.beginFade()
-                }
-            }
         }
         .onChange(of: model.step) { _, step in
             if step == .camera { flow.refreshAccess() }
@@ -216,8 +278,11 @@ struct OnboardingView: View {
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { morph.dragChanged(translation: $0.translation.height, time: $0.time.timeIntervalSinceReferenceDate) }
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged {
+                        morph.dragChanged(translation: $0.translation, location: $0.location,
+                                          time: $0.time.timeIntervalSinceReferenceDate)
+                    }
                     .onEnded { morph.dragEnded(time: $0.time.timeIntervalSinceReferenceDate) }
             )
     }
@@ -352,9 +417,43 @@ struct OnboardingView: View {
         landed || (model.step == .pull && !travels)
     }
 
+    @ViewBuilder
     private func stepLayer(layout: Layout, content: OnboardingStepContent) -> some View {
         let shown = controlsShown(travels: layout.island.hasMorph && !reduceMotion)
-        return VStack(spacing: 0) {
+        if let columnWidth = layout.trailingColumnWidth {
+            sideStepLayer(columnWidth: columnWidth, content: content, shown: shown)
+        } else {
+            stackedStepLayer(layout: layout, content: content, shown: shown)
+        }
+    }
+
+    /// iPhone Duo half open in landscape: the text and buttons, centred
+    /// together, in the side after the crease; the orb has the side before it.
+    private func sideStepLayer(columnWidth: CGFloat, content: OnboardingStepContent, shown: Bool) -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            GeometryReader { region in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        textBlock(content)
+                            .padding(.horizontal, 24)
+                        actionBar(content: content)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: region.size.height)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            .frame(width: columnWidth)
+        }
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .animation(.easeOut(duration: 0.4), value: shown)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    }
+
+    /// The orb above, the text under it and the buttons pinned at the bottom.
+    private func stackedStepLayer(layout: Layout, content: OnboardingStepContent, shown: Bool) -> some View {
+        VStack(spacing: 0) {
             Color.clear.frame(height: layout.contentTop)
             GeometryReader { region in
                 ScrollView {
@@ -367,8 +466,11 @@ struct OnboardingView: View {
             .opacity(shown ? 1 : 0)
             .animation(.easeOut(duration: 0.4), value: shown)
         }
+        // Centred on the same line as the orb.
+        .padding(layout.textBalance)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             actionBar(content: content)
+                .padding(layout.textBalance)
                 .opacity(shown ? 1 : 0)
                 .allowsHitTesting(shown)
                 .animation(.easeOut(duration: 0.4), value: shown)

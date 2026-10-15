@@ -166,7 +166,7 @@ final class SpringValue: ObservableObject {
     }
 
     fileprivate func frame(at time: CFTimeInterval) {
-        let dt = min(time - lastFrame, 1.0 / 20.0) * OnboardingDebug.timeScale
+        let dt = min(time - lastFrame, 1.0 / 20.0)
         lastFrame = time
         advance(by: dt)
     }

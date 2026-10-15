@@ -10,11 +10,15 @@ class ToastManager: ObservableObject {
     @Published var icon: String = "checkmark.circle.fill"
     @Published var isShowing: Bool = false
     @Published var undoAction: (() -> Void)?
+    /// Goes up when a toast is shown again while it's still up (copying the
+    /// same value twice), so the pill can bounce instead of sitting still.
+    @Published var repeatCount = 0
 
     private var hideWork: DispatchWorkItem?
 
     func show(_ message: String, icon: String = "doc.on.doc.fill", undo: (() -> Void)? = nil) {
         hideWork?.cancel()
+        if isShowing { repeatCount += 1 }
         self.message = message
         self.icon = icon
         self.undoAction = undo
@@ -34,6 +38,17 @@ class ToastManager: ObservableObject {
         // under VoiceOver so Undo is reachable.
         let delay: Double = undo == nil ? 1.8 : (UIAccessibility.isVoiceOverRunning ? 8.0 : 4.0)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Hides a toast that offers Undo and drops its action, for when what it
+    /// would act on is gone. Any other toast is left alone.
+    func dismissUndo() {
+        guard undoAction != nil else { return }
+        undoAction = nil
+        hideWork?.cancel()
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.25)) {
+            isShowing = false
+        }
     }
 
     func performUndo() {
@@ -60,6 +75,7 @@ struct ToastOverlay: ViewModifier {
                         Image(systemName: manager.icon)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.primary)
+                            .symbolEffect(.bounce, value: manager.repeatCount)
 
                         Text(manager.message)
                             .font(.system(size: 14, weight: .semibold))
@@ -78,6 +94,13 @@ struct ToastOverlay: ViewModifier {
                     .padding(.vertical, 12)
                     .liquidGlass(.regular, in: .capsule)
                     .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+                    // Shown again while up: a quick pop, so the second copy registers.
+                    .keyframeAnimator(initialValue: 1.0, trigger: manager.repeatCount) { pill, scale in
+                        pill.scaleEffect(reduceMotion ? 1 : scale)
+                    } keyframes: { _ in
+                        SpringKeyframe(1.12, duration: 0.12, spring: .snappy)
+                        SpringKeyframe(1.0, duration: 0.4, spring: .bouncy)
+                    }
                     .padding(.top, 8)
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     .zIndex(999)

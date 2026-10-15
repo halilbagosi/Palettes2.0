@@ -36,28 +36,19 @@ nonisolated extension OnboardingCameraAccess {
     /// camera exists. Lets the UI start from the right state while the device
     /// lookup in `current()` finishes.
     static func quick() -> OnboardingCameraAccess {
-#if targetEnvironment(simulator)
-        return .unavailable
-#else
         OnboardingCameraAccess(status: AVCaptureDevice.authorizationStatus(for: .video), hasDevice: true)
-#endif
     }
 
     /// The device's current camera state. The device lookup can block, so it
-    /// runs off the main thread. The simulator has no camera, so it goes
-    /// straight to the photo/sample fallback without prompting.
+    /// runs off the main thread. The simulator uses the Mac's camera.
     static func current() async -> OnboardingCameraAccess {
-#if targetEnvironment(simulator)
-        return .unavailable
-#else
         await Task.detached(priority: .userInitiated) {
-            let hasDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
+            let hasDevice = OrbCameraEngine.captureDevice() != nil
             return OnboardingCameraAccess(
                 status: AVCaptureDevice.authorizationStatus(for: .video),
                 hasDevice: hasDevice
             )
         }.value
-#endif
     }
 }
 
@@ -243,10 +234,16 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
         }
     }
 
+    /// The back camera, or whichever camera there is (the Mac's, in the simulator).
+    static func captureDevice() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(for: .video)
+    }
+
     /// Runs on `queue`.
     private func configureIfNeeded() -> Bool {
         if isConfigured { return true }
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+        guard let device = Self.captureDevice(),
               let input = try? AVCaptureDeviceInput(device: device) else { return false }
         session.beginConfiguration()
         defer { session.commitConfiguration() }
@@ -451,19 +448,28 @@ enum OnboardingSampleImage {
         format.scale = 1
         return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
             let cg = ctx.cgContext
-            let sky = [UIColor(red: 0.98, green: 0.62, blue: 0.45, alpha: 1).cgColor,
-                       UIColor(red: 0.86, green: 0.45, blue: 0.62, alpha: 1).cgColor,
-                       UIColor(red: 0.35, green: 0.33, blue: 0.62, alpha: 1).cgColor]
+            let w = size.width, h = size.height
+            func c(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> UIColor { UIColor(red: r, green: g, blue: b, alpha: 1) }
+            // Sky: soft blue down to a warm peach, no single dominant hue.
+            let sky = [c(0.36, 0.58, 0.86).cgColor, c(0.70, 0.78, 0.92).cgColor, c(0.97, 0.78, 0.68).cgColor]
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                         colors: sky as CFArray, locations: [0, 0.55, 1]) {
-                cg.drawLinearGradient(gradient, start: .zero,
-                                      end: CGPoint(x: 0, y: size.height), options: [])
+                                         colors: sky as CFArray, locations: [0, 0.5, 1]) {
+                cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: h * 0.62), options: [])
             }
-            UIColor(red: 1, green: 0.88, blue: 0.55, alpha: 1).setFill()
-            cg.fillEllipse(in: CGRect(x: size.width * 0.52, y: size.height * 0.2,
-                                      width: size.width * 0.3, height: size.width * 0.3))
-            UIColor(red: 0.16, green: 0.24, blue: 0.36, alpha: 1).setFill()
-            cg.fill(CGRect(x: 0, y: size.height * 0.78, width: size.width, height: size.height * 0.22))
+            // A small pale sun, kept well away from a large yellow area.
+            c(1, 0.96, 0.86).setFill()
+            cg.fillEllipse(in: CGRect(x: w * 0.66, y: h * 0.14, width: w * 0.12, height: w * 0.12))
+            // Distant hills, meadow, water and a red boat: a varied palette.
+            c(0.42, 0.52, 0.66).setFill()
+            cg.fillEllipse(in: CGRect(x: -w * 0.1, y: h * 0.50, width: w * 0.7, height: h * 0.3))
+            c(0.30, 0.62, 0.45).setFill()
+            cg.fillEllipse(in: CGRect(x: w * 0.35, y: h * 0.54, width: w * 0.85, height: h * 0.32))
+            c(0.22, 0.45, 0.30).setFill()
+            cg.fill(CGRect(x: 0, y: h * 0.70, width: w, height: h * 0.10))
+            c(0.15, 0.50, 0.62).setFill()
+            cg.fill(CGRect(x: 0, y: h * 0.80, width: w, height: h * 0.20))
+            c(0.85, 0.25, 0.22).setFill()
+            cg.fill(CGRect(x: w * 0.22, y: h * 0.86, width: w * 0.16, height: h * 0.05))
         }
     }
 }

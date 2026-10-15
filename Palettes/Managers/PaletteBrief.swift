@@ -17,6 +17,9 @@ struct PaletteBrief: Equatable {
     var tone: PaletteTone
     /// A harmonic scheme the vibe calls for. Never `.auto` or an interface mode.
     var scheme: HarmonyScheme?
+    /// How many colors the vibe calls for (4...8), when the model suggests one.
+    /// nil from the heuristic, which cannot judge it.
+    var suggestedSize: Int?
 
     static let neutral = PaletteBrief(hue: nil, tone: .balanced, scheme: nil)
 
@@ -51,6 +54,12 @@ struct PaletteBrief: Equatable {
             scheme = .triadic
         }
         return PaletteBrief(hue: hue, tone: tone, scheme: scheme)
+    }
+
+    /// The final palette size: an explicit request wins, else the model's
+    /// suggestion, else 6. Never below the number of locked colors; 2...12.
+    static func resolvedSize(requested: Int?, locked: Int, suggested: Int?) -> Int {
+        min(12, max(2, max(locked, requested ?? suggested ?? 6)))
     }
 
     /// The OKLCH hue of a color word such as "terracotta" or "navy blue":

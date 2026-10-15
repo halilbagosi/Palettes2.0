@@ -69,9 +69,14 @@ struct OnboardingOrbView: View {
         }
     }
     private var isTappable: Bool { onWindowTap != nil }
+    private var showsCamera: Bool {
+        if case .camera = content { return true }
+        return false
+    }
 
     var body: some View {
-        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes, pullable: true, glow: glow) {
+        LiquidBubble(diameter: diameter, energy: energy, kick: kick + pokes, pullable: true, glow: glow,
+                     distortsContent: !showsCamera) {
             ZStack {
                 window
                 // Colors float in the whole drop, as in the generate orb.
@@ -231,6 +236,7 @@ struct OrbLiquidDrops: View {
                 }
             }
             .frame(width: diameter, height: diameter)
+            .followsBubble(diameter: diameter)
             .blur(radius: diameter * 0.07)
             .saturation(1.2)
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: colors.count)

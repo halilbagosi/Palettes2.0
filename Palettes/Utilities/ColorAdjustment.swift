@@ -1,12 +1,15 @@
 import SwiftUI
 
-/// Shared temperature/saturation/brightness adjustment math used by the
+/// Shared hue/temperature/saturation/brightness adjustment math used by the
 /// scan flows and the color edit sheet. All slider values are 0…1 with 0.5 neutral.
 enum ColorAdjustment {
 
-    /// Applies temperature, saturation and brightness offsets to a base RGB (0–255) color.
+    /// Applies temperature, hue, saturation and brightness offsets to a base
+    /// RGB (0–255) color. Hue turns the color around the wheel, by up to half
+    /// a turn either way.
     static func apply(
         baseR: Double, baseG: Double, baseB: Double,
+        hue: Double = 0.5,
         temperature: Double, saturation: Double, brightness: Double
     ) -> (r: Double, g: Double, b: Double) {
         let tempFactor = (temperature - 0.5) * 2.0
@@ -25,13 +28,16 @@ enum ColorAdjustment {
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
 
+        var newHue = h + CGFloat(hue - 0.5)
+        newHue -= newHue.rounded(.down)
+
         let satFactor = (saturation - 0.5) * 2.0
         let newSat = min(1, max(0, s + CGFloat(satFactor) * 0.5))
 
         let briFactor = (brightness - 0.5) * 2.0
         let newBri = min(1, max(0, b + CGFloat(briFactor) * 0.5))
 
-        let adjusted = UIColor(hue: h, saturation: newSat, brightness: newBri, alpha: 1)
+        let adjusted = UIColor(hue: newHue, saturation: newSat, brightness: newBri, alpha: 1)
         var rOut: CGFloat = 0, gOut: CGFloat = 0, bOut: CGFloat = 0
         adjusted.getRed(&rOut, green: &gOut, blue: &bOut, alpha: &a)
 
@@ -56,6 +62,13 @@ enum ColorAdjustment {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
         return String(format: "#%02X%02X%02X", Int(round(r * 255)), Int(round(g * 255)), Int(round(b * 255)))
+    }
+
+    /// Formats a 0…1 hue slider value as degrees around the wheel, e.g. "+36°".
+    static func hueLabel(_ value: Double) -> String {
+        let degrees = Int(round((value - 0.5) * 360))
+        if degrees == 0 { return "Neutral" }
+        return degrees > 0 ? "+\(degrees)°" : "\(degrees)°"
     }
 
     /// Formats a 0…1 slider value as a signed offset label, e.g. "+20 warm" / "Neutral".

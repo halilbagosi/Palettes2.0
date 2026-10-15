@@ -35,6 +35,33 @@ final class ColorAdjustmentTests: XCTestCase {
         XCTAssertEqual(result.b, base.b, accuracy: 1.0)
     }
 
+    // MARK: - apply() hue
+
+    func testHueTurnsTheColorAroundTheWheel() {
+        // Half a turn from red is cyan; a sixth of a turn is yellow.
+        let cyan = ColorAdjustment.apply(
+            baseR: 255, baseG: 0, baseB: 0, hue: 1.0,
+            temperature: 0.5, saturation: 0.5, brightness: 0.5
+        )
+        XCTAssertEqual(cyan.r, 0, accuracy: 1)
+        XCTAssertEqual(cyan.g, 255, accuracy: 1)
+        XCTAssertEqual(cyan.b, 255, accuracy: 1)
+
+        let yellow = ColorAdjustment.apply(
+            baseR: 255, baseG: 0, baseB: 0, hue: 0.5 + 1.0 / 6,
+            temperature: 0.5, saturation: 0.5, brightness: 0.5
+        )
+        XCTAssertEqual(yellow.r, 255, accuracy: 1)
+        XCTAssertEqual(yellow.g, 255, accuracy: 1)
+        XCTAssertEqual(yellow.b, 0, accuracy: 1)
+    }
+
+    func testHueLabelShowsDegrees() {
+        XCTAssertEqual(ColorAdjustment.hueLabel(0.5), "Neutral")
+        XCTAssertEqual(ColorAdjustment.hueLabel(0.6), "+36°")
+        XCTAssertEqual(ColorAdjustment.hueLabel(0.0), "-180°")
+    }
+
     // MARK: - apply() clamps at bounds without crashing
 
     func testApplyClampsAtMinimumSliderValues() {

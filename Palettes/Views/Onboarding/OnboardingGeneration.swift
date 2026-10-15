@@ -37,25 +37,19 @@ enum OnboardingPaletteMaker {
     }
 
     /// Whether onboarding takes the Apple Intelligence path on this device
-    /// (pick a color, generate around it). DEBUG can force it either way.
-    static var usesAI: Bool {
-        switch OnboardingDebug.aiOverride {
-        case .on: return true
-        case .off: return false
-        case .automatic: return deviceHasAI
-        }
-    }
+    /// (pick a color, generate around it).
+    static var usesAI: Bool { forcesAI || deviceHasAI }
 
-    /// For the DEBUG settings footer.
-    static var deviceAIStatus: String { deviceHasAI ? "available" : "unavailable" }
+    /// Set by "Replay with Apple Intelligence" in Settings: takes the Apple
+    /// Intelligence path even where the model can't run (the simulator), with
+    /// the palette built deterministically but presented as generated.
+    @MainActor static var forcesAI = false
 
     private static var deviceHasAI: Bool {
         if #available(iOS 26.0, *) { return modelAvailable }
         return false
     }
 
-    /// DEBUG forced the AI path on a device that can't run the model: the
-    /// palette is built deterministically but treated as generated.
     private static var simulatesAI: Bool { usesAI && !deviceHasAI }
 
     /// `onColors` receives the palette's colors as they arrive, for the orb.
@@ -65,7 +59,9 @@ enum OnboardingPaletteMaker {
         size: Int = paletteSize,
         existingNames: [String],
         revealDelay: Duration = .zero,
-        onColors: @escaping @MainActor ([Color]) -> Void
+        onColors: @escaping @MainActor ([Color]) -> Void,
+        onLatePalette: (@MainActor (PaletteViewModel) -> Void)? = nil,
+        onLateTask: (@MainActor (Task<Void, Never>) -> Void)? = nil
     ) async throws -> Made {
         if usesAI, #available(iOS 26.0, *), modelAvailable {
             let palette = try await PaletteGenerator.generate(
@@ -73,7 +69,9 @@ enum OnboardingPaletteMaker {
                 size: size,
                 vibe: nil,
                 existingNames: existingNames,
-                onPartialColors: onColors
+                onPartialColors: onColors,
+                onLateNaming: onLatePalette,
+                onLateNamingTask: onLateTask
             )
             var generated = palette
             generated.isGenerated = true
@@ -83,9 +81,9 @@ enum OnboardingPaletteMaker {
         let palette = try deterministicPalette(anchorHex: anchorHex, size: size, existingNames: existingNames)
         let colors = palette.colors
         if revealDelay > .zero {
-            for count in 2...max(2, colors.count) {
-                try await Task.sleep(for: revealDelay)
-                onColors(Array(colors.prefix(count)))
+            for step in revealSteps(total: colors.count, shown: 1) {
+                if step.waitsFirst { try await Task.sleep(for: revealDelay) }
+                onColors(Array(colors.prefix(step.count)))
             }
         } else {
             onColors(colors)
@@ -104,20 +102,28 @@ enum OnboardingPaletteMaker {
         onColors: @escaping @MainActor ([Color]) -> Void
     ) async throws -> Made {
         // The photo is already downscaled and the extractor samples 160 px,
-        // so this is quick enough on the main actor (as in ColorInputView).
+        // so this is quick enough on the main actor (as in ColorComposer).
         let extracted = try ImageColorExtractor.extractColors(from: image, count: size)
         try Task.checkCancellation()
         let palette = try photoPalette(hexes: extracted.map(\.hex), existingNames: existingNames)
         let colors = palette.colors
         if revealDelay > .zero {
-            for count in 1...colors.count {
-                try await Task.sleep(for: revealDelay)
-                onColors(Array(colors.prefix(count)))
+            for step in revealSteps(total: colors.count, shown: 0) {
+                if step.waitsFirst { try await Task.sleep(for: revealDelay) }
+                onColors(Array(colors.prefix(step.count)))
             }
         } else {
             onColors(colors)
         }
         return Made(palette: palette, usedAI: false, anchorHex: nil)
+    }
+
+    /// The reveal schedule: each step shows `count` colors, after a pause
+    /// unless it is the very first color on screen. `shown` is how many are
+    /// already visible before the first step (the picked anchor, or none).
+    static func revealSteps(total: Int, shown: Int) -> [(count: Int, waitsFirst: Bool)] {
+        guard total > shown else { return [] }
+        return ((shown + 1)...total).map { count in (count: count, waitsFirst: count > 1) }
     }
 
     /// Colors, hexes and names built together so they stay index-aligned.

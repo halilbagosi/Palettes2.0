@@ -7,7 +7,8 @@
 //  Enforces one-role-per-palette uniqueness: assigning a role that's already
 //  held by another color in the same palette clears it there first. Mutates
 //  `appData.palettes` directly by index — the same palette-update path
-//  `PaletteEditSheet` uses for editing a palette color's hex/name/color.
+//  `PaletteEditSheet` uses for editing a palette color's hex/name/color. The
+//  list UI itself lives in `RoleList`, which only reports the choice back here.
 //
 
 import SwiftUI
@@ -19,11 +20,6 @@ struct RolePickerSheet: View {
 
     @EnvironmentObject var appData: AppData
     @Environment(\.dismiss) var dismiss
-
-    @State private var newTagText = ""
-    @State private var newTagError: String?
-    @State private var renamingTag: String?
-    @State private var renameText = ""
 
     private var paletteIndex: Int? {
         appData.palettes.firstIndex(where: { $0.id == palette.id })
@@ -41,155 +37,15 @@ struct RolePickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Role") {
-                    ForEach(ColorRole.defaults) { role in
-                        roleRow(role.name)
+            RoleList(current: liveCurrentRole, onSelect: assign(role:))
+                .navigationTitle("Tag Color")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
                     }
                 }
-
-                if !appData.customTags.isEmpty {
-                    Section("Custom Tags") {
-                        ForEach(appData.customTags, id: \.self) { tag in
-                            roleRow(tag)
-                        }
-                    }
-                }
-
-                Section {
-                    HStack {
-                        TextField("New tag…", text: $newTagText)
-                            .autocorrectionDisabled()
-                            .onChange(of: newTagText) { _, _ in newTagError = nil }
-                        Button("Add") {
-                            addTag()
-                        }
-                        .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                    if let newTagError {
-                        Text(newTagError)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                } header: {
-                    Text("New Tag")
-                }
-
-                if liveCurrentRole != nil {
-                    Section {
-                        Button(role: .destructive) {
-                            assign(role: nil)
-                        } label: {
-                            Text("Remove Tag")
-                        }
-                    }
-                }
-
-                if !appData.customTags.isEmpty {
-                    Section("Manage Tags") {
-                        ForEach(appData.customTags, id: \.self) { tag in
-                            manageTagRow(tag)
-                        }
-                        .onDelete { offsets in
-                            for name in offsets.map({ appData.customTags[$0] }) {
-                                appData.deleteCustomTag(name)
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Tag Color")
-            .navigationBarTitleDisplayMode(.inline)
-            .softScrollEdge()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .alert("Rename Tag", isPresented: Binding(
-                get: { renamingTag != nil },
-                set: { isPresented in if !isPresented { renamingTag = nil } }
-            )) {
-                TextField("Tag name", text: $renameText)
-                Button("Cancel", role: .cancel) { renamingTag = nil }
-                Button("Save") {
-                    if let old = renamingTag {
-                        appData.renameCustomTag(old, to: renameText)
-                    }
-                    renamingTag = nil
-                }
-            }
         }
-    }
-
-    // MARK: - Rows
-
-    /// Each role/tag is rendered as an actual chip — leading tag glyph, bold
-    /// label, filled pill — rather than plain list text, so the available
-    /// tags read clearly at a glance in the slide-up sheet. The selected one
-    /// gets a solid dark fill with a white label (matching the row control in
-    /// Edit Palette) plus a trailing checkmark; the rest use a subtle fill
-    /// that stays legible in both light and dark mode.
-    private func roleRow(_ name: String) -> some View {
-        let isSelected = liveCurrentRole?.caseInsensitiveCompare(name) == .orderedSame
-        return Button {
-            assign(role: name)
-        } label: {
-            HStack(spacing: 12) {
-                HStack(spacing: 5) {
-                    Image(systemName: "tag.fill")
-                        .font(.caption2)
-                    Text(name)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule().fill(isSelected
-                        ? AnyShapeStyle(Color(white: 0.22))
-                        : AnyShapeStyle(Color(.tertiarySystemFill)))
-                )
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color(white: 0.22))
-                }
-            }
-            .padding(.vertical, 2)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func manageTagRow(_ tag: String) -> some View {
-        HStack {
-            Text(tag)
-            Spacer()
-            Button {
-                renameText = tag
-                renamingTag = tag
-            } label: {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(.borderless)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func addTag() {
-        let trimmed = newTagText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appData.addCustomTag(trimmed) else {
-            newTagError = "That tag name is already in use."
-            return
-        }
-        newTagError = nil
-        newTagText = ""
-        assign(role: trimmed)
     }
 
     /// Assigns `role` to `colorIndex` in the palette. If another color in the

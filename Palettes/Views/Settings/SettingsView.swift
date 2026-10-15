@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  Palettes
 //
-//  iCloud status, library export/deletion, privacy policy, and support.
+//  A header with the user's library, then iCloud status, library export,
+//  help, legal, and — on its own at the bottom — deleting all data.
 //
 
 import SwiftUI
@@ -10,14 +11,16 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var appData: AppData
     @EnvironmentObject private var replay: OnboardingReplayCoordinator
-    #if DEBUG
-    @State private var debugStart = "pull"
-    @AppStorage(OnboardingDebug.slowMoToggleKey) private var debugSlowMo = false
-    @AppStorage(OnboardingDebug.aiOverrideKey) private var debugAI = OnboardingDebug.AIOverride.automatic.rawValue
-    #endif
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
+    @State private var showCustomize = false
+    @AppStorage(AppIconVersion.storageKey) private var iconStored = ""
+
+    private var iconVersion: AppIconVersion {
+        AppIconVersion(rawValue: iconStored) ?? AppIconVersion.current
+    }
 
     private var isSignedInToICloud: Bool {
         FileManager.default.ubiquityIdentityToken != nil
@@ -30,11 +33,55 @@ struct SettingsView: View {
         return "\(version) (\(build))"
     }
 
+    private var librarySummary: String {
+        "\(plural(appData.palettes.count, "palette")) · \(plural(appData.colors.count, "color"))"
+    }
+
+    /// What "Delete All Data" removes, counted when there's anything to count.
+    private var deleteScope: String {
+        guard !libraryIsEmpty else { return "every color, palette, and tag" }
+        let palettes = plural(appData.palettes.count, "palette")
+        let colors = plural(appData.colors.count, "color")
+        return "\(palettes), \(colors), and every tag"
+    }
+
+    private var libraryIsEmpty: Bool {
+        appData.palettes.isEmpty && appData.colors.isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("iCloud", value: isSignedInToICloud ? "Signed In" : "Not Signed In")
+                    header
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+
+                Section {
+                    HStack {
+                        SettingsRowLabel(
+                            title: "iCloud Sync",
+                            systemImage: "icloud.fill",
+                            tint: .blue
+                        )
+                        Label(
+                            isSignedInToICloud ? "On" : "Off",
+                            systemImage: isSignedInToICloud ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+                        )
+                        .labelStyle(.titleAndIcon)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(isSignedInToICloud ? Color.green : Color.orange)
+                    }
+                    .accessibilityElement(children: .combine)
+
+                    if !isSignedInToICloud {
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        } label: {
+                            SettingsRowLabel(title: "Open Settings", systemImage: "gear", tint: .gray, accessory: .external)
+                        }
+                    }
                 } header: {
                     Text("Sync")
                 } footer: {
@@ -47,80 +94,74 @@ struct SettingsView: View {
                     Button {
                         exportLibrary()
                     } label: {
-                        Label("Export Library", systemImage: "square.and.arrow.up")
+                        SettingsRowLabel(
+                            title: "Export Library",
+                            subtitle: "Every color, palette, and tag as a JSON file",
+                            systemImage: "square.and.arrow.up",
+                            tint: .indigo
+                        )
                     }
+                    .disabled(libraryIsEmpty)
+                } header: {
+                    Text("Library")
+                }
+
+                Section("Help") {
+                    Button {
+                        replayOnboarding()
+                    } label: {
+                        SettingsRowLabel(
+                            title: "Replay Onboarding",
+                            subtitle: "See the welcome tour again",
+                            systemImage: "sparkles",
+                            tint: .purple
+                        )
+                    }
+                    if AppleIntelligence.isDeviceSupported {
+                        Button {
+                            replayOnboarding(withAppleIntelligence: true)
+                        } label: {
+                            SettingsRowLabel(
+                                title: "Replay with Apple Intelligence",
+                                subtitle: "Pick a color and generate a palette around it",
+                                systemImage: "wand.and.stars",
+                                tint: .pink
+                            )
+                        }
+                    }
+                    Link(destination: AppLinks.supportEmailURL) {
+                        SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill", tint: .green, accessory: .external)
+                    }
+                }
+
+                Section("Legal") {
+                    NavigationLink {
+                        PrivacyPolicyView()
+                    } label: {
+                        SettingsRowLabel(title: "Privacy Policy", systemImage: "hand.raised.fill", tint: .blue)
+                    }
+                    Link(destination: AppLinks.termsOfUse) {
+                        SettingsRowLabel(title: "Terms of Use", systemImage: "doc.text.fill", tint: .gray, accessory: .external)
+                    }
+                }
+
+                // On its own, last, and away from Export: the one action here
+                // that can't be undone.
+                Section {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
                     } label: {
-                        Label("Delete All Data", systemImage: "trash")
+                        Text("Delete All Data")
+                            .frame(maxWidth: .infinity)
                     }
                     .confirmationDialog("Delete all data?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
                         Button("Delete All Data", role: .destructive) { deleteAll() }
                     } message: {
-                        Text("This permanently deletes every color, palette, and tag, your recent searches, and Siri and Spotlight suggestions. If iCloud sync is on, they're also removed from your other devices. This can't be undone.")
+                        Text("This permanently deletes \(deleteScope), your recent searches, and Siri and Spotlight suggestions. If iCloud sync is on, they're also removed from your other devices. This can't be undone.")
                     }
-                } header: {
-                    Text("Your Data")
                 } footer: {
-                    Text("Export saves every color, palette, and tag as a JSON file.")
+                    Text("Permanently removes your library from this device and iCloud.")
                 }
-
-                Section("About") {
-                    NavigationLink {
-                        PrivacyPolicyView()
-                    } label: {
-                        Label("Privacy Policy", systemImage: "hand.raised")
-                    }
-                    Link(destination: AppLinks.termsOfUse) {
-                        Label("Terms of Use", systemImage: "doc.text")
-                    }
-                    Link(destination: AppLinks.supportEmailURL) {
-                        Label("Contact Support", systemImage: "envelope")
-                    }
-                    Button {
-                        replayOnboarding()
-                    } label: {
-                        Label("Replay Onboarding", systemImage: "sparkles")
-                    }
-                    LabeledContent("Version", value: versionString)
-                }
-
-                #if DEBUG
-                Section {
-                    Picker("Start at", selection: $debugStart) {
-                        ForEach(OnboardingDebug.stepNames, id: \.self) { Text($0.capitalized).tag($0) }
-                    }
-                    Toggle("Slow motion (0.25×)", isOn: $debugSlowMo)
-                    Picker("Apple Intelligence", selection: $debugAI) {
-                        ForEach(OnboardingDebug.AIOverride.allCases) { Text($0.label).tag($0.rawValue) }
-                    }
-                    Button {
-                        OnboardingDebug.requestFromSettings(start: debugStart)
-                        // Same path as Replay Onboarding: the presenter restarts it in onDismiss.
-                        replayOnboarding()
-                    } label: {
-                        Label("Try Onboarding", systemImage: "play.circle")
-                    }
-                    Button {
-                        debugAI = OnboardingDebug.AIOverride.on.rawValue
-                        OnboardingDebug.requestFromSettings(start: "pull")
-                        replayOnboarding()
-                    } label: {
-                        Label("Replay with Apple Intelligence", systemImage: "sparkles")
-                    }
-                    Button {
-                        debugAI = OnboardingDebug.AIOverride.off.rawValue
-                        OnboardingDebug.requestFromSettings(start: "pull")
-                        replayOnboarding()
-                    } label: {
-                        Label("Replay without Apple Intelligence", systemImage: "photo")
-                    }
-                } header: {
-                    Text("Onboarding (Debug)")
-                } footer: {
-                    Text("Starts onboarding at the chosen step with the sample image. Completing it behaves like a normal replay. Apple Intelligence picks the path: On picks a color and generates around it (simulated where the model can't run), Off makes the palette straight from the photo. This device: \(OnboardingPaletteMaker.deviceAIStatus).")
-                }
-                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -130,10 +171,46 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showCustomize) {
+                CustomizeAppearanceView()
+                    .presentationDetents([.large])
+            }
             .alert("Couldn't export your library.", isPresented: $showExportError) {
                 Button("OK", role: .cancel) {}
             }
         }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            AppIconPreview(version: iconVersion, size: 88, resolvesAuto: true)
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+
+            VStack(spacing: 2) {
+                Text("Palettes")
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                Text(librarySummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Version \(versionString)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Button("Customize") {
+                showCustomize = true
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
+
+    private func plural(_ count: Int, _ noun: String) -> String {
+        "\(count) \(noun)\(count == 1 ? "" : "s")"
     }
 
     private func exportLibrary() {
@@ -146,9 +223,9 @@ struct SettingsView: View {
         }
     }
 
-    private func replayOnboarding() {
+    private func replayOnboarding(withAppleIntelligence: Bool = false) {
         // The presenter restarts onboarding in the sheet's onDismiss.
-        replay.request()
+        replay.request(withAppleIntelligence: withAppleIntelligence)
         dismiss()
     }
 
@@ -157,6 +234,55 @@ struct SettingsView: View {
             dismiss()
             ToastManager.shared.show("All data deleted", icon: "trash.fill")
         }
+    }
+}
+
+/// A Settings row: a tinted icon tile, a title with an optional subtitle and,
+/// for links that leave the app, an outbound arrow. Reads in the primary
+/// color (not the accent tint buttons and links would otherwise get).
+private struct SettingsRowLabel: View {
+    enum Accessory {
+        case none
+        case external
+    }
+
+    let title: String
+    var subtitle: String? = nil
+    let systemImage: String
+    let tint: Color
+    var accessory: Accessory = .none
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(tint.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(Color.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if accessory == .external {
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.45)
     }
 }
 

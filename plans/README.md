@@ -25,6 +25,11 @@ without `xcodebuild` do the file work and report verification as pending.
 | 012 | App Store readiness (iCloud v1): privacy manifest, export hardening, Spotlight queue, delete-all/export, Settings + privacy policy, accessibility | P0/P1 | L | — | DONE (feature/app-store-readiness @ d1f5ec9; PR #2) |
 | 013 | Generation redesign: model brief + deterministic OKLCH builder (60/30/10), swatch-checked names and titles, modes with vibe | P1 | L | 012 | DONE (feature/generation-redesign) |
 | 014 | Onboarding: pull-down orb, camera scan in orb, adjust, generate, palette detail coach mark, optional share/Siri cards | P1 | M | — | DONE (device verification pending: camera + rotation, Apple Intelligence path, VoiceOver, landscape, iOS 17/18) |
+| 016 | iPad & iPhone Duo: per-window state, menu-bar commands, share-sheet crash fix, titled toolbar items + system overflow menu, adaptive generating stage, drag out; next: fold-aware grids, arrangement views, inspector editing | P1 | M | — | IN PROGRESS (part 1 done on feature/ipad-duo-optimization; xcodebuild pending) |
+| 017 | Sheet redesign r2: one shared color editor, single-sheet New Palette with push navigation (HIG), Free/Premium plan tag in Settings | P2 | M | — | SUPERSEDED by 018/019 |
+| 018 | Sheets redesign r3: inline Spectrum/Grid/RGB picker in a pinned color editor; one strip-based palette editor for New + Edit Palette (start tiles, harmonies, photo pins); ✓ create/save, + add; Add Colors sheet removed | P1 | L | 017 | DONE — palette editor design superseded by 019 (feature/sheets-redesign) |
+| 019 | Sheets r4: dev's New Palette layout as base (pinned add panel: Pick · Scan · Library · Harmony), glass cards, no color wash, Scan as a picker mode, plan-018 motion fixes | P1 | L | 018 | DONE (feature/sheets-redesign; final review + device checks pending) |
+| 020 | Bug batch: onboarding (camera, haptics, speed, light-mode orb), Generate (Auto size, modes, photo), naming, Siri/Shortcuts find+search, sheets for iPhone Duo/iPad, Settings everywhere, Colors-tab perf | P1 | L | 019 | DONE (code complete; device checks owed, see ledger) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

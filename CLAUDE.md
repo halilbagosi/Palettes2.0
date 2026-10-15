@@ -28,3 +28,17 @@ Branch flow: feature branch → `dev` → `staging` → `main`. Never commit fea
 ## Graphify
 
 This repo has a knowledge graph at `graphify-out/`. Before broad source exploration, run `graphify query "<question>"` (or `graphify path "<A>" "<B>"` / `graphify explain "<concept>"`) — it returns a scoped subgraph that's usually cheaper than raw grep or reading `GRAPH_REPORT.md`. After modifying code, run `graphify update .` to keep the graph current.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as local markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), recorded as a `Status:` line in each issue file. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` plus `docs/adr/`, both created lazily. See `docs/agents/domain.md`.

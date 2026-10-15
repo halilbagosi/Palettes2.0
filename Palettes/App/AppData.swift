@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import SwiftData
+import AppIntents
 import CoreData
 import UIKit
 
@@ -25,6 +26,14 @@ class AppData: ObservableObject {
 
     /// Palette id an Open intent asked to show; PaletteView consumes it.
     @Published var pendingOpenPaletteID: UUID?
+    /// Search term a Search/Find intent asked to show; SearchView consumes it.
+    @Published var pendingSearchTerm: String?
+
+    /// Returns the term a Search intent queued (if any) and clears it.
+    func takePendingSearchTerm() -> String? {
+        defer { pendingSearchTerm = nil }
+        return pendingSearchTerm
+    }
     /// Transient (never persisted): the palette that should show the
     /// onboarding coach mark when its detail screen appears.
     @Published var coachMarkPaletteID: UUID?
@@ -45,6 +54,8 @@ class AppData: ObservableObject {
     /// True while the published arrays are being replaced from the store, so
     /// the debounced persistence sinks don't write back what was just read.
     private var isReloading = false
+    /// Bumped on every `reloadFromStore()`; lets `waitUntilLoaded` detect a reload.
+    private var reloadGeneration = 0
 
     /// Pending task that clears `isReloading`; cancelled and replaced on each
     /// reload so the flag clears 600 ms after the most recent one.
@@ -143,6 +154,8 @@ class AppData: ObservableObject {
                                 palettes: palettes.map(PaletteEntity.init),
                                 colors: colors.map(ColorEntity.init)
                             )
+                            // Refresh the palette / color values Siri phrases resolve against.
+                            PalettesShortcuts.updateAppShortcutParameters()
                         }
                     }
                 }
@@ -205,8 +218,10 @@ class AppData: ObservableObject {
     /// Refetches the store and replaces the published arrays without
     /// triggering a write-back. The flag outlives the sinks' 300 ms debounce
     /// and clears 600 ms after the most recent reload.
-    private func reloadFromStore() {
+    /// Internal (not private) so tests can drive it.
+    func reloadFromStore() {
         guard container != nil else { return }
+        reloadGeneration += 1
         // Flush any pending local edits before we replace the in-memory
         // arrays, so a reload can't clobber work that hasn't hit the store.
         if isDirtyColors { persistColors(colors) }
@@ -224,6 +239,20 @@ class AppData: ObservableObject {
             if self.isDirtyColors { self.persistColors(self.colors) }
             if self.isDirtyPalettes { self.persistPalettes(self.palettes) }
             if self.isDirtyTags { self.persistTags(self.customTags) }
+        }
+    }
+
+    /// For intent launches into a fresh process. `load()` is synchronous, so
+    /// a non-empty store is already usable and this returns immediately. If
+    /// the store is empty (fresh install, CloudKit import pending) it waits,
+    /// bounded by `timeout`, for the first `reloadFromStore()` and then
+    /// returns whether or not data arrived.
+    func waitUntilLoaded(timeout: Duration = .seconds(2)) async {
+        guard colors.isEmpty, palettes.isEmpty else { return }
+        let startGeneration = reloadGeneration
+        let deadline = ContinuousClock.now + timeout
+        while reloadGeneration == startGeneration, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 
