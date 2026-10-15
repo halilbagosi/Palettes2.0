@@ -173,7 +173,7 @@ struct GenerationOrbView: View {
                 Circle()
                     .fill(Color.secondary.opacity(0.10))
                     .frame(width: diameter * 0.5, height: diameter * 0.5)
-                    .offset(drift(index: 0, time: t, orbit: diameter * 0.14))
+                    .offset(drift(index: 0, time: t, orbit: diameter * 0.22))
                     .blur(radius: diameter * 0.08)
             }
 
@@ -182,7 +182,7 @@ struct GenerationOrbView: View {
                 Circle()
                     .fill(color.opacity(0.7))
                     .frame(width: diameter * 0.52, height: diameter * 0.52)
-                    .offset(drift(index: index, time: t, orbit: diameter * 0.19))
+                    .offset(drift(index: index, time: t, orbit: diameter * 0.28))
                     .scaleEffect(bloom)
                     .opacity(Double(bloom))
             }
@@ -198,7 +198,7 @@ struct GenerationOrbView: View {
     /// Slow orbital drift, unique per drop.
     private func drift(index: Int, time t: Double, orbit: CGFloat) -> CGSize {
         let i = Double(index)
-        let speed = 0.55 + 0.06 * i.truncatingRemainder(dividingBy: 3)
+        let speed = 1.0 + 0.1 * i.truncatingRemainder(dividingBy: 3)
         return CGSize(
             width: orbit * sin(t * speed + i * 2.4),
             height: orbit * cos(t * (speed * 0.8) + i * 1.7)

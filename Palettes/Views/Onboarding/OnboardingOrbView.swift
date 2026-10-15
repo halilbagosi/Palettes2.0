@@ -18,7 +18,8 @@ enum OrbWindowContent {
     case camera(OrbCameraController, AVCaptureDevice?)
     case photo(UIImage)
     case color(Color)
-    /// One blurred drop per color, drifting slowly.
+    /// One blurred drop per color, drifting.
+    /// (`.color` is a still, feathered window instead.)
     case drops([Color])
 
     /// Changes when the content swaps, so the window cross-fades with a blur bridge.
@@ -63,7 +64,6 @@ struct OnboardingOrbView: View {
 
     private var liquidColors: [Color] {
         switch content {
-        case .color(let color): [color]
         case .drops(let colors): colors
         default: []
         }
@@ -144,7 +144,13 @@ struct OnboardingOrbView: View {
                 .scaledToFill()
                 .frame(width: windowDiameter, height: windowDiameter)
                 .clipped()
-        case .color, .drops:
+        case .color(let color):
+            // A still pane of color with blurred edges while it is being adjusted;
+            // generating turns it into drifting drops.
+            Circle()
+                .fill(color)
+                .frame(width: windowDiameter, height: windowDiameter)
+        case .drops:
             // Drawn across the whole drop, outside the feathered window.
             Color.clear
         }
@@ -231,7 +237,7 @@ struct OrbLiquidDrops: View {
                     Circle()
                         .fill(color.opacity(0.7))
                         .frame(width: diameter * 0.52, height: diameter * 0.52)
-                        .offset(drift(index: index, time: t, orbit: diameter * 0.19))
+                        .offset(drift(index: index, time: t, orbit: diameter * 0.28))
                         .transition(.scale(scale: 0.4).combined(with: .opacity))
                 }
             }
@@ -246,7 +252,7 @@ struct OrbLiquidDrops: View {
     /// Slow orbital drift, unique per drop (the generate orb's).
     private func drift(index: Int, time t: Double, orbit: CGFloat) -> CGSize {
         let i = Double(index)
-        let speed = 0.55 + 0.06 * i.truncatingRemainder(dividingBy: 3)
+        let speed = 1.0 + 0.1 * i.truncatingRemainder(dividingBy: 3)
         return CGSize(width: orbit * sin(t * speed + i * 2.4),
                       height: orbit * cos(t * (speed * 0.8) + i * 1.7))
     }

@@ -134,7 +134,7 @@ using namespace metal;
     if (q >= 1.0) { return position; }
     // Untouched in the middle; in the outer band the rim samples from near the
     // center, so inner content smears around the edge like in a drop of water.
-    float k = strength * pow(q, 14.0);
+    float k = strength * pow(q, 8.0);
     float2 warped = local * (1.0 - k);
     // Back to screen space.
     float2 back = float2(c * warped.x - s * warped.y, s * warped.x + c * warped.y);
