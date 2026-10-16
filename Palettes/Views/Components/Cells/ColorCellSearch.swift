@@ -31,7 +31,7 @@ struct ColorCellSearch: View {
                             .lineLimit(1)
                         Text(highlightedText(hexCode, matching: highlight))
                             .font(.system(.caption2, design: .monospaced).weight(.medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.primary.opacity(0.7))
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)

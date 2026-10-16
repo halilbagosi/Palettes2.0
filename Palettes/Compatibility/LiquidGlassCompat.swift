@@ -36,8 +36,14 @@ extension View {
                 // with just a hairline rim.
                 overlay { shape.stroke(.white.opacity(0.18), lineWidth: 0.75) }
             case .regular, .interactive:
-                background(.ultraThinMaterial, in: shape)
-                    .overlay { shape.stroke(.white.opacity(0.12), lineWidth: 0.5) }
+                // `.regularMaterial`, not ultra-thin: these pills carry text over
+                // arbitrary swatch colors and need enough blur/opacity to keep contrast.
+                // The adaptive fill and primary-colored rim keep the surface visible
+                // on a plain sheet background, where a bare material (and a white
+                // rim) all but disappears in light mode.
+                background(.regularMaterial, in: shape)
+                    .background(Color(.tertiarySystemFill), in: shape)
+                    .overlay { shape.stroke(Color.primary.opacity(0.12), lineWidth: 0.5) }
             }
         }
     }
@@ -60,6 +66,20 @@ struct GlassContainer<Content: View>: View {
 }
 
 extension View {
+    /// A sheet's navigation bar with a solid grouped background before iOS 26.
+    /// The default bar is a very thin material, so a swatch or field scrolling
+    /// under the title bled through and fought the title for legibility. The
+    /// bar still only appears once content scrolls under it. No-op on iOS 26,
+    /// whose scroll-edge effect handles this.
+    @ViewBuilder
+    func solidSheetBar() -> some View {
+        if #available(iOS 26.0, *) {
+            self
+        } else {
+            toolbarBackground(Color(.systemGroupedBackground), for: .navigationBar)
+        }
+    }
+
     /// Soft (blurred) scroll-edge effect under navigation titles and toolbars on
     /// iOS 26+; a no-op on earlier systems.
     @ViewBuilder

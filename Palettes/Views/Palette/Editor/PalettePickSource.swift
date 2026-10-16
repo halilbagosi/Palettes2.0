@@ -80,7 +80,7 @@ struct PalettePickSource: View {
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(.regularMaterial, in: Capsule())
                     .padding(8)
                     .opacity(isDuplicate ? 1 : 0)
                     .animation(.easeOut(duration: 0.2), value: isDuplicate)
@@ -94,9 +94,11 @@ struct PalettePickSource: View {
     /// The name takes what the color wheel and the + leave.
     private var nameRow: some View {
         HStack(spacing: 12) {
-            TextField("Color Name", text: $name, prompt: Text(autoName.isEmpty ? "Color Name" : autoName))
+            TextField("", text: $name)
                 .font(.system(size: 18, weight: .medium))
+                .legiblePlaceholder(autoName.isEmpty ? "Color Name" : autoName, isEmpty: name.isEmpty)
                 .submitLabel(.done)
+                .autocorrectionDisabled()
                 .focused($focus, equals: .name)
                 .onSubmit { focus = nil }
                 .padding()

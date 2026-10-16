@@ -180,6 +180,7 @@ struct PaletteEditor: View {
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle(isCreating ? "New Palette" : "Edit Palette")
             .navigationBarTitleDisplayMode(.inline)
+            .solidSheetBar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     SheetCancelButton { cancel() }
@@ -275,9 +276,11 @@ struct PaletteEditor: View {
     }
 
     private var nameField: some View {
-        TextField(suggestedName.isEmpty ? "Palette Name" : suggestedName, text: $draft.name)
+        TextField("", text: $draft.name)
             .font(.system(size: nameFontSize, weight: .medium))
+            .legiblePlaceholder(suggestedName.isEmpty ? "Palette Name" : suggestedName, isEmpty: draft.name.isEmpty)
             .submitLabel(.done)
+            .autocorrectionDisabled()
             .focused($nameFocused)
             .onSubmit { nameFocused = false }
             .padding(.horizontal)

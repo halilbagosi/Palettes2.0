@@ -19,11 +19,25 @@ struct FloatingAddButton: View {
                 .font(.title3.weight(.semibold))
                 .frame(width: 44, height: 44)
         }
-        .glassButton()
+        .modifier(FloatingAddStyle())
         .buttonBorderShape(.circle)
         .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 3)
         .accessibilityLabel(title)
         .help(title)
+    }
+}
+
+/// iOS 26: glass. Earlier: an opaque accent-filled circle with a white glyph —
+/// `.bordered` is translucent, so content scrolling underneath showed through
+/// the "+" and made it unreadable.
+private struct FloatingAddStyle: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.buttonStyle(.glass)
+        } else {
+            content.buttonStyle(.borderedProminent)
+        }
     }
 }
 
