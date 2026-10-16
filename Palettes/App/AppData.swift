@@ -519,7 +519,7 @@ class AppData: ObservableObject {
     /// save paths can't drift. Does not persist synchronously: the normal
     /// debounced write-back handles it.
     func addPaletteColorsToLibrary(_ paletteColors: [PaletteColor], isGenerated: Bool) {
-        for (i, paletteColor) in paletteColors.enumerated() {
+        for paletteColor in paletteColors {
             let hex = paletteColor.hex
             guard !hex.isEmpty else { continue }
             let alreadyExists = colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }

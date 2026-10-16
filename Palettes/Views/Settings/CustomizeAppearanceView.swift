@@ -163,6 +163,7 @@ struct CustomizeAppearanceView: View {
             }
             .navigationTitle("Customize")
             .navigationBarTitleDisplayMode(.inline)
+            .softScrollEdge()
             .sensoryFeedback(.selection, trigger: accentStored)
             .sensoryFeedback(.selection, trigger: appearanceStored)
             .sensoryFeedback(.selection, trigger: iconVersion)
