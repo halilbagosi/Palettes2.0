@@ -519,12 +519,12 @@ class AppData: ObservableObject {
     /// save paths can't drift. Does not persist synchronously: the normal
     /// debounced write-back handles it.
     func addPaletteColorsToLibrary(_ paletteColors: [PaletteColor], isGenerated: Bool) {
-        for (i, paletteColor) in paletteColors.enumerated() {
+        for paletteColor in paletteColors {
             let hex = paletteColor.hex
             guard !hex.isEmpty else { continue }
             let alreadyExists = colors.contains { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
             guard !alreadyExists else { continue }
-            let name = paletteColor.name.isEmpty ? "Color \(i + 1)" : paletteColor.name
+            let name = uniqueColorName(preferred: paletteColor.name, forHex: hex)
             colors.append(ColorViewModel(
                 name: name,
                 color: paletteColor.color,
@@ -544,7 +544,7 @@ class AppData: ObservableObject {
     @discardableResult
     func addColor(name: String, hex: String) -> ColorViewModel {
         let color = ColorViewModel(
-            name: name,
+            name: uniqueColorName(preferred: name, forHex: hex),
             color: Color(hex: hex) ?? .gray,
             HEX: hex,
             usedInPalette: false
@@ -642,6 +642,21 @@ class AppData: ObservableObject {
     /// Returns the library color with this hex, if any.
     func existingColor(hex: String) -> ColorViewModel? {
         colors.first { $0.HEX.caseInsensitiveCompare(hex) == .orderedSame }
+    }
+
+    /// Every library color name, for naming a new color around them.
+    var colorNameSet: Set<String> { Set(colors.map(\.name)) }
+
+    /// An auto-name for `hex` that no library color already uses.
+    func uniqueColorName(forHex hex: String) -> String {
+        ColorNamer.name(forHex: hex, avoiding: colorNameSet)
+    }
+
+    /// `preferred` if no library color uses it, else a fresh name for `hex`.
+    func uniqueColorName(preferred: String, forHex hex: String) -> String {
+        let trimmed = preferred.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, existingColor(named: trimmed) == nil else { return uniqueColorName(forHex: hex) }
+        return trimmed
     }
 
     /// Returns the palette with this name (case-insensitive), if any.

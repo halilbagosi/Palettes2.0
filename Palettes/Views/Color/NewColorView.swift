@@ -18,12 +18,17 @@ struct NewColorView: View {
 
     private var resolvedName: String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? ColorNamer.name(forHex: hex) : trimmed
+        return trimmed.isEmpty ? appData.uniqueColorName(forHex: hex) : trimmed
     }
 
     private var notice: String? {
-        guard let existing = appData.existingColor(hex: hex) else { return nil }
-        return "Already saved as \u{201C}\(existing.name)\u{201D}"
+        if let existing = appData.existingColor(hex: hex) {
+            return "Already saved as \u{201C}\(existing.name)\u{201D}"
+        }
+        if appData.existingColor(named: resolvedName) != nil {
+            return "A color named \u{201C}\(resolvedName)\u{201D} already exists"
+        }
+        return nil
     }
 
     var body: some View {
@@ -31,6 +36,7 @@ struct NewColorView: View {
             ColorComposer(color: $color, name: $name, allowsPhoto: true, namesFollowColor: true, notice: notice)
                 .navigationTitle("New Color")
                 .navigationBarTitleDisplayMode(.inline)
+                .solidSheetBar()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         SheetCancelButton { dismiss() }
@@ -46,10 +52,9 @@ struct NewColorView: View {
                     Text("\(hex) is already saved as \"\(duplicateExistingName)\". Rename it to \"\(resolvedName)\"?")
                 }
                 .alert("Name Already Exists", isPresented: $showNameDuplicateAlert) {
-                    Button("Save Anyway") { save() }
-                    Button("Cancel", role: .cancel) {}
+                    Button("OK", role: .cancel) {}
                 } message: {
-                    Text("A color named \"\(resolvedName)\" already exists (\(duplicateExistingName)).")
+                    Text("A color named \"\(resolvedName)\" already exists (\(duplicateExistingName)). Choose a different name.")
                 }
         }
         // Sheets cover the app-root toast overlay, so host one here too.

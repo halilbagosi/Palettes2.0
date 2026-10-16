@@ -16,7 +16,7 @@ struct SelectionCheckmark: View {
             .symbolRenderingMode(.palette)
             .foregroundStyle(.white, isSelected ? Color.accentColor : Color.black.opacity(0.25))
             .padding(12)
-            .shadow(color: .black.opacity(0.2), radius: 3, x: 0, y: 1)
+            .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 0.5)
             .contentTransition(.symbolEffect(.replace))
             .symbolEffect(.bounce, value: isSelected)
             .accessibilityLabel(isSelected ? "Selected" : "Not selected")

@@ -36,8 +36,10 @@ struct SaveColorIntent: AppIntent {
         }
 
         let resolvedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalName = (resolvedName?.isEmpty == false) ? resolvedName! : ColorNamer.name(forHex: normalized)
-        let saved = AppData.shared.addColor(name: finalName, hex: normalized)
+        if let resolvedName, !resolvedName.isEmpty, let existing = AppData.shared.existingColor(named: resolvedName) {
+            throw PalettesIntentError.nameTaken(resolvedName, existing.HEX)
+        }
+        let saved = AppData.shared.addColor(name: resolvedName ?? "", hex: normalized)
 
         return .result(
             value: ColorEntity(saved),

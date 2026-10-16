@@ -490,41 +490,13 @@ enum ColorNamer {
         return String(format: "#%02X%02X%02X", Int(entry.r), Int(entry.g), Int(entry.b))
     }
 
-    static func name(forHex hex: String) -> String {
-        var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleaned.hasPrefix("#") { cleaned.removeFirst() }
-        guard cleaned.count == 6,
-              let number = UInt64(cleaned, radix: 16) else {
-            return "Unknown"
-        }
-
-        let r = Double((number >> 16) & 0xFF) / 255.0
-        let g = Double((number >> 8) & 0xFF) / 255.0
-        let b = Double(number & 0xFF) / 255.0
-
-        let lab = sRGBtoLab(r: r, g: g, b: b)
-        let color = OKLCH(r: r, g: g, b: b)
-
-        // Nearest entry in the color's own family (greys for greys), the
-        // same filter `uniqueNames` uses; the nearest overall only when
-        // nothing fits.
-        var bestName = "Unknown"
-        var bestDelta = Double.greatestFiniteMagnitude
-        var nearestName = "Unknown"
-        var nearestDelta = Double.greatestFiniteMagnitude
-        for (index, entry) in namedColorsLab.enumerated() {
-            let delta = ciede2000(lab, entry.lab)
-            if delta < nearestDelta {
-                nearestDelta = delta
-                nearestName = entry.name
-            }
-            if delta < bestDelta, entryFits(index, color: color) {
-                bestDelta = delta
-                bestName = entry.name
-            }
-        }
-
-        return bestDelta < Double.greatestFiniteMagnitude ? bestName : nearestName
+    /// The best name for one color: the same descriptive naming a whole
+    /// palette gets ("Dusty Rose", "Deep Teal"), not just the nearest
+    /// dictionary entry. Names in `taken` (case-insensitive) are skipped,
+    /// falling through to alternate modifiers and then the next-nearest
+    /// entries, so a library never ends up with two identically named colors.
+    static func name(forHex hex: String, avoiding taken: Set<String> = []) -> String {
+        uniqueNames(forHexes: [hex], avoiding: taken)[0]
     }
 
     /// Names an entire palette at once, guaranteeing every returned name is
@@ -545,7 +517,7 @@ enum ColorNamer {
     ///
     /// Deterministic: identical input (`hexes`, `preferred`) always produces
     /// identical output.
-    static func uniqueNames(forHexes hexes: [String], preferred: [String?] = []) -> [String] {
+    static func uniqueNames(forHexes hexes: [String], preferred: [String?] = [], avoiding taken: Set<String> = []) -> [String] {
         let n = hexes.count
         guard n > 0 else { return [] }
 
@@ -620,25 +592,25 @@ enum ColorNamer {
         }
 
         var result = Array(repeating: "", count: n)
-        var used = Set<String>()
+        var used = Set<String>(taken.map { $0.lowercased() })
 
         for i in 0..<n {
             // 1. AI-supplied / user-supplied preferred name, if present,
             // non-empty, and not already claimed by an earlier index.
             if i < preferred.count, let raw = preferred[i] {
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty, !used.contains(trimmed) {
+                if !trimmed.isEmpty, !used.contains(trimmed.lowercased()) {
                     result[i] = trimmed
-                    used.insert(trimmed)
+                    used.insert(trimmed.lowercased())
                     continue
                 }
             }
 
             // 2. Invalid hex: deterministic, always-unique placeholder.
             guard labs[i] != nil, !ranked[i].isEmpty else {
-                let fallback = used.contains("Unknown") ? "Unknown (\(hexes[i]))" : "Unknown"
+                let fallback = used.contains("unknown") ? "Unknown (\(hexes[i]))" : "Unknown"
                 result[i] = fallback
-                used.insert(fallback)
+                used.insert(fallback.lowercased())
                 continue
             }
 
@@ -649,7 +621,7 @@ enum ColorNamer {
             var chosen: String?
             searchEntries: for rank in 0..<ranked[i].count {
                 for candidate in candidates(colorIndex: i, rank: rank) {
-                    if !used.contains(candidate) {
+                    if !used.contains(candidate.lowercased()) {
                         chosen = candidate
                         break searchEntries
                     }
@@ -657,7 +629,7 @@ enum ColorNamer {
             }
             let final = chosen ?? "\(ranked[i].first.map { namedColorsLab[$0.index].name } ?? "Unknown") (\(hexes[i]))"
             result[i] = final
-            used.insert(final)
+            used.insert(final.lowercased())
         }
 
         return result

@@ -68,7 +68,9 @@ struct ToastOverlay: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     func body(content: Content) -> some View {
-        content
+        // A plain copy: the keyframe animator's closure is Sendable and can't read the view's property.
+        let reduceMotion = reduceMotion
+        return content
             .overlay(alignment: .top) {
                 if manager.isShowing {
                     HStack(spacing: 8) {

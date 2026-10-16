@@ -283,9 +283,11 @@ struct ColorComposer: View {
     /// and, for new colors, the photo button.
     private var nameRow: some View {
         HStack(spacing: 12) {
-            TextField("Name", text: nameBinding)
+            TextField("", text: nameBinding)
                 .font(.system(size: 18, weight: .medium))
+                .legiblePlaceholder("Name", isEmpty: nameBinding.wrappedValue.isEmpty)
                 .submitLabel(.done)
+                .autocorrectionDisabled()
                 .focused($focusedField, equals: .name)
                 .padding()
                 .liquidGlass(.regular, in: .rect(cornerRadius: 16))
@@ -637,7 +639,7 @@ struct ColorComposer: View {
         if let existing = appData.colors.first(where: { $0.HEX.caseInsensitiveCompare("#\(raw)") == .orderedSame }) {
             return existing.name
         }
-        return ColorNamer.name(forHex: raw)
+        return appData.uniqueColorName(forHex: raw)
     }
 
     // MARK: - Helpers

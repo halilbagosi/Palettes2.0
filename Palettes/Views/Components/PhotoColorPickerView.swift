@@ -76,6 +76,22 @@ struct PhotoColorPickerView: View {
                             }
                         }
 
+                    // The drag layer sits under the panel, so the panel's own
+                    // controls (the system color picker) still get their taps.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    dragVelocity = value.velocity
+                                    sample(at: value.location, in: rect)
+                                }
+                                .onEnded { _ in
+                                    dragVelocity = .zero   // let the bubble spring back / bounce
+                                    currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+                                }
+                        )
+
                     if let m = marker {
                         PhotoSampleMarker(color: currentColor, dragVelocity: dragVelocity)
                             .position(m)
@@ -88,21 +104,9 @@ struct PhotoColorPickerView: View {
                             .padding(.bottom, 24)
                     }
                 }
-                .contentShape(Rectangle())
                 // The first layout can be empty; place the marker once the photo has a size.
                 .onAppear { placeInitialMarker(in: rect) }
                 .onChange(of: rect.size) { _, _ in placeInitialMarker(in: rect) }
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            dragVelocity = value.velocity
-                            sample(at: value.location, in: rect)
-                        }
-                        .onEnded { _ in
-                            dragVelocity = .zero   // let the bubble spring back / bounce
-                            currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
-                        }
-                )
             }
             .navigationTitle("Pick Color")
             .navigationBarTitleDisplayMode(.inline)
@@ -179,6 +183,20 @@ struct PhotoColorPickerView: View {
 
     // MARK: - Preview
 
+    /// Bridges the system `ColorPicker` to the sampled RGB (0–255 channels).
+    private var adjustedColor: Binding<Color> {
+        Binding(
+            get: { currentColor },
+            set: { new in
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                guard UIColor(new).getRed(&r, green: &g, blue: &b, alpha: &a) else { return }
+                currentRGB = (Double(r) * 255, Double(g) * 255, Double(b) * 255)
+                hasSample = true
+                currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+            }
+        )
+    }
+
     private var previewPanel: some View {
         HStack(spacing: 16) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -199,6 +217,15 @@ struct PhotoColorPickerView: View {
             }
 
             Spacer()
+
+            // Before iOS 26: the system color picker (spectrum, sliders, and its
+            // own eyedropper) to fine-tune the sampled color.
+            if #unavailable(iOS 26.0) {
+                ColorPicker("Adjust Color", selection: adjustedColor, supportsOpacity: false)
+                    .labelsHidden()
+                    .scaleEffect(1.25)
+                    .frame(width: 44, height: 44)
+            }
         }
         .padding(18)
         .liquidGlass(.regular, in: .rect(cornerRadius: 24))
@@ -231,6 +258,35 @@ struct PhotoSampleMarker: View {
         .allowsHitTesting(false)
     }
 
+    /// iOS 26: the disc sealed inside a clear liquid-glass shell. Earlier: the
+    /// system eyedropper's look, a disc of the color in an ultra-thin material ring.
+    @ViewBuilder
+    private var bubble: some View {
+        if #available(iOS 26.0, *) {
+            ZStack {
+                Circle()
+                    .fill(.clear)
+                    .liquidGlass(.clear, in: .circle)
+                    .frame(width: 112, height: 112)
+                Circle()
+                    .fill(color)
+                    .frame(width: 86, height: 86)
+                    .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+            }
+        } else {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 108, height: 108)
+                    .overlay(Circle().strokeBorder(.white.opacity(0.35), lineWidth: 0.5))
+                Circle()
+                    .fill(color)
+                    .frame(width: 88, height: 88)
+                    .overlay(Circle().strokeBorder(.black.opacity(0.2), lineWidth: 0.5))
+            }
+        }
+    }
+
     /// The bubble that floats above the fingertip: an opaque disc of the sampled
     /// color sealed inside a clear liquid-glass shell. It squishes along the
     /// drag axis in proportion to finger speed — the same stretch language the
@@ -239,20 +295,7 @@ struct PhotoSampleMarker: View {
         let vx = max(-1, min(1, dragVelocity.width / 2500))
         let vy = max(-1, min(1, dragVelocity.height / 2500))
 
-        return ZStack {
-            // Clear liquid-glass circle — refracts the photo behind it.
-            Circle()
-                .fill(.clear)
-                .liquidGlass(.clear, in: .circle)
-                .frame(width: 112, height: 112)
-
-            // A plain (non-glass) disc of the color currently being picked,
-            // sitting inside the glass so the exact color reads at a glance.
-            Circle()
-                .fill(color)
-                .frame(width: 86, height: 86)
-                .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
-        }
+        return bubble
         // Stretch toward the direction of travel, thinning on the cross axis.
         .scaleEffect(
             x: reduceMotion ? 1 : 1 + abs(vx) * 0.45 - abs(vy) * 0.12,

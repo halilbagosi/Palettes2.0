@@ -456,7 +456,7 @@ struct PaletteDetailView: View {
         let edited = appData.palettes[paletteIdx].paletteColors[index]
         let known = appData.colors.contains { $0.HEX.caseInsensitiveCompare(edited.hex) == .orderedSame }
         if !known {
-            appData.colors.append(ColorViewModel(name: edited.name, color: edited.color, HEX: edited.hex, usedInPalette: true))
+            appData.colors.append(ColorViewModel(name: appData.uniqueColorName(preferred: edited.name, forHex: edited.hex), color: edited.color, HEX: edited.hex, usedInPalette: true))
         }
     }
 

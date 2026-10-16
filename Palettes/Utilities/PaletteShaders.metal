@@ -123,7 +123,8 @@ using namespace metal;
     float2 center,
     float2 radii,
     float angle,
-    float strength
+    float strength,
+    float power
 ) {
     float2 d = position - center;
     float c = cos(angle), s = sin(angle);
@@ -134,7 +135,7 @@ using namespace metal;
     if (q >= 1.0) { return position; }
     // Untouched in the middle; in the outer band the rim samples from near the
     // center, so inner content smears around the edge like in a drop of water.
-    float k = strength * pow(q, 14.0);
+    float k = strength * pow(q, power);
     float2 warped = local * (1.0 - k);
     // Back to screen space.
     float2 back = float2(c * warped.x - s * warped.y, s * warped.x + c * warped.y);

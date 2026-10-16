@@ -3,7 +3,7 @@
 //  Palettes
 //
 //  A one-time welcome sheet the first time each of the Colors, Search and
-//  Generate tabs opens: the empty-state art, an eyebrow, a rounded title and
+//  Generate tabs opens: the empty-state art, a rounded title and
 //  a few things the tab can do. It waits for the main onboarding to finish
 //  and never comes back once shown (Settings' replay resets it).
 //
@@ -41,14 +41,6 @@ enum FeatureIntro: String, CaseIterable {
         case .colors: "circle.grid.cross.fill"
         case .search: "magnifyingglass"
         case .generate: "sparkles"
-        }
-    }
-
-    var eyebrow: String {
-        switch self {
-        case .colors: "Colors"
-        case .search: "Search"
-        case .generate: "Generate"
         }
     }
 
@@ -173,7 +165,6 @@ struct FeatureIntroSheet: View {
                     .padding(.top, 20)
                     .introReveal(appeared, index: 0, reduceMotion: reduceMotion)
                 VStack(spacing: 14) {
-                    OnboardingEyebrow(title: intro.eyebrow, systemImage: intro.symbol)
                     OnboardingStepText(title: intro.title, subtitle: intro.subtitle)
                         .accessibilityFocused($titleFocused)
                 }
