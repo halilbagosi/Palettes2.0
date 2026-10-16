@@ -166,6 +166,7 @@ struct OnboardingExtrasView: View {
                 .padding(.bottom, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .softScrollEdge()
             .background(alignment: .top) {
                 PaletteWash(colors: palette.colors)
                     .opacity(appeared ? 1 : 0)
@@ -215,16 +216,10 @@ struct OnboardingExtrasView: View {
 
     // MARK: - Header
 
-    /// The app's icon, glowing in the palette's own colors, over the closing
-    /// line. The swatches sit under it as a row of drops.
+    /// The palette's swatches as a row of drops over the closing line.
     private var header: some View {
         VStack(spacing: 18) {
             VStack(spacing: 14) {
-                AppIconPreview(version: .auto, size: 92, resolvesAuto: true)
-                    .shadow(color: (palette.colors.first ?? .accentColor).opacity(0.45), radius: 24, y: 10)
-                    .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
-                    .scaleEffect(appeared || reduceMotion ? 1 : 0.8)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1), value: appeared)
                 SwatchFan(colors: palette.colors)
                     .accessibilityHidden(true)
             }
@@ -301,7 +296,10 @@ struct OnboardingExtrasView: View {
                 SiriPhraseBubble(phrase: OnboardingExtrasLogic.siriPhrase(
                     appName: appName, usesAI: OnboardingPaletteMaker.usesAI, paletteName: palette.name))
                 ShortcutsLink()
-                    .shortcutsLinkStyle(.automaticOutline)
+                    .shortcutsLinkStyle(.automatic)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 2)
             }
         }
     }
