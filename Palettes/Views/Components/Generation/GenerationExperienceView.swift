@@ -178,6 +178,7 @@ struct GenerationResultView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(1...3)
                     .focused($nameFocused)
+                    .autocorrectionDisabled()
                     .submitLabel(.done)
                     .onSubmit { name = name.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .onChange(of: name) { _, new in

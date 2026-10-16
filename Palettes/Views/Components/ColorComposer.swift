@@ -283,9 +283,11 @@ struct ColorComposer: View {
     /// and, for new colors, the photo button.
     private var nameRow: some View {
         HStack(spacing: 12) {
-            TextField("Name", text: nameBinding)
+            TextField("", text: nameBinding)
                 .font(.system(size: 18, weight: .medium))
+                .legiblePlaceholder("Name", isEmpty: nameBinding.wrappedValue.isEmpty)
                 .submitLabel(.done)
+                .autocorrectionDisabled()
                 .focused($focusedField, equals: .name)
                 .padding()
                 .liquidGlass(.regular, in: .rect(cornerRadius: 16))

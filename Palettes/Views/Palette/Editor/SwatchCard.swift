@@ -51,8 +51,8 @@ struct SwatchCard<Accessory: View>: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
                     Text(hex)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.primary.opacity(0.7))
                 }
                 .lineLimit(1)
                 .padding(.horizontal, 10)

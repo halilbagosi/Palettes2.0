@@ -31,6 +31,7 @@ struct NewColorView: View {
             ColorComposer(color: $color, name: $name, allowsPhoto: true, namesFollowColor: true, notice: notice)
                 .navigationTitle("New Color")
                 .navigationBarTitleDisplayMode(.inline)
+                .solidSheetBar()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         SheetCancelButton { dismiss() }
