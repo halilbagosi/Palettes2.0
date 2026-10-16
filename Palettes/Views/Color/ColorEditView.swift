@@ -22,6 +22,7 @@ struct ColorEditView: View {
     @State private var internalColor: Color
     @State private var internalRole: String?
     @State private var showsTags = false
+    @State private var showNameTakenAlert = false
 
     init(
         colorName: Binding<String>,
@@ -58,6 +59,11 @@ struct ColorEditView: View {
                         SheetConfirmButton(kind: .save) { handleSaveTapped() }
                     }
                 }
+                .alert("Name Already Exists", isPresented: $showNameTakenAlert) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text("Another color is already named \"\(internalName.trimmingCharacters(in: .whitespacesAndNewlines))\". Choose a different name.")
+                }
                 .navigationDestination(isPresented: $showsTags) {
                     RoleList(
                         current: internalRole,
@@ -80,7 +86,22 @@ struct ColorEditView: View {
         .toastOverlay()
     }
 
+    /// A library color can't take another library color's name. Palette
+    /// colors (`tag` set) name only their slot, so they aren't checked.
+    private var nameIsTaken: Bool {
+        guard tag == nil else { return false }
+        let trimmed = internalName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return appData.colors.contains {
+            $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+                && $0.HEX.caseInsensitiveCompare(hexCode) != .orderedSame
+        }
+    }
+
     private func handleSaveTapped() {
+        if nameIsTaken {
+            showNameTakenAlert = true
+            return
+        }
         saveChanges()
         dismiss()
     }

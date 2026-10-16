@@ -201,4 +201,28 @@ final class ColorNamerTests: XCTestCase {
         XCTAssertNil(ColorNamer.hex(forName: "Not A Color"))
     }
 
+    // MARK: - avoiding taken names
+
+    func testAvoidingATakenNamePicksADifferentOne() {
+        let plain = ColorNamer.name(forHex: red.hex)
+        let other = ColorNamer.name(forHex: red.hex, avoiding: [plain])
+        XCTAssertNotEqual(other.lowercased(), plain.lowercased())
+        XCTAssertFalse(other.isEmpty)
+    }
+
+    func testAvoidingIsCaseInsensitive() {
+        let plain = ColorNamer.name(forHex: red.hex)
+        let other = ColorNamer.name(forHex: red.hex, avoiding: [plain.uppercased()])
+        XCTAssertNotEqual(other.lowercased(), plain.lowercased())
+    }
+
+    func testRepeatedlyAvoidingNeverRepeats() {
+        var taken = Set<String>()
+        for _ in 0..<12 {
+            let name = ColorNamer.name(forHex: "3A7BD5", avoiding: taken)
+            XCTAssertFalse(taken.contains(name.lowercased()), "\(name) repeated")
+            taken.insert(name.lowercased())
+        }
+    }
+
 }

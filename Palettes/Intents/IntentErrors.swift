@@ -16,6 +16,7 @@ enum PalettesIntentError: Error, Equatable, CustomLocalizedStringResourceConvert
     case invalidHex(String)
     case paletteNotFound
     case colorNotFound
+    case nameTaken(String, String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -33,6 +34,8 @@ enum PalettesIntentError: Error, Equatable, CustomLocalizedStringResourceConvert
             return "That palette couldn't be found in your library."
         case .colorNotFound:
             return "That color couldn't be found in your library."
+        case .nameTaken(let name, let hex):
+            return "A color named '\(name)' already exists (\(hex)). Choose a different name."
         }
     }
 }

@@ -637,7 +637,7 @@ struct ColorComposer: View {
         if let existing = appData.colors.first(where: { $0.HEX.caseInsensitiveCompare("#\(raw)") == .orderedSame }) {
             return existing.name
         }
-        return ColorNamer.name(forHex: raw)
+        return appData.uniqueColorName(forHex: raw)
     }
 
     // MARK: - Helpers
