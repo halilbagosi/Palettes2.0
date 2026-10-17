@@ -40,7 +40,7 @@ Palettes doesn't collect personal information from anyone, including children.
 
 ## Changes to this policy
 
-If this policy changes, the new version will be published at the same address with a new effective date, and the in-app copy will be updated.
+If this policy changes, the new version will be published at the same address with a new effective date.
 
 ## Contact
 
