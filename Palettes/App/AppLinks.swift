@@ -9,9 +9,7 @@
 import Foundation
 
 enum AppLinks {
-    // TODO(owner): replace with the dedicated support address before submission
-    // (also in Palettes/Resources/PrivacyPolicy.md).
-    static let supportEmail = "support@example.com"
+    static let supportEmail = "support@halilbagosi.com"
 
     static var supportEmailURL: URL {
         URL(string: "mailto:\(supportEmail)")!

@@ -44,4 +44,4 @@ If this policy changes, the new version will be published at the same address wi
 
 ## Contact
 
-Questions or requests: support@example.com
+Questions or requests: support@halilbagosi.com
