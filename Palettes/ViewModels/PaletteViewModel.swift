@@ -12,13 +12,21 @@ struct PaletteColor: Identifiable, Sendable, Hashable {
     var id = UUID()
     var color: Color
     var hex: String
-    var name: String
+    var name: String { didSet { name = NameLimit.clamp(name) } }
     var role: String? = nil
+
+    init(id: UUID = UUID(), color: Color, hex: String, name: String, role: String? = nil) {
+        self.id = id
+        self.color = color
+        self.hex = hex
+        self.name = NameLimit.clamp(name)
+        self.role = role
+    }
 }
 
 struct PaletteViewModel: Identifiable, Sendable, Hashable {
     var id = UUID()
-    var name: String
+    var name: String { didSet { name = NameLimit.clamp(name) } }
     var paletteColors: [PaletteColor]
     var isFavorite: Bool = false
     var isGenerated: Bool = false
@@ -43,7 +51,7 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         isGenerated: Bool = false
     ) {
         self.id = id
-        self.name = name
+        self.name = NameLimit.clamp(name)
         self.isFavorite = isFavorite
         self.isGenerated = isGenerated
         self.paletteColors = colors.enumerated().map { index, color in
@@ -62,7 +70,7 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         isGenerated: Bool = false
     ) {
         self.id = id
-        self.name = name
+        self.name = NameLimit.clamp(name)
         self.paletteColors = paletteColors
         self.isFavorite = isFavorite
         self.isGenerated = isGenerated

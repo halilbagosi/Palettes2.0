@@ -410,6 +410,24 @@ final class PaletteExporterTests: XCTestCase {
         XCTAssertEqual(decodeASEFirstColorName(data), "Ocean")
     }
 
+    func testASEHeavilyCombinedNameStaysUnderUInt16() {
+        // 100 characters, each with 1,000 combining marks: ~100k UTF-16
+        // units, past what the format's UInt16 name length can hold.
+        let heavy = String(repeating: "a" + String(repeating: "\u{0301}", count: 1000), count: 100)
+        let palette = PaletteViewModel(name: "Heavy", colors: [.red], hexCodes: ["#FF0000"], colorNames: [heavy])
+        let data = PaletteExporter.aseData(palette)
+        let nameLength = Int(data[18]) << 8 | Int(data[19])
+        XCTAssertEqual(nameLength, PaletteExporter.maxASENameUnits + 1) // + terminator
+    }
+
+    func testASENameUnitsNeverSplitASurrogatePair() {
+        let emoji = String(repeating: "🎨", count: PaletteExporter.maxASENameUnits)
+        let units = PaletteExporter.aseNameUnits(emoji)
+        XCTAssertEqual(units.count, PaletteExporter.maxASENameUnits)
+        // Each emoji is a surrogate pair, so exactly half of them fit whole.
+        XCTAssertEqual(String(decoding: units, as: UTF16.self), String(repeating: "🎨", count: PaletteExporter.maxASENameUnits / 2))
+    }
+
     // MARK: - PDF
 
     @MainActor

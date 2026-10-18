@@ -264,6 +264,23 @@ enum PaletteExporter {
     /// the null terminator; name as UTF-16BE bytes + 0x0000 terminator; 4 ASCII
     /// bytes "RGB " (trailing space); three big-endian Float32 (r,g,b in 0-1);
     /// UInt16 colorType 0x0002 (normal).
+    /// Longest ASE name, in UTF-16 units before the terminator. The format
+    /// stores the length as a UInt16; this stays far below that so a name
+    /// stacked with combining marks can't overflow it.
+    static let maxASENameUnits = 1024
+
+    /// `name` as UTF-16, cut at a whole Unicode scalar so no surrogate pair
+    /// is split.
+    static func aseNameUnits(_ name: String) -> [UInt16] {
+        var units: [UInt16] = []
+        for scalar in name.unicodeScalars {
+            let encoded = Array(String(scalar).utf16)
+            guard units.count + encoded.count <= maxASENameUnits else { break }
+            units += encoded
+        }
+        return units
+    }
+
     static func aseData(_ palette: PaletteViewModel) -> Data {
         let pairs = slugSourcesAndHexes(palette)
         var data = Data()
@@ -289,7 +306,7 @@ enum PaletteExporter {
         appendUInt32(UInt32(pairs.count)) // block count
 
         for pair in pairs {
-            let nameUTF16: [UInt16] = Array(pair.displayName.utf16) + [0x0000]
+            let nameUTF16: [UInt16] = aseNameUnits(pair.displayName) + [0x0000]
             let nameLength = UInt16(nameUTF16.count)
 
             appendUInt16(0x0001) // block type: color entry

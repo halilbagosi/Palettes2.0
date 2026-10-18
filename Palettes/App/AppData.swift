@@ -694,7 +694,7 @@ class AppData: ObservableObject {
     /// `ColorRole.defaults` or an existing custom tag.
     @discardableResult
     func addCustomTag(_ name: String) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameLimit.clamp(name.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !trimmed.isEmpty else { return false }
         guard !isReservedOrExistingTag(trimmed) else { return false }
         customTags.append(trimmed)
@@ -707,7 +707,7 @@ class AppData: ObservableObject {
     /// existing custom tag.
     func renameCustomTag(_ old: String, to new: String) {
         guard let index = customTags.firstIndex(where: { $0.caseInsensitiveCompare(old) == .orderedSame }) else { return }
-        let trimmed = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameLimit.clamp(new.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !trimmed.isEmpty else { return }
         guard !isReservedOrExistingTag(trimmed, excludingCustomTag: old) else { return }
 
