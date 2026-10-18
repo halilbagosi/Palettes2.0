@@ -107,6 +107,10 @@ enum OnboardingPull {
 
 @MainActor
 final class OnboardingModel: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     @Published private(set) var step: OnboardingStep
     @Published private(set) var isFinished = false
     @Published var cameraAccess: OnboardingCameraAccess = .notDetermined

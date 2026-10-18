@@ -14,6 +14,10 @@ import Combine
 
 @MainActor
 final class OnboardingCameraFlow: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     let model: OnboardingModel
     let camera = OrbCameraController()
 

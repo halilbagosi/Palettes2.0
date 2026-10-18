@@ -432,6 +432,10 @@ enum NamingRace {
 }
 
 private final class OnceBox<Value: Sendable>: @unchecked Sendable {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Value, Never>?
     init(_ continuation: CheckedContinuation<Value, Never>) { self.continuation = continuation }
