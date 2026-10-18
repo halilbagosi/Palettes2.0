@@ -11,6 +11,10 @@ import Combine
 
 @MainActor
 final class OnboardingReplayCoordinator: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     private(set) var isRequested = false
 
     /// `withAppleIntelligence` replays down the Apple Intelligence path even

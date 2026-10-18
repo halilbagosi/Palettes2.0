@@ -26,6 +26,10 @@ struct CameraPicker: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        /// Not main-actor isolated: the synthesized isolated deinit crashes on
+        /// iOS 17/18 (see CLAUDE.md).
+        nonisolated deinit {}
+
         var parent: CameraPicker
         init(_ parent: CameraPicker) { self.parent = parent }
 
@@ -44,6 +48,10 @@ struct CameraPicker: UIViewControllerRepresentable {
 }
 
 private final class EdgeToEdgeImagePickerController: UIImagePickerController {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     override var prefersStatusBarHidden: Bool { true }
 
     override func viewDidLoad() {

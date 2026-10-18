@@ -52,6 +52,10 @@ struct OrbTuning: Equatable {
 #if DEBUG
 @MainActor
 final class OrbDebugSettings: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     static let shared = OrbDebugSettings()
     @Published var tuning = OrbTuning()
 }

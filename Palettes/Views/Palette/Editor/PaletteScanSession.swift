@@ -15,6 +15,10 @@ import PhotosUI
 
 @MainActor
 final class PaletteScanSession: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     /// Colors found in a new photo, for the editor to put in the palette in
     /// place of the previous photo's colors (`replacing`).
     struct Delivery: Equatable {

@@ -7,6 +7,10 @@ import UIKit
 
 @MainActor
 class AppData: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     @Published var activeTab: TabValue = .palettes
 
     /// Color to pre-select when the Generate tab is opened from a color detail view.

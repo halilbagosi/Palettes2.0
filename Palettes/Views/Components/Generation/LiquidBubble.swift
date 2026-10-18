@@ -54,6 +54,10 @@ extension EnvironmentValues {
 /// through zero flips it to the perpendicular axis, which is exactly how a
 /// stretched jelly overshoots into a squash.
 final class DropPhysics {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     private struct Spring2 {
         var x = 0.0, y = 0.0, vx = 0.0, vy = 0.0
         mutating func step(toward tx: Double, _ ty: Double, response: Double, damping: Double, dt: Double) {

@@ -27,6 +27,10 @@ enum AppPlan: String, CaseIterable, Identifiable {
 
 @MainActor
 final class SubscriptionStatus: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     static let shared = SubscriptionStatus()
 
     // TODO(owner): the auto-renewable subscription product IDs from App Store
