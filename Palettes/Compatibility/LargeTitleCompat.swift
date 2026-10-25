@@ -33,34 +33,53 @@ extension View {
     }
 }
 
-/// "Palettes (12)": the title with its count in a capsule. The capsule
-/// spans the title's capitals: its bottom on the baseline, its top at the
-/// cap height.
+/// "Palettes (12)": the title with its count in a capsule. The number sits
+/// on the title's baseline with digits a little shorter than its capitals;
+/// the capsule grows around the number as far as it needs to.
 private struct LibraryLargeTitle: View {
     let noun: String
     let count: Int
 
-    /// Re-reads the cap height when the text size changes.
+    /// Re-reads the font sizes when the text size changes.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var capHeight: CGFloat {
-        UIFont.preferredFont(forTextStyle: .largeTitle).capHeight.rounded()
+    /// The count's font, as a fraction of the title's size. Digits are cap
+    /// height, so 0.72 gives digits a little shorter than its capitals.
+    private static let sizeRatio = 0.72
+    /// Capsule padding around the digits, as a fraction of their height.
+    private static let insetRatio = 0.5
+
+    private var countSize: CGFloat {
+        (UIFont.preferredFont(forTextStyle: .largeTitle).pointSize * Self.sizeRatio).rounded()
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        let font = UIFont.systemFont(ofSize: countSize, weight: .semibold)
+        let inset = (font.capHeight * Self.insetRatio).rounded()
+        let pillHeight = font.capHeight + inset * 2
+        // The text frame runs ascender to descender; move the capsule from
+        // that frame's center to the digits' center.
+        let shift = (font.ascender + font.descender - font.capHeight) / 2
+
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(LibraryTitle.plural(noun))
                 .font(.largeTitle.bold())
             if count > 0 {
                 Text("\(count)")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(size: countSize, weight: .semibold))
                     .monospacedDigit()
+                    // Never truncate to "…" when the toolbar slot is short.
+                    .fixedSize()
                     .contentTransition(.numericText(value: Double(count)))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .frame(minWidth: capHeight, minHeight: capHeight, maxHeight: capHeight)
-                    .background(Color(.tertiarySystemFill), in: Capsule())
-                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                    .padding(.horizontal, inset * 1.2)
+                    .frame(minWidth: pillHeight)
+                    .background {
+                        Capsule()
+                            .fill(Color(.tertiarySystemFill))
+                            .frame(height: pillHeight)
+                            .offset(y: shift)
+                    }
                     .transition(.scale.combined(with: .opacity))
             }
         }
