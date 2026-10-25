@@ -56,7 +56,8 @@ struct PaletteCellSearch: View {
         .frame(height: 108)
         // Card radius = pill capsule radius (~16) + 8pt inset for concentric corners.
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .swatchEdge(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 
     @ViewBuilder

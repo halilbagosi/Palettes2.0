@@ -30,7 +30,6 @@ struct GenerationSwatchRow: View {
                         Circle()
                             .fill(colors[index])
                             .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
-                            .swatchEdge(Circle())
                             .transition(reduceMotion ? .opacity : .scale(scale: 0.3).combined(with: .opacity))
                     }
                 }

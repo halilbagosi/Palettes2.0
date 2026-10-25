@@ -245,7 +245,6 @@ struct PaletteColorRow: View {
             .fill(entry.color)
             .frame(width: Self.tileSize, height: Self.tileSize)
             .overlay(shape.strokeBorder(.primary.opacity(0.12), lineWidth: 1))
-            .swatchEdge(shape)
             .overlay(alignment: .topTrailing) { removeBadge(id) }
             .scaleEffect(isLifted && !reduceMotion ? 1.1 : 1)
             .shadow(color: .black.opacity(isLifted ? 0.25 : 0), radius: 8, y: 4)
