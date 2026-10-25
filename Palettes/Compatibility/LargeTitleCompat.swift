@@ -112,14 +112,14 @@ private struct LibraryLargeTitle: View {
 /// them from a panel (triple-tap a library title) to compare on device.
 private enum CountPillTuning {
     /// Count font size as a fraction of the title's. Digits are cap height,
-    /// so 0.72 gives digits a little shorter than its capitals.
-    static let defaultSize = 0.72
+    /// so 0.63 gives digits well short of its capitals.
+    static let defaultSize = 0.63
     /// Capsule padding around the digits, as a fraction of their height.
-    static let defaultInset = 0.5
+    static let defaultInset = 0.45
     /// Points the pill moves right (+) / left (−) from its baseline position.
     static let defaultOffsetX = 0.0
     /// Points the pill moves down (+) / up (−) from its baseline position.
-    static let defaultOffsetY = 0.0
+    static let defaultOffsetY = -2.0
     static let sizeKey = "debug.countPill.size"
     static let insetKey = "debug.countPill.inset"
     static let offsetXKey = "debug.countPill.offsetX"
@@ -140,7 +140,7 @@ private struct CountPillTuningPanel: View {
                     row("Number size", value: $sizeRatio, in: 0.4...1.1, step: 0.01)
                     row("Pill padding", value: $insetRatio, in: 0.1...0.8, step: 0.01)
                 } footer: {
-                    Text("Number size is a fraction of the title's font size; 0.72 makes the digits a little shorter than the capitals. Pill padding is a fraction of the digits' height.")
+                    Text("Number size is a fraction of the title's font size; 0.63 makes the digits well short of the capitals. Pill padding is a fraction of the digits' height.")
                 }
                 Section {
                     row("Horizontal position", value: $offsetX, in: -20...20, step: 0.5, unit: "pt")
