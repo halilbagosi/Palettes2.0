@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Compact full-bleed color tile for search and browse: the color fills the
 /// tile with the name and hex floating in a liquid glass pill.
-struct ColorCellSearch: View {
+struct ColorCellSearch: View, Equatable {
     let colorName: String
     let hexCode: String
     let color: Color
@@ -17,6 +17,14 @@ struct ColorCellSearch: View {
     var isGenerated: Bool = false
     /// When provided, a copy button is shown in the trailing corner.
     var onCopy: (() -> Void)? = nil
+
+    /// `onCopy` is compared by presence only, so `.equatable()` can skip body
+    /// re-runs for unchanged cards.
+    static func == (lhs: ColorCellSearch, rhs: ColorCellSearch) -> Bool {
+        lhs.colorName == rhs.colorName && lhs.hexCode == rhs.hexCode && lhs.color == rhs.color
+            && lhs.highlight == rhs.highlight && lhs.isGenerated == rhs.isGenerated
+            && (lhs.onCopy == nil) == (rhs.onCopy == nil)
+    }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -54,8 +62,14 @@ struct ColorCellSearch: View {
         // sits concentric with the card corner.
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .swatchOutline(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .compositingGroup()
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        // The shadow is cast by a plain shape behind the card rather than a
+        // compositing group over it, which would re-render the glass pills
+        // offscreen for every card while scrolling.
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.background)
+                .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        }
     }
 
     @ViewBuilder
