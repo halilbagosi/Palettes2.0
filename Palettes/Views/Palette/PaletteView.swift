@@ -26,8 +26,13 @@ struct PaletteView: View {
     @AppStorage("palettesSort") private var sortRaw = LibrarySort.newestFirst.rawValue
     @AppStorage("palettesOriginFilter") private var originFilterRaw = LibraryOriginFilter.all.rawValue
     @State private var favoritesOnly = false
-    /// iPhone Duo's fold across the grid (see `MorphingCardGrid.foldSpan`).
-    @State private var foldSpan: ClosedRange<CGFloat>?
+    /// Filtered + sorted palettes, cached so scrolling / unrelated `AppData`
+    /// publishes don't re-filter and re-sort the library. nil until first computed.
+    @State private var cachedDisplayed: [PaletteViewModel]?
+    /// True while a layout toggle animates, so the grid keeps cards for both
+    /// layouts mounted only for that window.
+    @State private var isMorphing = false
+    @State private var morphToken = 0
     /// The one-time options card after onboarding's "Start creating".
     @State private var showsOptionsTour = false
     @State private var optionsTourTask: Task<Void, Never>?
@@ -48,26 +53,61 @@ struct PaletteView: View {
 
     private var layoutBinding: Binding<ListLayout> {
         Binding(get: { layout }, set: { newValue in
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                layoutRaw = newValue.rawValue
+            // Open the morph window first so the target layout's extra cards are
+            // already mounted (with a frame) when the animated change lands.
+            beginMorphWindow()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(60))
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                    layoutRaw = newValue.rawValue
+                }
             }
         })
     }
 
     private var sortBinding: Binding<LibrarySort> {
-        Binding(get: { sort }, set: { sortRaw = $0.rawValue })
+        Binding(get: { sort }, set: { sortRaw = $0.rawValue; refreshDisplayed() })
     }
 
     private var originFilterBinding: Binding<LibraryOriginFilter> {
-        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue })
+        Binding(get: { originFilter }, set: { originFilterRaw = $0.rawValue; refreshDisplayed() })
+    }
+
+    private var favoritesOnlyBinding: Binding<Bool> {
+        Binding(get: { favoritesOnly }, set: { newValue in
+            favoritesOnly = newValue
+            refreshDisplayed()
+        })
     }
 
     /// Filtered + sorted for display only; the stored array keeps creation order.
     private var displayedPalettes: [PaletteViewModel] {
-        var items = appData.palettes
+        cachedDisplayed ?? Self.displayed(from: appData.palettes, favoritesOnly: favoritesOnly,
+                                          origin: originFilter, sort: sort)
+    }
+
+    static func displayed(from palettes: [PaletteViewModel], favoritesOnly: Bool,
+                          origin: LibraryOriginFilter, sort: LibrarySort) -> [PaletteViewModel] {
+        var items = palettes
         if favoritesOnly { items = items.filter(\.isFavorite) }
-        items = items.filter { originFilter.includes(isGenerated: $0.isGenerated) }
+        items = items.filter { origin.includes(isGenerated: $0.isGenerated) }
         return sort.ordered(items) { HueOrder.key(forHexes: $0.hexCodes) }
+    }
+
+    private func refreshDisplayed(from palettes: [PaletteViewModel]? = nil) {
+        cachedDisplayed = Self.displayed(from: palettes ?? appData.palettes, favoritesOnly: favoritesOnly,
+                                         origin: originFilter, sort: sort)
+    }
+
+    /// Keeps both layouts' cards mounted just long enough for the morph.
+    private func beginMorphWindow() {
+        isMorphing = true
+        morphToken += 1
+        let token = morphToken
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.0))
+            if token == morphToken { isMorphing = false }
+        }
     }
 
     private var allVisibleSelected: Bool {
@@ -102,6 +142,10 @@ struct PaletteView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
+                .onReceive(appData.$palettes) { refreshDisplayed(from: $0) }
+                .onChange(of: sortRaw) { refreshDisplayed() }
+                .onChange(of: originFilterRaw) { refreshDisplayed() }
+                .onChange(of: favoritesOnly) { refreshDisplayed() }
                 .libraryTitle("Palette", count: displayedPalettes.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .navigationDestination(for: PaletteViewModel.self) { palette in
                     PaletteDetailView(paletteName: palette.name, palette: palette)
@@ -154,7 +198,7 @@ struct PaletteView: View {
                         LibraryOptionsTourCard(
                             layout: layoutBinding,
                             sort: sortBinding,
-                            favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                            favoritesOnly: favoritesOnlyBinding.animation(.spring(response: 0.3)),
                             originFilter: originFilterBinding.animation(.spring(response: 0.3)),
                             sorts: LibrarySort.paletteCases,
                             onDone: endOptionsTour
@@ -245,33 +289,31 @@ struct PaletteView: View {
                 withAnimation(.spring(response: 0.3)) {
                     favoritesOnly = false
                     originFilterRaw = LibraryOriginFilter.all.rawValue
+                    refreshDisplayed()
                 }
             }
             .frame(maxHeight: .infinity)
         } else {
-            ScrollView {
-                MorphingCardGrid(
-                    minColumnWidth: layout == .compact ? 320 : 340,
-                    maxColumnWidth: 560,
-                    rowHeight: layout == .compact ? 108 : 180,
-                    spacing: layout == .compact ? 10 : 20,
-                    foldSpan: foldSpan
-                ) {
-                    ForEach(displayedPalettes) { palette in
-                        paletteCard(palette)
-                    }
-                }
-                .onVerticalFoldSpanChange { newValue in
-                    // Cards move and resize to their new columns as the device folds.
-                    withAnimation(.smooth(duration: 0.35)) { foldSpan = newValue }
-                }
-                .padding()
-                .padding(.bottom, 88)
-                // Implicit as well as the binding's withAnimation: a change from a
-                // Toggle (the onboarding options card) arrives in the Toggle's own
-                // transaction and would otherwise snap.
-                .animation(.spring(response: 0.35, dampingFraction: 0.9), value: layout)
-            }
+            // The layout binding always applies its own withAnimation (also for
+            // the options card's Toggle), so no implicit animation is needed here.
+            PalettesGrid(
+                palettes: displayedPalettes,
+                layout: layout,
+                isMorphing: isMorphing,
+                isSelecting: isSelecting,
+                selectedIDs: selectedIDs,
+                card: { paletteCard($0) }
+            )
+            .equatable()
+        }
+    }
+
+    fileprivate static func gridLayout(for layout: ListLayout) -> MorphingCardGrid {
+        switch layout {
+        case .compact:
+            MorphingCardGrid(minColumnWidth: 320, maxColumnWidth: 560, rowHeight: 108, spacing: 10)
+        case .normal:
+            MorphingCardGrid(minColumnWidth: 340, maxColumnWidth: 560, rowHeight: 180, spacing: 20)
         }
     }
 
@@ -292,6 +334,7 @@ struct PaletteView: View {
             isSelecting: isSelecting,
             onCopy: { copyToClipboard(palette.hexCodes.joined(separator: ", "), label: "Copied HEX") }
         )
+        .equatable()
         .hoverEffect(.lift)
         .selectableCardChrome(
             isSelecting: isSelecting,
@@ -454,7 +497,7 @@ struct PaletteView: View {
             LibraryOptionsMenu(
                 layout: layoutBinding,
                 sort: sortBinding,
-                favoritesOnly: $favoritesOnly.animation(.spring(response: 0.3)),
+                favoritesOnly: favoritesOnlyBinding.animation(.spring(response: 0.3)),
                 originFilter: originFilterBinding.animation(.spring(response: 0.3)),
                 sorts: LibrarySort.paletteCases
             )
@@ -569,4 +612,48 @@ struct PaletteView: View {
         ShareSheetPresenter.present(items: [text])
     }
 
+}
+
+// MARK: - Grid
+
+/// The scrolling card grid, split out and `Equatable` so `PaletteView` body
+/// re-runs caused by unrelated `AppData` publishes (tab changes, coach marks)
+/// don't re-evaluate it. Closures are ignored in `==`: `card` only reads state
+/// that is also a field here (`layout`, `isSelecting`, `selectedIDs`) or boxed
+/// `@State`, so equal fields render identically.
+private struct PalettesGrid<Card: View>: View, Equatable {
+    let palettes: [PaletteViewModel]
+    let layout: ListLayout
+    let isMorphing: Bool
+    let isSelecting: Bool
+    let selectedIDs: Set<UUID>
+    let card: (PaletteViewModel) -> Card
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.layout == rhs.layout && lhs.isMorphing == rhs.isMorphing
+            && lhs.isSelecting == rhs.isSelecting && lhs.selectedIDs == rhs.selectedIDs
+            && lhs.palettes.count == rhs.palettes.count
+            && zip(lhs.palettes, rhs.palettes).allSatisfy { $0.hasSameContent(as: $1) }
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyMorphingCardGrid(
+                items: palettes,
+                grid: PaletteView.gridLayout(for: layout),
+                morphTargets: isMorphing ? [PaletteView.gridLayout(for: layout == .compact ? .normal : .compact)] : [],
+                content: card
+            )
+            .padding()
+            .padding(.bottom, 88)
+        }
+    }
+}
+
+private extension PaletteViewModel {
+    /// `==` is identity-only; rendering depends on these fields too.
+    func hasSameContent(as other: PaletteViewModel) -> Bool {
+        id == other.id && name == other.name && paletteColors == other.paletteColors
+            && isFavorite == other.isFavorite && isGenerated == other.isGenerated
+    }
 }
