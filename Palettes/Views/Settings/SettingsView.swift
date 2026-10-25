@@ -135,6 +135,9 @@ struct SettingsView: View {
                     Link(destination: AppLinks.supportEmailURL) {
                         SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill", tint: .green, accessory: .external)
                     }
+                    Link(destination: AppLinks.feedbackEmailURL) {
+                        SettingsRowLabel(title: "Send Feedback", systemImage: "bubble.left.and.text.bubble.right.fill", tint: .orange, accessory: .external)
+                    }
                 }
 
                 Section("Legal") {

@@ -17,6 +17,18 @@ enum AppLinks {
         URL(string: "mailto:\(supportEmail)")!
     }
 
+    static let feedbackEmail = "palettes.feedback@halilbagosi.com"
+
+    /// A mailto link to `feedbackEmail`, its subject naming the app version.
+    static var feedbackEmailURL: URL {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = feedbackEmail
+        components.queryItems = [URLQueryItem(name: "subject", value: "Palettes Feedback (\(version))")]
+        return components.url!
+    }
+
     static let supportPage = URL(string: "https://palettes.halilbagosi.com/support/")!
     static let privacyPolicy = URL(string: "https://palettes.halilbagosi.com/privacy/")!
 
