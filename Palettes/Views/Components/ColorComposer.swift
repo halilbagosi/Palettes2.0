@@ -266,7 +266,7 @@ struct ColorComposer: View {
             .frame(maxHeight: fillsHeight ? .infinity : nil)
             .frame(height: fillsHeight ? nil : (isEditingValues ? shrunkSwatchHeight : swatchHeight))
             .overlay(shape.stroke(Color.primary.opacity(0.1), lineWidth: 1))
-            .shadow(color: color.opacity(0.3), radius: 10, x: 0, y: 5)
+            .swatchEdge(shape)
             .contextMenu {
                 Button("Copy HEX", systemImage: "doc.on.doc") {
                     copyToClipboard(syncedHex, label: "Copied HEX")
