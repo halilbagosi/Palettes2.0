@@ -287,7 +287,6 @@ struct LiquidBubble<Content: View>: View {
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Circle())
-        .orbDebugMenu()
         .simultaneousGesture(pullGesture, including: pullable ? .all : .none)
         .onChange(of: kick) { _, _ in
             guard !reduceMotion else { return }
