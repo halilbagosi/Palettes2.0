@@ -54,7 +54,7 @@ private struct LibraryLargeTitle: View {
 #endif
 
     /// The count's font, as a fraction of the title's size. Digits are cap
-    /// height, so 0.7 gives digits a little shorter than its capitals.
+    /// height, so 0.72 gives digits a little shorter than its capitals.
     private var countSize: CGFloat {
         (UIFont.preferredFont(forTextStyle: .largeTitle).pointSize * sizeRatio).rounded()
     }
@@ -109,9 +109,9 @@ private struct LibraryLargeTitle: View {
 /// panel (triple-tap a library title) to compare sizes on device.
 private enum CountPillTuning {
     /// Count font size as a fraction of the title's.
-    static let defaultSize = 0.7
+    static let defaultSize = 0.72
     /// Capsule padding around the digits, as a fraction of their height.
-    static let defaultInset = 0.3
+    static let defaultInset = 0.5
     static let sizeKey = "debug.countPill.size"
     static let insetKey = "debug.countPill.inset"
 }
@@ -128,7 +128,7 @@ private struct CountPillTuningPanel: View {
                     row("Number size", value: $sizeRatio, in: 0.4...1.1)
                     row("Pill padding", value: $insetRatio, in: 0.1...0.8)
                 } footer: {
-                    Text("Number size is a fraction of the title's font size; 0.7 makes the digits a little shorter than the capitals. Pill padding is a fraction of the digits' height.")
+                    Text("Number size is a fraction of the title's font size; 0.72 makes the digits a little shorter than the capitals. Pill padding is a fraction of the digits' height.")
                 }
                 Section {
                     Button("Reset to defaults", role: .destructive) {
