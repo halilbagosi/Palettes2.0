@@ -269,7 +269,7 @@ struct ColorDetailView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             )
-            .shadow(color: liveColor.color.opacity(0.3), radius: 10, x: 0, y: 5)
+            .swatchEdge(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .matchedGeometryEffect(id: "color", in: foldNamespace)
     }
 

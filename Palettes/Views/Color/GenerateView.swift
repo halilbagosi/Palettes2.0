@@ -758,6 +758,7 @@ struct GenerateView: View {
                         .overlay {
                             Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
                         }
+                        .swatchEdge(Circle())
                         .overlay {
                             if isSelected {
                                 Circle()

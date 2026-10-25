@@ -35,6 +35,7 @@ struct PaletteStripPreview: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(Color.primary.opacity(0.1), lineWidth: 1)
         )
+        .swatchEdge(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Palette preview")

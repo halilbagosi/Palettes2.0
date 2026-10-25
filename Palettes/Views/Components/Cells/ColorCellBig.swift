@@ -37,8 +37,7 @@ struct ColorCellBig: View {
                 bottomBar.padding(Self.overlayInset)
             }
             .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-            .compositingGroup()
-            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+            .swatchEdge(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
             // Only claim taps when a handler exists — an unconditional tap
             // gesture swallows taps meant for an enclosing NavigationLink.
