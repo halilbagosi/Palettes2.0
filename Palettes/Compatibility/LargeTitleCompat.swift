@@ -34,17 +34,25 @@ extension View {
 }
 
 /// "Palettes (12)": the title with its count in a capsule. The capsule
-/// spans the title's capitals: its bottom on the baseline, its top at the
-/// cap height.
+/// spans the full height of the title's letters: its bottom on the
+/// baseline, its top level with the tallest letter (the "l" in "Palettes").
 private struct LibraryLargeTitle: View {
     let noun: String
     let count: Int
 
-    /// Re-reads the cap height when the text size changes.
+    /// Re-reads the letter height when the text size changes.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var capHeight: CGFloat {
-        UIFont.preferredFont(forTextStyle: .largeTitle).capHeight.rounded()
+    /// Height of the title's tallest letter above the baseline, measured
+    /// from the bold large-title glyphs themselves.
+    private var letterHeight: CGFloat {
+        let size = UIFont.preferredFont(forTextStyle: .largeTitle).pointSize
+        let font = UIFont.systemFont(ofSize: size, weight: .bold) as CTFont
+        let chars = Array(LibraryTitle.plural(noun).utf16)
+        var glyphs = [CGGlyph](repeating: 0, count: chars.count)
+        CTFontGetGlyphsForCharacters(font, chars, &glyphs, chars.count)
+        let bounds = CTFontGetBoundingRectsForGlyphs(font, .default, glyphs, nil, glyphs.count)
+        return bounds.maxY.rounded()
     }
 
     var body: some View {
@@ -53,12 +61,12 @@ private struct LibraryLargeTitle: View {
                 .font(.largeTitle.bold())
             if count > 0 {
                 Text("\(count)")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(size: letterHeight * 0.62, weight: .semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: Double(count)))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .frame(minWidth: capHeight, minHeight: capHeight, maxHeight: capHeight)
+                    .padding(.horizontal, letterHeight * 0.3)
+                    .frame(minWidth: letterHeight, minHeight: letterHeight, maxHeight: letterHeight)
                     .background(Color(.tertiarySystemFill), in: Capsule())
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
                     .transition(.scale.combined(with: .opacity))
