@@ -261,7 +261,7 @@ struct ColorComposer: View {
     private func swatch(fillsHeight: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return shape
-            .fill(color.gradient)
+            .fill(color)
             .frame(maxWidth: .infinity)
             .frame(maxHeight: fillsHeight ? .infinity : nil)
             .frame(height: fillsHeight ? nil : (isEditingValues ? shrunkSwatchHeight : swatchHeight))
@@ -349,11 +349,9 @@ struct ColorComposer: View {
             // The container animates this scroll view's frame as the header
             // changes; the cards themselves must not animate with focus.
             VStack(alignment: .leading, spacing: 16) {
-                // New Color: the values right under the name.
-                if allowsPhoto {
-                    valuesSection
-                        .transaction { $0.animation = nil }
-                }
+                // The values right under the name.
+                valuesSection
+                    .transaction { $0.animation = nil }
                 if allowsPhoto, scanSession.image != nil || scanSession.isLoading {
                     photoSection
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -364,10 +362,6 @@ struct ColorComposer: View {
                 }
                 adjustSection
                     .transaction { $0.animation = nil }
-                if !allowsPhoto {
-                    valuesSection
-                        .transaction { $0.animation = nil }
-                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)

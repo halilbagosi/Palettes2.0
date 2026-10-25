@@ -28,7 +28,7 @@ struct ColorCellBig: View {
 
     var body: some View {
         Rectangle()
-            .fill(color.gradient)
+            .fill(color)
             .frame(height: 180)
             .overlay(alignment: .topLeading) {
                 namePill.padding(Self.overlayInset)

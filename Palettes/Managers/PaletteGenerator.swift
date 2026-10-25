@@ -79,6 +79,79 @@ struct GeneratedNames {
 }
 
 @available(iOS 26.0, *)
+@Generable
+enum ChangeStep {
+    case less, same, more
+}
+
+@available(iOS 26.0, *)
+@Generable
+enum ChangeHarmony {
+    case keep, analogous, complementary, splitComplementary, triadic, monochromatic
+}
+
+/// A requested change to an existing palette, read relative to it.
+@available(iOS 26.0, *)
+@Generable
+struct GeneratedChange {
+    @Guide(description: "more for lighter or paler, less for darker or deeper, same if the request doesn't mention lightness")
+    var lightness: ChangeStep
+
+    @Guide(description: "more for more vivid, bold or saturated, less for more muted, dusty or subtle, same if the request doesn't mention it")
+    var saturation: ChangeStep
+
+    @Guide(description: "more for warmer (toward red, orange, yellow), less for cooler (toward blue, teal), same if the request doesn't mention temperature")
+    var warmth: ChangeStep
+
+    @Guide(description: "One plain color word if the request asks for a different main color, such as teal, navy, sage or plum. Empty if it doesn't.")
+    var newMainColor: String
+
+    @Guide(description: "A new color harmony only if the request asks for one, otherwise keep")
+    var harmony: ChangeHarmony
+
+    @Guide(description: "more if the request wants more colors, less if fewer, same otherwise")
+    var colorCount: ChangeStep
+}
+
+@available(iOS 26.0, *)
+extension PaletteChange {
+    init(model: GeneratedChange, request: String) {
+        func delta(_ step: ChangeStep) -> Int {
+            switch step {
+            case .less: return -1
+            case .same: return 0
+            case .more: return 1
+            }
+        }
+        // The request's own words settle what the model can't: an exact
+        // count, and a step the model missed.
+        let words = PaletteChange.heuristic(from: request)
+        self.init()
+        lightness = delta(model.lightness)
+        chroma = delta(model.saturation)
+        temperature = delta(model.warmth)
+        let color = model.newMainColor.trimmingCharacters(in: .whitespacesAndNewlines)
+        mainHue = color.isEmpty ? nil : PaletteBrief.hue(forColorWord: color)
+        switch model.harmony {
+        case .keep: scheme = nil
+        case .analogous: scheme = .analogous
+        case .complementary: scheme = .complementary
+        case .splitComplementary: scheme = .splitComplementary
+        case .triadic: scheme = .triadic
+        case .monochromatic: scheme = .monochromatic
+        }
+        size = words.size
+        sizeDelta = delta(model.colorCount)
+        if lightness == 0 { lightness = words.lightness }
+        if chroma == 0 { chroma = words.chroma }
+        if temperature == 0 { temperature = words.temperature }
+        if mainHue == nil { mainHue = words.mainHue }
+        if scheme == nil { scheme = words.scheme }
+        if sizeDelta == 0 { sizeDelta = words.sizeDelta }
+    }
+}
+
+@available(iOS 26.0, *)
 extension PaletteBrief {
     /// The model's brief in builder terms. A main color word that neither
     /// the vocabulary nor the dictionary knows keeps the vibe's own reading.
@@ -124,17 +197,30 @@ enum PaletteGenerator {
         let name: String
     }
 
+    /// A change to a palette this generator made: its recipe, and the
+    /// user's words for what should change.
+    struct Refinement {
+        let recipe: GenerationRecipe
+        let change: String
+    }
+
     /// Generates a palette, streaming its colors to `onPartialColors` one at
     /// a time for the generation orb. The streamed colors are the final
     /// ones: the builder knows them before the model names them.
     /// - Parameter existingNames: names already in the user's library, so
     ///   the generated palette's title stays distinct from them.
+    /// - Parameter refining: rebuilds that palette with a change applied
+    ///   instead of generating a new one; `size` and `scheme` are ignored.
+    /// - Parameter onRecipe: receives what the palette was built from, to
+    ///   refine it later.
     static func generate(
         baseColors: [BaseColor],
         size: Int?,
         vibe: String?,
         scheme: HarmonyScheme = .auto,
         existingNames: [String] = [],
+        refining: Refinement? = nil,
+        onRecipe: (@MainActor (GenerationRecipe) -> Void)? = nil,
         onPartialColors: (@MainActor ([Color]) -> Void)? = nil,
         onLateNaming: (@MainActor (PaletteViewModel) -> Void)? = nil,
         onLateNamingTask: (@MainActor (Task<Void, Never>) -> Void)? = nil
@@ -149,27 +235,52 @@ enum PaletteGenerator {
         let locked = lockedEntries(from: baseColors)
         let trimmedVibe = vibe?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        // 1. Brief.
-        let brief = trimmedVibe.isEmpty ? PaletteBrief.neutral : await makeBrief(vibe: trimmedVibe)
-        try Task.checkCancellation()
-        let targetCount = PaletteBrief.resolvedSize(requested: size, locked: locked.count, suggested: brief.suggestedSize)
-
-        // The user's mode always wins. Auto follows the brief's harmony,
-        // unless two or more chosen colors already imply one.
-        var resolvedScheme = scheme
-        if scheme == .auto, locked.count < 2, let suggested = brief.scheme {
-            resolvedScheme = suggested
+        // 1. Brief: read from the vibe, or the last recipe with the change applied.
+        var recipe: GenerationRecipe
+        if let refining {
+            let change = await readChange(refining.change, recipe: refining.recipe)
+            recipe = refining.recipe.applying(change, lockedCount: locked.count)
+            if change.isEmpty {
+                // Not a step from the palette ("more like a beach"): read it
+                // as a vibe and take whatever it says over the old brief.
+                let brief = await makeBrief(vibe: refining.change)
+                recipe.brief.hue = brief.hue ?? recipe.brief.hue
+                recipe.brief.tone = brief.tone
+                if let suggested = brief.scheme, !recipe.scheme.isUIMode { recipe.scheme = suggested }
+            }
+            // A change must change something.
+            if recipe == refining.recipe { recipe.seed = UInt64.random(in: .min ... .max) }
+        } else {
+            let brief = trimmedVibe.isEmpty ? PaletteBrief.neutral : await makeBrief(vibe: trimmedVibe)
+            // The user's mode always wins. Auto follows the brief's harmony,
+            // unless two or more chosen colors already imply one.
+            var resolvedScheme = scheme
+            if scheme == .auto, locked.count < 2, let suggested = brief.scheme {
+                resolvedScheme = suggested
+            }
+            recipe = GenerationRecipe(
+                brief: brief,
+                size: PaletteBrief.resolvedSize(requested: size, locked: locked.count, suggested: brief.suggestedSize),
+                scheme: resolvedScheme,
+                seed: UInt64.random(in: .min ... .max)
+            )
         }
+        try Task.checkCancellation()
 
         // 2. Build.
         let built = PaletteBuilder.build(PaletteBuildRequest(
             anchors: locked.map(\.hex),
-            size: targetCount,
-            scheme: resolvedScheme,
-            tone: brief.tone,
-            hue: brief.hue,
-            seed: UInt64.random(in: .min ... .max)
+            size: recipe.size,
+            scheme: recipe.scheme,
+            tone: recipe.brief.tone,
+            hue: recipe.brief.hue,
+            seed: recipe.seed
         ))
+        recipe.builtHue = built.mainHue
+        if let onRecipe {
+            let finished = recipe
+            await MainActor.run { onRecipe(finished) }
+        }
         let hexCodes = built.hexes
         let colors = hexCodes.compactMap { Color(hex: $0) }
         guard colors.count == hexCodes.count, colors.count >= 2 else { throw AppError.generationFailed }
@@ -316,6 +427,35 @@ enum PaletteGenerator {
         } catch {
             logFailure(error, step: "brief")
             return PaletteBrief.heuristic(from: vibe)
+        }
+        #endif
+    }
+
+    /// Reads a requested change relative to the palette's recipe. On the
+    /// Simulator, or when the model fails, the change's own words are read.
+    private static func readChange(_ request: String, recipe: GenerationRecipe) async -> PaletteChange {
+        let trimmed = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if targetEnvironment(simulator)
+        return PaletteChange.heuristic(from: trimmed)
+        #else
+        let tone = recipe.brief.tone
+        let current = "\(tone.lightness.rawValue) lightness, \(tone.chroma.rawValue) saturation, \(recipe.size) colors"
+        do {
+            let session = LanguageModelSession(instructions: """
+                You are a color designer adjusting an existing palette. Read what someone \
+                wants changed and answer only with the fields asked for. Mark a field as \
+                unchanged unless the request asks for it.
+                """)
+            let response = try await session.respond(
+                to: "The palette is \(current). Change requested: \(trimmed)",
+                generating: GeneratedChange.self
+            )
+            return PaletteChange(model: response.content, request: trimmed)
+        } catch is CancellationError {
+            return PaletteChange.heuristic(from: trimmed)
+        } catch {
+            logFailure(error, step: "change")
+            return PaletteChange.heuristic(from: trimmed)
         }
         #endif
     }

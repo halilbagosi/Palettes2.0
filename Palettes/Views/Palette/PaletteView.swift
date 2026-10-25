@@ -290,7 +290,6 @@ struct PaletteView: View {
             isGenerated: palette.isGenerated,
             isFavorite: palette.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onView: { if !isSelecting { path.append(palette) } },
             onCopy: { copyToClipboard(palette.hexCodes.joined(separator: ", "), label: "Copied HEX") }
         )
         .hoverEffect(.lift)

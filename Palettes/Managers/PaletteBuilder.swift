@@ -57,6 +57,15 @@ struct BuiltPalette: Equatable {
     var hexes: [String] { entries.map(\.hex) }
     /// Roles in the parallel-array form `PaletteViewModel` stores ("" = none).
     var roles: [String] { entries.map { $0.role ?? "" } }
+
+    /// Hue (degrees) of the first chromatic generated color: the main color
+    /// the builder chose. nil when every generated color is a grey.
+    var mainHue: Double? {
+        entries.lazy
+            .filter { $0.group != .anchor && $0.group != .neutral }
+            .compactMap { OKLCH(hex: $0.hex) }
+            .first { $0.C >= 0.03 }?.h
+    }
 }
 
 /// Deterministic PRNG: the same request must always build the same palette,

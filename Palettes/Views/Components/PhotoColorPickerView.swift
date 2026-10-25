@@ -200,7 +200,7 @@ struct PhotoColorPickerView: View {
     private var previewPanel: some View {
         HStack(spacing: 16) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(currentColor.gradient)
+                .fill(currentColor)
                 .frame(width: 56, height: 56)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)

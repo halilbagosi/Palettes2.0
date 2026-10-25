@@ -21,7 +21,7 @@ struct ColorCellSearch: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Rectangle()
-                .fill(color.gradient)
+                .fill(color)
 
             GlassContainer(spacing: 10) {
                 HStack(spacing: 10) {

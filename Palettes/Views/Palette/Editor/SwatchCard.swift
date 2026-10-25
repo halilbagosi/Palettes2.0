@@ -30,7 +30,7 @@ struct SwatchCard<Accessory: View>: View {
         // The library's compact color card, without its copy button: the
         // color fills the card, the name and HEX sit on glass at its foot.
         Rectangle()
-            .fill(color.gradient)
+            .fill(color)
             .frame(maxWidth: .infinity)
             .frame(height: Self.height)
             .overlay(alignment: .topLeading) {
