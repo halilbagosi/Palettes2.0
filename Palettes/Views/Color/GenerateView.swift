@@ -21,7 +21,11 @@ struct GenerateView: View {
     @State private var vibeDescription = ""
     @FocusState private var vibeFocused: Bool
     /// The stage's size, for its orientation and the generating orb's size.
+    /// Held while the vibe field is focused (see `stage`).
     @State private var stageSize: CGSize = .zero
+    /// The latest measured size, applied to `stageSize` once the field
+    /// lets go of focus.
+    @State private var measuredStageSize: CGSize = .zero
     /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
     /// the crease and the controls the side after it.
     @State private var fold: Fold?
@@ -144,11 +148,19 @@ struct GenerateView: View {
             // Measured without the keyboard: with it up, an iPhone's stage is
             // wider than tall, which read as landscape and swapped the form
             // for the split layout, rebuilding the vibe field and dropping its
-            // focus (so the keyboard never stayed up).
+            // focus (so the keyboard never stayed up). The size is also held
+            // while the field is focused, so the layout can't swap under it
+            // even where the keyboard still reaches the measurement.
             .background {
                 Color.clear
                     .ignoresSafeArea(.keyboard)
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                        measuredStageSize = size
+                        if !vibeFocused { stageSize = size }
+                    }
+            }
+            .onChange(of: vibeFocused) { _, focused in
+                if !focused { stageSize = measuredStageSize }
             }
             .onFoldChange { newFold in
                 withAnimation(.smooth(duration: 0.35)) { fold = newFold }
