@@ -287,7 +287,7 @@ struct PaletteDetailView: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             )
-            .swatchEdge(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
 
             Text("\(livePalette.colors.count) color\(livePalette.colors.count == 1 ? "" : "s")")
                 .font(.caption)

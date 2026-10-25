@@ -767,10 +767,7 @@ struct GenerateView: View {
                     Circle()
                         .fill(colorItem.color)
                         .frame(width: diameter, height: diameter)
-                        .overlay {
-                            Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
-                        }
-                        .swatchEdge(Circle())
+                        .swatchOutline(Circle())
                         .overlay {
                             if isSelected {
                                 Circle()

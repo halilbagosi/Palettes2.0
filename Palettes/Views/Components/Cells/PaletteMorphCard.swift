@@ -50,7 +50,9 @@ struct PaletteMorphCard: View {
                 .padding(isCompact ? 8 : 12)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .swatchEdge(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .swatchOutline(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 
     @ViewBuilder

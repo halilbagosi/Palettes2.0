@@ -80,7 +80,7 @@ struct ColorMorphCard: View, Equatable {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .swatchEdge(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .swatchOutline(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     @ViewBuilder

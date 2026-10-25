@@ -29,8 +29,7 @@ struct GenerationSwatchRow: View {
                     if index < colors.count {
                         Circle()
                             .fill(colors[index])
-                            .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
-                            .swatchEdge(Circle())
+                            .swatchOutline(Circle())
                             .transition(reduceMotion ? .opacity : .scale(scale: 0.3).combined(with: .opacity))
                     }
                 }

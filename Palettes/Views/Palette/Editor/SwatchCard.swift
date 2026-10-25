@@ -65,7 +65,6 @@ struct SwatchCard<Accessory: View>: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
-            .swatchEdge(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
