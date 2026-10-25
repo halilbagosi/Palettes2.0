@@ -33,42 +33,47 @@ extension View {
     }
 }
 
-/// "Palettes (12)": the title with its count in a capsule. The capsule
-/// spans the full height of the title's letters: its bottom on the
-/// baseline, its top level with the tallest letter (the "l" in "Palettes").
+/// "Palettes (12)": the title with its count in a capsule. The number sits
+/// on the title's baseline with digits almost as tall as its capitals; the
+/// capsule grows around the number as far as it needs to.
 private struct LibraryLargeTitle: View {
     let noun: String
     let count: Int
 
-    /// Re-reads the letter height when the text size changes.
+    /// Re-reads the font sizes when the text size changes.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    /// Height of the title's tallest letter above the baseline, measured
-    /// from the bold large-title glyphs themselves.
-    private var letterHeight: CGFloat {
-        let size = UIFont.preferredFont(forTextStyle: .largeTitle).pointSize
-        let font = UIFont.systemFont(ofSize: size, weight: .bold) as CTFont
-        let chars = Array(LibraryTitle.plural(noun).utf16)
-        var glyphs = [CGGlyph](repeating: 0, count: chars.count)
-        CTFontGetGlyphsForCharacters(font, chars, &glyphs, chars.count)
-        let bounds = CTFontGetBoundingRectsForGlyphs(font, .default, glyphs, nil, glyphs.count)
-        return bounds.maxY.rounded()
+    /// The count's font: digits are cap height, so 88% of the title's size
+    /// gives digits just under the height of its capitals.
+    private var countSize: CGFloat {
+        (UIFont.preferredFont(forTextStyle: .largeTitle).pointSize * 0.88).rounded()
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        let font = UIFont.systemFont(ofSize: countSize, weight: .semibold)
+        let inset = (font.capHeight * 0.4).rounded()
+        let pillHeight = font.capHeight + inset * 2
+        // The text frame runs ascender to descender; move the capsule from
+        // that frame's center to the digits' center.
+        let shift = (font.ascender + font.descender - font.capHeight) / 2
+
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(LibraryTitle.plural(noun))
                 .font(.largeTitle.bold())
             if count > 0 {
                 Text("\(count)")
-                    .font(.system(size: letterHeight * 0.62, weight: .semibold))
+                    .font(.system(size: countSize, weight: .semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: Double(count)))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, letterHeight * 0.3)
-                    .frame(minWidth: letterHeight, minHeight: letterHeight, maxHeight: letterHeight)
-                    .background(Color(.tertiarySystemFill), in: Capsule())
-                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                    .padding(.horizontal, inset * 1.2)
+                    .frame(minWidth: pillHeight)
+                    .background {
+                        Capsule()
+                            .fill(Color(.tertiarySystemFill))
+                            .frame(height: pillHeight)
+                            .offset(y: shift)
+                    }
                     .transition(.scale.combined(with: .opacity))
             }
         }
