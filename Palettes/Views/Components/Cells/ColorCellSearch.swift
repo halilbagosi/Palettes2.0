@@ -53,6 +53,7 @@ struct ColorCellSearch: View {
         // Card radius = pill capsule radius (~20) + 8pt inset, so the pill
         // sits concentric with the card corner.
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .swatchOutline(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .compositingGroup()
         .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
