@@ -285,7 +285,6 @@ struct ColorsView: View {
             isGenerated: color.isGenerated,
             isFavorite: color.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onView: { if !isSelecting { path.append(color) } },
             onCopy: { copyToClipboard(color.HEX, label: "Copied HEX") }
         )
         .equatable()

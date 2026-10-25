@@ -18,8 +18,6 @@ struct PaletteMorphCard: View {
     var isGenerated: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
-    /// Opens the palette; shown as a "View" pill in the normal layout.
-    var onView: (() -> Void)? = nil
     /// Copies the palette's HEX codes; wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
 
@@ -74,7 +72,7 @@ struct PaletteMorphCard: View {
         .liquidGlass(.regular, in: .circle)
     }
 
-    // MARK: - Normal layout: name + View + copy
+    // MARK: - Normal layout: name + copy
 
     private var regularBar: some View {
         GlassContainer(spacing: 10) {
@@ -87,20 +85,6 @@ struct PaletteMorphCard: View {
                     .liquidGlass(.regular, in: .capsule)
 
                 Spacer(minLength: 0)
-
-                if let onView, !isSelecting {
-                    Button(action: onView) {
-                        Text("View")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlass(.interactive, in: .capsule)
-                }
 
                 if !isSelecting {
                     copyButton(diameter: 38)
