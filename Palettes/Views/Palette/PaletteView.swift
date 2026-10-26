@@ -170,7 +170,7 @@ struct PaletteView: View {
                 }
                 .sheet(item: $paletteToExport) { palette in
                     ExportPaletteSheet(palette: palette)
-                        .presentationDetents([.medium, .large])
+                        .presentationDetents([.large])
                 }
                 .alert("Delete Palette", isPresented: $showDeleteAlert, presenting: paletteToDelete) { palette in
                     Button("Delete", role: .destructive) {

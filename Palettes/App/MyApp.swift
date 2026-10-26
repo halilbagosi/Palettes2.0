@@ -10,6 +10,9 @@ struct MyApp: App {
         if #available(iOS 26.0, *) {
             PalettesShortcuts.updateAppShortcutParameters()
         }
+        #if DEBUG
+        ScreenshotSeed.applyIfRequested(to: .shared)
+        #endif
     }
 
     var body: some Scene {

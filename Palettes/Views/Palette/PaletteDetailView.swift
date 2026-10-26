@@ -201,8 +201,17 @@ struct PaletteDetailView: View {
             }
             .sheet(isPresented: $isExporting) {
                 ExportPaletteSheet(palette: livePalette)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.large])
             }
+            #if DEBUG
+            .task {
+                guard ScreenshotSeed.isActive else { return }
+                let sheet = UserDefaults.standard.string(forKey: "screenshotSheet")
+                try? await Task.sleep(for: .milliseconds(800))
+                if sheet == "export" { isExporting = true }
+                if sheet == "edit" { isEditingPalette = true }
+            }
+            #endif
             .alert("Delete Palette", isPresented: $showDeleteAlert) {
                 Button("Delete", role: .destructive) {
                     withAnimation(.spring()) {

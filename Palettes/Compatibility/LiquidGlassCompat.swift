@@ -80,6 +80,18 @@ extension View {
         }
     }
 
+    /// Pins `content` to the bottom edge as a bar: `safeAreaBar` on iOS 26+, so
+    /// the scroll-edge effect blurs content passing under it; a safe-area inset
+    /// on the system bar material on earlier systems.
+    @ViewBuilder
+    func bottomActionBar<Bar: View>(@ViewBuilder _ content: () -> Bar) -> some View {
+        if #available(iOS 26.0, *) {
+            safeAreaBar(edge: .bottom, content: content)
+        } else {
+            safeAreaInset(edge: .bottom) { content().background(.bar) }
+        }
+    }
+
     /// Soft (blurred) scroll-edge effect under navigation titles and toolbars on
     /// iOS 26+; a no-op on earlier systems.
     @ViewBuilder
