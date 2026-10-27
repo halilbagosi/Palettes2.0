@@ -23,6 +23,14 @@ final class SceneRouter: ObservableObject {
     @Published var isCreatingPalette = false
     @Published var isCreatingColor = false
     @Published var isShowingSettings = false
+    /// The Scan Color quick action opened New Color; its editor opens the
+    /// camera once (see `consumeScanRequest`).
+    var isScanRequested = false
+
+    func consumeScanRequest() -> Bool {
+        defer { isScanRequested = false }
+        return isScanRequested
+    }
 }
 
 /// What the menu bar and keyboard shortcuts can do in the focused window.

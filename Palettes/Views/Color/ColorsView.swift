@@ -154,9 +154,10 @@ struct ColorsView: View {
                 .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
                 .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
-                .sheet(isPresented: $router.isCreatingColor) {
+                .sheet(isPresented: $router.isCreatingColor, onDismiss: { router.isScanRequested = false }) {
                     NewColorView()
                         .environmentObject(appData)
+                        .environment(\.consumeScanRequest, router.consumeScanRequest)
                         .presentationDetents([.large])
                         .formPresentationSizing()
                 }

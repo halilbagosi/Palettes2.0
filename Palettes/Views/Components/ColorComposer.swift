@@ -43,6 +43,7 @@ struct ColorComposer: View {
     @ScaledMetric(relativeTo: .body) private var minControlsHeight: CGFloat = 220
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.consumeScanRequest) private var consumeScanRequest
 
     private enum Field: Hashable {
         case name, hex, red, green, blue
@@ -155,6 +156,7 @@ struct ColorComposer: View {
             nameIsCustom = !namesFollowColor || !name.isEmpty
             shownNotice = notice ?? ""
             apply(color, from: .outside)
+            if allowsPhoto, consumeScanRequest() { openScanAfterSheet() }
         }
         .onChange(of: Self.hexKey(color)) { _, hex in
             if hex != syncedHex { apply(color, from: .outside) }
@@ -301,6 +303,15 @@ struct ColorComposer: View {
             if allowsPhoto {
                 photoMenu
             }
+        }
+    }
+
+    /// Scan Color quick action: the camera (or library) once the sheet is up;
+    /// a cover asked for mid-presentation is dropped.
+    private func openScanAfterSheet() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            if Self.cameraAvailable { showCamera = true } else { showLibrary = true }
         }
     }
 
