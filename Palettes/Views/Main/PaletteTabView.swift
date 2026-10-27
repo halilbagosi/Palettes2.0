@@ -47,6 +47,14 @@ struct PaletteTabView: View {
         .environment(\.selectedTab, selectedTab)
         .focusedSceneValue(\.sceneCommands, sceneCommands)
         .onReceive(appData.$activeTab.dropFirst()) { selectedTab = $0 }
+        .onReceive(QuickActionCenter.shared.$pending.compactMap { $0 }) { _ in
+            // On a cold launch this fires during the first layout, when a tab
+            // switch or sheet is dropped; wait for the window to settle.
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                if let action = QuickActionCenter.shared.take() { perform(action) }
+            }
+        }
         .onAppear {
             // First launch: present on the first appearance, without animation
             // (a cover that starts out shown slides up, carrying the island's
@@ -163,6 +171,37 @@ struct PaletteTabView: View {
             SearchView()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag(TabValue.search)
+        }
+    }
+
+    /// A Home Screen quick action (see QuickActions.swift). Ignored until
+    /// onboarding is done: its cover would hide whatever opened.
+    private func perform(_ action: QuickAction) {
+        guard !onboardingWanted else { return }
+        // Start from the library, not on top of a sheet already up: close it
+        // and open the new one once it has gone.
+        let sheetWasUp = router.isShowingSettings || router.isCreatingPalette || router.isCreatingColor
+        router.isShowingSettings = false
+        router.isCreatingPalette = false
+        router.isCreatingColor = false
+        router.isScanRequested = false
+        guard !sheetWasUp else {
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                perform(action)
+            }
+            return
+        }
+        switch action {
+        case .newPalette:
+            selectedTab = .palettes
+            router.isCreatingPalette = true
+        case .newColor, .scanColor:
+            router.isScanRequested = action == .scanColor
+            selectedTab = .colors
+            router.isCreatingColor = true
+        case .generatePalette:
+            if AppleIntelligence.isDeviceSupported { selectedTab = .generate }
         }
     }
 
