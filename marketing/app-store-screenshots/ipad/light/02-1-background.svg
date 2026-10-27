@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2064" height="2752" viewBox="0 0 2064 2752">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBFAF8"/>
+      <stop offset="1" stop-color="#EFECE8"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.15" cy="0.30" r="0.65">
+      <stop offset="0" stop-color="#5A9B47" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#5A9B47" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.95" cy="0.55" r="0.60">
+      <stop offset="0" stop-color="#FF3FA4" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FF3FA4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow3" cx="0.40" cy="1.0" r="0.60">
+      <stop offset="0" stop-color="#8E80D0" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#8E80D0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g id="background">
+    <rect width="2064" height="2752" fill="url(#base)"/>
+    <rect width="2064" height="2752" fill="url(#glow1)"/>
+    <rect width="2064" height="2752" fill="url(#glow2)"/>
+    <rect width="2064" height="2752" fill="url(#glow3)"/>
+  </g>
+  <g id="caption" text-anchor="middle" fill="#1C1C1E">
+    <text id="headline" y="230" font-family="SF Pro Display, -apple-system, Helvetica Neue, sans-serif" font-weight="700" font-size="120" letter-spacing="-1.5"><tspan x="1032.0" dy="0">Describe a vibe.</tspan><tspan x="1032.0" dy="138">Watch it mix.</tspan></text>
+    <text id="subhead" x="1032.0" y="471" font-family="SF Pro Text, -apple-system, Helvetica Neue, sans-serif" font-weight="500" font-size="54" fill-opacity="0.62">On-device Apple Intelligence builds the palette</text>
+  </g>
+</svg>

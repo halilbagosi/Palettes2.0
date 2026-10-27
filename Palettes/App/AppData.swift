@@ -26,7 +26,13 @@ class AppData: ObservableObject {
 
     /// Single app-wide instance shared by the UI and App Intents so both see
     /// (and persist through) the same in-memory library.
+    #if DEBUG
+    /// In-memory while `ScreenshotSeed` is active, so its demo library never
+    /// overwrites the device's real one.
+    static let shared = AppData(inMemory: ScreenshotSeed.isActive)
+    #else
     static let shared = AppData()
+    #endif
 
     /// Palette id an Open intent asked to show; PaletteView consumes it.
     @Published var pendingOpenPaletteID: UUID?
