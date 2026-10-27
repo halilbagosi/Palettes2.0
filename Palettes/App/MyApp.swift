@@ -17,10 +17,21 @@ struct MyApp: App {
 
     var body: some Scene {
         WindowGroup(id: PalettesScene.libraryID) {
+            #if DEBUG
+            if MotionStage.isActive, #available(iOS 26.0, *) {
+                MotionStageView()
+            } else {
+                AccentRoot {
+                    PaletteTabView()
+                        .toastOverlay()
+                }
+            }
+            #else
             AccentRoot {
                 PaletteTabView()
                     .toastOverlay()
             }
+            #endif
         }
         .commands { PalettesCommands() }
     }
