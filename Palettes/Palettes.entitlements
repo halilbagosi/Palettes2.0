@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- iCloud/Push entitlements removed: personal (free) development teams
-	     cannot sign them. Restore after joining the Apple Developer Program:
 	<key>aps-environment</key>
 	<string>development</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
@@ -14,6 +12,5 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
-	-->
 </dict>
 </plist>
