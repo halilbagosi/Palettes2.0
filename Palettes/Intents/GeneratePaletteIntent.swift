@@ -13,7 +13,7 @@ import SwiftUI
 struct GeneratePaletteIntent: AppIntent {
     static let title: LocalizedStringResource = "Generate Palette"
     static let description = IntentDescription(
-        "Generates a new color palette with Apple Intelligence and saves it to your library."
+        "Generates a new color palette with on-device foundation models and saves it to your library."
     )
 
     @Parameter(

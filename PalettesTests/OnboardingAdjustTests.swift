@@ -205,9 +205,9 @@ final class OnboardingExtrasLogicTests: XCTestCase {
 
     func testCardListHidesReservedCardsAndGatesSiri() {
         XCTAssertFalse(OnboardingExtras.showsWidgetCard)
-        XCTAssertFalse(OnboardingExtras.showsICloudCard)
-        XCTAssertEqual(OnboardingExtrasLogic.cards(siriAvailable: true), [.share, .siri])
-        XCTAssertEqual(OnboardingExtrasLogic.cards(siriAvailable: false), [.share])
+        XCTAssertTrue(OnboardingExtras.showsICloudCard)
+        XCTAssertEqual(OnboardingExtrasLogic.cards(siriAvailable: true), [.share, .siri, .icloud])
+        XCTAssertEqual(OnboardingExtrasLogic.cards(siriAvailable: false), [.share, .icloud])
         XCTAssertEqual(
             OnboardingExtrasLogic.cards(siriAvailable: true, showsWidget: true, showsICloud: true),
             [.share, .siri, .widget, .icloud])

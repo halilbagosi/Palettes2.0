@@ -4,8 +4,8 @@
 //
 //  Optional closing cards shown once, as a sheet, shortly after the coach
 //  mark is dismissed on the palette onboarding created. Share, Siri and
-//  Spotlight are live; the widget and iCloud cards are written but hidden
-//  until those features ship.
+//  Spotlight and iCloud are live; the widget card is written but hidden
+//  until the widget ships.
 //
 
 import SwiftUI
@@ -14,9 +14,7 @@ import AppIntents
 enum OnboardingExtras {
     /// Flip when the widget ships.
     static let showsWidgetCard = false
-    /// Flip when v1 ships with CloudKit enabled (entitlements are commented
-    /// out until the paid developer membership exists).
-    static let showsICloudCard = false
+    static let showsICloudCard = true
 }
 
 enum OnboardingExtrasCard: Equatable {
