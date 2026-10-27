@@ -19,8 +19,6 @@ struct ColorMorphCard: View, Equatable {
     var isGenerated: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
-    /// Opens the colour detail view; shown as a "View" pill in the normal layout.
-    var onView: (() -> Void)? = nil
     /// Copies the HEX; wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
 
@@ -31,13 +29,12 @@ struct ColorMorphCard: View, Equatable {
         lhs.colorName == rhs.colorName && lhs.hexCode == rhs.hexCode && lhs.color == rhs.color
             && lhs.isCompact == rhs.isCompact && lhs.isGenerated == rhs.isGenerated
             && lhs.isFavorite == rhs.isFavorite && lhs.isSelecting == rhs.isSelecting
-            && (lhs.onView == nil) == (rhs.onView == nil)
             && (lhs.onCopy == nil) == (rhs.onCopy == nil)
     }
 
     var body: some View {
         Rectangle()
-            .fill(color.gradient)
+            .fill(color)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .topLeading) {
                 if !isCompact {
@@ -83,6 +80,7 @@ struct ColorMorphCard: View, Equatable {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .swatchOutline(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     @ViewBuilder
@@ -92,7 +90,7 @@ struct ColorMorphCard: View, Equatable {
         }
     }
 
-    // MARK: - Normal layout: floating name (top) + hex/View/copy bar (bottom)
+    // MARK: - Normal layout: floating name (top) + hex/copy bar (bottom)
 
     private var namePill: some View {
         Text(colorName)
@@ -125,20 +123,6 @@ struct ColorMorphCard: View, Equatable {
                     .liquidGlass(.regular, in: .capsule)
 
                 Spacer(minLength: 0)
-
-                if let onView, !isSelecting {
-                    Button(action: onView) {
-                        Text("View")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlass(.interactive, in: .capsule)
-                }
 
                 if !isSelecting {
                     copyButton(diameter: 38)

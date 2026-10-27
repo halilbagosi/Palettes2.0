@@ -138,29 +138,44 @@ struct ColorDetailView: View {
 
     // MARK: - Subviews
 
-    private func valueRow(label: String, value: String, copyLabel: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 15, weight: .semibold))
-                .frame(width: 50, alignment: .leading)
-
-            Text(value)
-                .font(.system(size: 16, design: .monospaced))
-
-            Spacer()
-
-            Button {
-                copyToClipboard(value, label: copyLabel)
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
+    /// A HEX or channel value, styled like Edit Color's fields. Read-only
+    /// here, so a tap copies.
+    private func valueField(prefix: String, prefixFont: Font, value: String, spoken: String,
+                            copy: @escaping () -> Void) -> some View {
+        // HEX reads from the leading edge; a channel's number sits centered
+        // beside its letter, as in Edit Color.
+        let isHex = prefix == "#"
+        return Button(action: copy) {
+            HStack(spacing: isHex ? 2 : 3) {
+                Text(prefix)
+                    .font(prefixFont)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(value)
+                    .font(.system(size: 15, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: isHex ? nil : .infinity)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Copy \(label)")
+            .padding(.horizontal, isHex ? 10 : 8)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding(12)
-        .liquidGlass(.regular, in: .rect(cornerRadius: 12))
+        .buttonStyle(.plain)
+        .liquidGlass(.interactive, in: .rect(cornerRadius: 10))
+        .accessibilityLabel("\(spoken) \(value)")
+        .accessibilityHint("Copies the value")
+    }
+
+    private func copyHex() {
+        copyToClipboard(liveColor.HEX, label: "Copied HEX")
+    }
+
+    private func copyRGB() {
+        let c = liveColor.color.rgbComponents
+        copyToClipboard("\(Int(round(c.r))), \(Int(round(c.g))), \(Int(round(c.b)))", label: "Copied RGB")
     }
 
     private var emptyPalettesSection: some View {
@@ -247,7 +262,7 @@ struct ColorDetailView: View {
 
     private func colorWindow(fillsHeight: Bool) -> some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(liveColor.color.gradient)
+            .fill(liveColor.color)
             .frame(height: fillsHeight ? nil : 180)
             .frame(maxHeight: fillsHeight ? .infinity : nil)
             .overlay(
@@ -258,19 +273,30 @@ struct ColorDetailView: View {
             .matchedGeometryEffect(id: "color", in: foldNamespace)
     }
 
+    /// HEX, R, G and B in one compact row, matching Edit Color.
     private var valuesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let c = liveColor.color.rgbComponents
+        let hex = liveColor.HEX.hasPrefix("#") ? String(liveColor.HEX.dropFirst()) : liveColor.HEX
+        let channel = Font.system(size: 12, weight: .semibold)
+        return VStack(alignment: .leading, spacing: 8) {
             Text("Values")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.secondary)
-                .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
 
-            VStack(spacing: 12) {
-                valueRow(label: "HEX", value: liveColor.HEX, copyLabel: "Copied HEX")
-                valueRow(label: "RGB", value: liveColor.color.rgbString, copyLabel: "Copied RGB")
+            ValuesRow {
+                valueField(prefix: "#", prefixFont: .system(size: 15, weight: .bold, design: .monospaced),
+                           value: hex, spoken: "HEX", copy: copyHex)
+                valueField(prefix: "R", prefixFont: channel, value: "\(Int(round(c.r)))", spoken: "Red", copy: copyRGB)
+                valueField(prefix: "G", prefixFont: channel, value: "\(Int(round(c.g)))", spoken: "Green", copy: copyRGB)
+                valueField(prefix: "B", prefixFont: channel, value: "\(Int(round(c.b)))", spoken: "Blue", copy: copyRGB)
             }
-            .padding(.horizontal)
+
+            Text("Tap a value to copy it")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal)
         .matchedGeometryEffect(id: "values", in: foldNamespace)
     }
 

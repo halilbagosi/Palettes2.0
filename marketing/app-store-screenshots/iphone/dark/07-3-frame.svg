@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="2868" viewBox="0 0 1320 2868">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5A5862"/>
+      <stop offset="0.5" stop-color="#2A292F"/>
+      <stop offset="1" stop-color="#4A4852"/>
+    </linearGradient>
+  </defs>
+  <g id="device-frame">
+    <path id="bezel" fill-rule="evenodd" fill="#0B0B0D" d="M304,616 H1016 A158,158 0 0 1 1174,774 V2635 A158,158 0 0 1 1016,2793 H304 A158,158 0 0 1 146,2635 V774 A158,158 0 0 1 304,616 Z M304,640 H1016 A134,134 0 0 1 1150,774 V2635 A134,134 0 0 1 1016,2769 H304 A134,134 0 0 1 170,2635 V774 A134,134 0 0 1 304,640 Z"/>
+    <path id="rim" fill="none" stroke="url(#rim)" stroke-width="5" d="M304.0,618.5 H1016.0 A155.5,155.5 0 0 1 1171.5,774.0 V2635.0 A155.5,155.5 0 0 1 1016.0,2790.5 H304.0 A155.5,155.5 0 0 1 148.5,2635.0 V774.0 A155.5,155.5 0 0 1 304.0,618.5 Z"/>
+    <rect id="dynamic-island" x="554.55" y="671.2" width="210.9" height="81.7" rx="40.85" fill="#000000"/>
+  </g>
+</svg>

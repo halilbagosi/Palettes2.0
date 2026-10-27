@@ -19,10 +19,13 @@ struct GenerateView: View {
     @State private var selectedColorIDs: Set<UUID> = []
     @State private var scheme: HarmonyScheme = .auto
     @State private var vibeDescription = ""
-    @State private var glowPhase: CGFloat = 0
     @FocusState private var vibeFocused: Bool
     /// The stage's size, for its orientation and the generating orb's size.
+    /// Held while the vibe field is focused (see `stage`).
     @State private var stageSize: CGSize = .zero
+    /// The latest measured size, applied to `stageSize` once the field
+    /// lets go of focus.
+    @State private var measuredStageSize: CGSize = .zero
     /// iPhone Duo half open (see `FoldCompat`): the orb takes the side before
     /// the crease and the controls the side after it.
     @State private var fold: Fold?
@@ -43,17 +46,17 @@ struct GenerateView: View {
     @State private var resultName = ""
     @State private var resultPaletteColors: [PaletteColor] = []
     @State private var pendingRefinement = ""
+    /// What the shown result was built from, so a described change edits it
+    /// rather than starting over.
+    @State private var resultRecipe: GenerationRecipe?
+    /// Changes applied to the shown result, oldest first; they name it.
+    @State private var appliedChanges: [String] = []
     @State private var showDuplicateAlert = false
     @State private var showNameDuplicateAlert = false
     @State private var duplicateOfName = ""
 
     private let sizeOptions = [2, 4, 6, 8, 10, 12]
     private let formOrbDiameter: CGFloat = 156
-
-    /// Iridescent tint reserved for the Apple Intelligence glyph.
-    private var glowGradient: AnyShapeStyle {
-        GeneratedGradient.style(phase: glowPhase)
-    }
 
     /// The simulator can't run Apple Intelligence; show the form there so the
     /// flow stays developable. Devices still gate on real availability.
@@ -130,9 +133,6 @@ struct GenerateView: View {
             .toolbar(phase == .generating && isPortrait ? .hidden : .automatic, for: .navigationBar)
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
-                withAnimation(.easeInOut(duration: GeneratedGradient.cycleDuration).repeatForever(autoreverses: true)) {
-                    glowPhase = 1
-                }
                 consumePendingColor()
             }
             .onChange(of: appData.pendingGenerateColorID) {
@@ -148,11 +148,19 @@ struct GenerateView: View {
             // Measured without the keyboard: with it up, an iPhone's stage is
             // wider than tall, which read as landscape and swapped the form
             // for the split layout, rebuilding the vibe field and dropping its
-            // focus (so the keyboard never stayed up).
+            // focus (so the keyboard never stayed up). The size is also held
+            // while the field is focused, so the layout can't swap under it
+            // even where the keyboard still reaches the measurement.
             .background {
                 Color.clear
                     .ignoresSafeArea(.keyboard)
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { stageSize = $0 }
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                        measuredStageSize = size
+                        if !vibeFocused { stageSize = size }
+                    }
+            }
+            .onChange(of: vibeFocused) { _, focused in
+                if !focused { stageSize = measuredStageSize }
             }
             .onFoldChange { newFold in
                 withAnimation(.smooth(duration: 0.35)) { fold = newFold }
@@ -183,10 +191,14 @@ struct GenerateView: View {
                     paletteColors: $resultPaletteColors,
                     onBack: {
                         cancelLateNaming()
+                        resultRecipe = nil
+                        appliedChanges = []
                         withAnimation(.smooth(duration: 0.5)) { phase = .form }
                     },
                     onRegenerate: {
                         pendingRefinement = ""
+                        resultRecipe = nil
+                        appliedChanges = []
                         startGeneration()
                     },
                     onDescribeChange: { change in
@@ -753,11 +765,9 @@ struct GenerateView: View {
             VStack(spacing: 6) {
                 ZStack(alignment: .bottomTrailing) {
                     Circle()
-                        .fill(colorItem.color.gradient)
+                        .fill(colorItem.color)
                         .frame(width: diameter, height: diameter)
-                        .overlay {
-                            Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1)
-                        }
+                        .swatchOutline(Circle())
                         .overlay {
                             if isSelected {
                                 Circle()
@@ -794,9 +804,14 @@ struct GenerateView: View {
     private var vibeField: some View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "apple.intelligence")
-                    .font(.title3)
-                    .foregroundStyle(glowGradient)
+                // Driven by the clock, not a repeating animation: one started
+                // in onAppear also animated the form's first layout, so the
+                // glass behind the fields kept growing and shrinking forever.
+                TimelineView(.animation) { timeline in
+                    Image(systemName: "apple.intelligence")
+                        .font(.title3)
+                        .foregroundStyle(GeneratedGradient.style(phase: GeneratedGradient.phase(at: timeline.date)))
+                }
 
                 TextField("Warm autumn forest, neon arcade…", text: $vibeDescription)
                     .font(.body)
@@ -992,6 +1007,8 @@ struct GenerateView: View {
         scheme = .auto
         vibeDescription = ""
         pendingRefinement = ""
+        resultRecipe = nil
+        appliedChanges = []
         arrivedColors = []
     }
 
@@ -1004,7 +1021,15 @@ struct GenerateView: View {
             .filter { selectedColorIDs.contains($0.id) }
             .map { PaletteGenerator.BaseColor(hex: $0.HEX, name: $0.name) }
 
-        let combinedVibe = [vibeDescription, pendingRefinement]
+        let change = pendingRefinement.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Used once: a later Generate from the form starts fresh.
+        pendingRefinement = ""
+        let refining = change.isEmpty ? nil : resultRecipe.map {
+            PaletteGenerator.Refinement(recipe: $0, change: change)
+        }
+        let changes = refining == nil ? [] : appliedChanges + [change]
+        // Names follow the vibe and every change made since.
+        let combinedVibe = ([vibeDescription] + changes)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: ". ")
@@ -1015,6 +1040,11 @@ struct GenerateView: View {
             vibe: combinedVibe,
             scheme: canChooseMode ? scheme : .auto,
             existingNames: appData.palettes.map { $0.name },
+            refining: refining,
+            onRecipe: { recipe in
+                resultRecipe = recipe
+                appliedChanges = changes
+            },
             onPartialColors: onColors,
             // The result shows once the colors land; names follow.
             onLateNaming: onLateNaming,

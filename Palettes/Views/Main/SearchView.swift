@@ -15,6 +15,13 @@ struct SearchView: View {
     @State private var selectedTags: Set<String> = []
     @AppStorage(AppData.recentSearchesKey) private var recentSearchesJSON: String = "[]"
 
+    /// Derived lists cached in state and refreshed only when their inputs change,
+    /// so body runs while scrolling (or from unrelated `AppData` publishes) don't
+    /// re-filter the library. Nil until the first refresh, when they're computed live.
+    @State private var cachedIndex: SearchBrowseIndex?
+    @State private var cachedBrowse: SearchLists?
+    @State private var cachedResults: SearchLists?
+
     // MARK: - Query
 
     private var query: String {
@@ -30,11 +37,11 @@ struct SearchView: View {
     // MARK: - Search Matching
 
     var filteredColors: [ColorViewModel] {
-        LibrarySearch.colors(matching: query, in: appData.colors)
+        cachedResults?.colors ?? LibrarySearch.colors(matching: query, in: appData.colors)
     }
 
     var filteredPalettes: [PaletteViewModel] {
-        LibrarySearch.palettes(matching: query, in: appData.palettes)
+        cachedResults?.palettes ?? LibrarySearch.palettes(matching: query, in: appData.palettes)
     }
 
     private var showColorResults: Bool { scope != .palettes && !filteredColors.isEmpty }
@@ -47,28 +54,51 @@ struct SearchView: View {
 
     // MARK: - Browse (idle) Filtering
 
+    private var libraryIndex: SearchBrowseIndex {
+        cachedIndex ?? SearchBrowseIndex(colors: appData.colors, palettes: appData.palettes)
+    }
+
     private var browseColors: [ColorViewModel] {
-        guard !selectedHues.isEmpty else { return appData.colors }
-        return appData.colors.filter { selectedHues.contains($0.color.hueCategory) }
+        cachedBrowse?.colors ?? libraryIndex.colors(appData.colors, hues: selectedHues)
     }
 
     private var browsePalettes: [PaletteViewModel] {
-        appData.palettes.filter { palette in
-            (selectedHues.isEmpty || palette.colors.contains(where: { selectedHues.contains($0.hueCategory) })) &&
-            SearchMatching.paletteMatchesTags(palette, tags: selectedTags)
-        }
+        cachedBrowse?.palettes ?? libraryIndex.palettes(appData.palettes, hues: selectedHues, tags: selectedTags)
     }
 
     /// Only offer chips for hues that actually exist in the library.
-    private var availableHues: [HueCategory] {
-        let present = Set(appData.colors.map { $0.color.hueCategory })
-            .union(appData.palettes.flatMap { $0.colors.map { $0.hueCategory } })
-        return HueCategory.allCases.filter { present.contains($0) }
-    }
+    private var availableHues: [HueCategory] { libraryIndex.availableHues }
 
     /// Only offer chips for color-role tags that actually exist in the library's palettes.
-    private var availableTags: [String] {
-        SearchMatching.tagsInUse(palettes: appData.palettes)
+    private var availableTags: [String] { libraryIndex.availableTags }
+
+    // MARK: - Cache Refresh
+
+    /// `onReceive` fires before `AppData` stores the new value, so the changed
+    /// list arrives as an argument and the other is read from `appData`.
+    private func refreshLibrary(colors: [ColorViewModel], palettes: [PaletteViewModel]) {
+        let index = SearchBrowseIndex(colors: colors, palettes: palettes)
+        cachedIndex = index
+        cachedBrowse = SearchLists(
+            colors: index.colors(colors, hues: selectedHues),
+            palettes: index.palettes(palettes, hues: selectedHues, tags: selectedTags)
+        )
+        refreshResults(colors: colors, palettes: palettes)
+    }
+
+    private func refreshBrowse() {
+        let index = libraryIndex
+        cachedBrowse = SearchLists(
+            colors: index.colors(appData.colors, hues: selectedHues),
+            palettes: index.palettes(appData.palettes, hues: selectedHues, tags: selectedTags)
+        )
+    }
+
+    private func refreshResults(colors: [ColorViewModel]? = nil, palettes: [PaletteViewModel]? = nil) {
+        cachedResults = SearchLists(
+            colors: LibrarySearch.colors(matching: query, in: colors ?? appData.colors),
+            palettes: LibrarySearch.palettes(matching: query, in: palettes ?? appData.palettes)
+        )
     }
 
     /// A Search intent (Siri/Shortcuts/Spotlight) asked for a term: show it, then clear.
@@ -133,6 +163,11 @@ struct SearchView: View {
             }
         }
         .onChange(of: appData.pendingSearchTerm, initial: true) { _, _ in consumePendingSearchTerm() }
+        .onReceive(appData.$colors) { refreshLibrary(colors: $0, palettes: appData.palettes) }
+        .onReceive(appData.$palettes) { refreshLibrary(colors: appData.colors, palettes: $0) }
+        .onChange(of: selectedHues) { refreshBrowse() }
+        .onChange(of: selectedTags) { refreshBrowse() }
+        .onChange(of: query) { refreshResults() }
         .onSubmit(of: .search) {
             recordRecentSearch()
         }
@@ -146,44 +181,13 @@ struct SearchView: View {
     private var searchResults: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
             if showColorResults {
-                SearchSectionHeader(title: "Colors", count: filteredColors.count)
-
-                FoldAwareGrid(minimum: 160, maximum: 280, spacing: 12, rowSpacing: 12) {
-                    ForEach(filteredColors) { color in
-                        NavigationLink(value: color) {
-                            ColorCellSearch(
-                                colorName: color.name,
-                                hexCode: color.HEX,
-                                color: color.color,
-                                highlight: query,
-                                isGenerated: color.isGenerated
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .hoverEffect(.lift)
-                        .simultaneousGesture(TapGesture().onEnded { recordRecentSearch() })
-                    }
-                }
+                SearchColorSection(colors: filteredColors, highlight: query, onOpen: recordRecentSearch)
+                    .equatable()
             }
 
             if showPaletteResults {
-                SearchSectionHeader(title: "Palettes", count: filteredPalettes.count)
-
-                FoldAwareGrid(minimum: 320, maximum: 560, spacing: 12, rowSpacing: 10) {
-                    ForEach(filteredPalettes) { palette in
-                        NavigationLink(value: palette) {
-                            PaletteCellSearch(
-                                paletteName: palette.name,
-                                colors: palette.colors,
-                                highlight: query,
-                                isGenerated: palette.isGenerated
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .hoverEffect(.lift)
-                        .simultaneousGesture(TapGesture().onEnded { recordRecentSearch() })
-                    }
-                }
+                SearchPaletteSection(palettes: filteredPalettes, highlight: query, onOpen: recordRecentSearch)
+                    .equatable()
             }
 
             if !hasResults {
@@ -199,9 +203,10 @@ struct SearchView: View {
 
     private var browseContent: some View {
         LazyVStack(alignment: .leading, spacing: 20) {
-            if !recentSearches.isEmpty {
+            let recent = recentSearches
+            if !recent.isEmpty {
                 RecentSearchesRow(
-                    searches: recentSearches,
+                    searches: recent,
                     onSelect: { term in searchText = term },
                     onClear: clearRecentSearches
                 )
@@ -218,23 +223,8 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 20) {
 
             if !browseColors.isEmpty {
-                SearchSectionHeader(title: "Colors", count: browseColors.count)
-
-                FoldAwareGrid(minimum: 160, maximum: 280, spacing: 12, rowSpacing: 12) {
-                    ForEach(browseColors) { color in
-                        NavigationLink(value: color) {
-                            ColorCellSearch(
-                                colorName: color.name,
-                                hexCode: color.HEX,
-                                color: color.color,
-                                isGenerated: color.isGenerated
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .hoverEffect(.lift)
-                        .transition(.opacity)
-                    }
-                }
+                SearchColorSection(colors: browseColors)
+                    .equatable()
             }
 
             if !availableTags.isEmpty {
@@ -242,22 +232,8 @@ struct SearchView: View {
             }
 
             if !browsePalettes.isEmpty {
-                SearchSectionHeader(title: "Palettes", count: browsePalettes.count)
-
-                FoldAwareGrid(minimum: 320, maximum: 560, spacing: 12, rowSpacing: 10) {
-                    ForEach(browsePalettes) { palette in
-                        NavigationLink(value: palette) {
-                            PaletteCellSearch(
-                                paletteName: palette.name,
-                                colors: palette.colors,
-                                isGenerated: palette.isGenerated
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .hoverEffect(.lift)
-                        .transition(.opacity)
-                    }
-                }
+                SearchPaletteSection(palettes: browsePalettes)
+                    .equatable()
             }
 
             if browseColors.isEmpty && browsePalettes.isEmpty, (!selectedHues.isEmpty || !selectedTags.isEmpty) {
@@ -345,6 +321,108 @@ struct SearchView: View {
             .animation(.spring(response: 0.24, dampingFraction: 1), value: selectedTags)
         }
         .chipRowFade(margin: Self.chipMargin)
+    }
+}
+
+// MARK: - Result Sections
+
+/// A pair of filtered lists, cached together by `SearchView`.
+private struct SearchLists {
+    var colors: [ColorViewModel]
+    var palettes: [PaletteViewModel]
+}
+
+/// Header plus color grid, `Equatable` so `SearchView` body re-runs that leave
+/// the list unchanged don't rebuild its cards. `onOpen` is ignored in `==`: it
+/// only records the current query, which `highlight` already reflects.
+private struct SearchColorSection: View, Equatable {
+    let colors: [ColorViewModel]
+    var highlight: String = ""
+    /// Runs alongside navigation when a card is tapped.
+    var onOpen: (() -> Void)? = nil
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.highlight == rhs.highlight && (lhs.onOpen == nil) == (rhs.onOpen == nil)
+            && lhs.colors.count == rhs.colors.count
+            && zip(lhs.colors, rhs.colors).allSatisfy { $0.hasSameSearchContent(as: $1) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SearchSectionHeader(title: "Colors", count: colors.count)
+
+            FoldAwareGrid(minimum: 160, maximum: 280, spacing: 12, rowSpacing: 12) {
+                ForEach(colors) { color in
+                    NavigationLink(value: color) {
+                        ColorCellSearch(
+                            colorName: color.name,
+                            hexCode: color.HEX,
+                            color: color.color,
+                            highlight: highlight,
+                            isGenerated: color.isGenerated
+                        )
+                        .equatable()
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.lift)
+                    .simultaneousGesture(TapGesture().onEnded { onOpen?() }, including: onOpen == nil ? .none : .all)
+                    .transition(.opacity)
+                }
+            }
+        }
+    }
+}
+
+/// Header plus palette grid; see `SearchColorSection`.
+private struct SearchPaletteSection: View, Equatable {
+    let palettes: [PaletteViewModel]
+    var highlight: String = ""
+    var onOpen: (() -> Void)? = nil
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.highlight == rhs.highlight && (lhs.onOpen == nil) == (rhs.onOpen == nil)
+            && lhs.palettes.count == rhs.palettes.count
+            && zip(lhs.palettes, rhs.palettes).allSatisfy { $0.hasSameSearchContent(as: $1) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SearchSectionHeader(title: "Palettes", count: palettes.count)
+
+            FoldAwareGrid(minimum: 320, maximum: 560, spacing: 12, rowSpacing: 10) {
+                ForEach(palettes) { palette in
+                    NavigationLink(value: palette) {
+                        PaletteCellSearch(
+                            paletteName: palette.name,
+                            colors: palette.colors,
+                            highlight: highlight,
+                            isGenerated: palette.isGenerated
+                        )
+                        .equatable()
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.lift)
+                    .simultaneousGesture(TapGesture().onEnded { onOpen?() }, including: onOpen == nil ? .none : .all)
+                    .transition(.opacity)
+                }
+            }
+        }
+    }
+}
+
+private extension ColorViewModel {
+    /// `==` is identity-only; the search card renders these fields too.
+    func hasSameSearchContent(as other: ColorViewModel) -> Bool {
+        id == other.id && name == other.name && HEX == other.HEX && color == other.color
+            && isGenerated == other.isGenerated
+    }
+}
+
+private extension PaletteViewModel {
+    /// `==` is identity-only; the search card renders these fields too.
+    func hasSameSearchContent(as other: PaletteViewModel) -> Bool {
+        id == other.id && name == other.name && isGenerated == other.isGenerated
+            && paletteColors.map(\.color) == other.paletteColors.map(\.color)
     }
 }
 

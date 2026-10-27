@@ -78,4 +78,15 @@ final class HEXParserTests: XCTestCase {
     func testRejectsThreeLetterNonHex() {
         XCTAssertNil(Color(hex: "GGG"))
     }
+
+    func testRejectsSignedHex() {
+        // UInt64(_:radix:) alone would accept these.
+        XCTAssertNil(Color(hex: "#+ABCDE"))
+        XCTAssertNil(Color(hex: "-00000"))
+        XCTAssertNil(Color(hex: "+FFF"))
+    }
+
+    func testRejectsFullwidthDigits() {
+        XCTAssertNil(Color(hex: "１２３４５６"))
+    }
 }

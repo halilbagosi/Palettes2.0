@@ -69,7 +69,7 @@ struct PalettePickSource: View {
 
     private var preview: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(color.gradient)
+            .fill(color)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.primary.opacity(0.12), lineWidth: 1)

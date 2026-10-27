@@ -4,6 +4,10 @@ import Combine
 /// Manages display of a small confirmation pill/toast under the Dynamic Island.
 @MainActor
 class ToastManager: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     static let shared = ToastManager()
     
     @Published var message: String = ""

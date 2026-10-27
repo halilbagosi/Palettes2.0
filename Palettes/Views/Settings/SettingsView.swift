@@ -129,16 +129,20 @@ struct SettingsView: View {
                             )
                         }
                     }
+                    Link(destination: AppLinks.supportPage) {
+                        SettingsRowLabel(title: "Help & Support", systemImage: "questionmark.circle.fill", tint: .teal, accessory: .external)
+                    }
                     Link(destination: AppLinks.supportEmailURL) {
                         SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill", tint: .green, accessory: .external)
+                    }
+                    Link(destination: AppLinks.feedbackEmailURL) {
+                        SettingsRowLabel(title: "Send Feedback", systemImage: "bubble.left.and.text.bubble.right.fill", tint: .orange, accessory: .external)
                     }
                 }
 
                 Section("Legal") {
-                    NavigationLink {
-                        PrivacyPolicyView()
-                    } label: {
-                        SettingsRowLabel(title: "Privacy Policy", systemImage: "hand.raised.fill", tint: .blue)
+                    Link(destination: AppLinks.privacyPolicy) {
+                        SettingsRowLabel(title: "Privacy Policy", systemImage: "hand.raised.fill", tint: .blue, accessory: .external)
                     }
                     Link(destination: AppLinks.termsOfUse) {
                         SettingsRowLabel(title: "Terms of Use", systemImage: "doc.text.fill", tint: .gray, accessory: .external)

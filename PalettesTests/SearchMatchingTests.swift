@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import SwiftUI
 @testable import Palettes
 
 final class SearchMatchingTests: XCTestCase {
@@ -145,5 +146,35 @@ final class SearchMatchingTests: XCTestCase {
             PaletteViewModel(name: "P1", colors: [.blue], hexCodes: ["#0000FF"], colorNames: ["Blue"])
         ]
         XCTAssertEqual(SearchMatching.tagsInUse(palettes: palettes), [])
+    }
+
+    // MARK: - SearchBrowseIndex
+
+    private let red = Color(red: 1, green: 0, blue: 0)
+    private let blue = Color(red: 0, green: 0, blue: 1)
+
+    func testBrowseIndexListsHuesPresentInLibrary() {
+        let colors = [ColorViewModel(name: "Red", color: red, HEX: "#FF0000", usedInPalette: false)]
+        let palettes = [PaletteViewModel(name: "Sea", colors: [blue], hexCodes: ["#0000FF"], colorNames: ["Blue"])]
+        let index = SearchBrowseIndex(colors: colors, palettes: palettes)
+        XCTAssertEqual(index.availableHues, [.reds, .blues])
+    }
+
+    func testBrowseIndexFiltersColorsByHue() {
+        let r = ColorViewModel(name: "Red", color: red, HEX: "#FF0000", usedInPalette: false)
+        let b = ColorViewModel(name: "Blue", color: blue, HEX: "#0000FF", usedInPalette: false)
+        let index = SearchBrowseIndex(colors: [r, b], palettes: [])
+        XCTAssertEqual(index.colors([r, b], hues: [.blues]).map(\.id), [b.id])
+        XCTAssertEqual(index.colors([r, b], hues: []).map(\.id), [r.id, b.id])
+    }
+
+    func testBrowseIndexFiltersPalettesByHueAndTag() {
+        let warm = PaletteViewModel(name: "Warm", paletteColors: [PaletteColor(color: red, hex: "#FF0000", name: "Red", role: "Primary")])
+        let cool = PaletteViewModel(name: "Cool", paletteColors: [PaletteColor(color: blue, hex: "#0000FF", name: "Blue")])
+        let index = SearchBrowseIndex(colors: [], palettes: [warm, cool])
+        XCTAssertEqual(index.palettes([warm, cool], hues: [.reds], tags: []).map(\.id), [warm.id])
+        XCTAssertEqual(index.palettes([warm, cool], hues: [], tags: ["primary"]).map(\.id), [warm.id])
+        XCTAssertEqual(index.palettes([warm, cool], hues: [.blues], tags: ["Primary"]).map(\.id), [])
+        XCTAssertEqual(index.availableTags, ["Primary"])
     }
 }

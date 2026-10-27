@@ -7,6 +7,10 @@ import UIKit
 
 @MainActor
 class AppData: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     @Published var activeTab: TabValue = .palettes
 
     /// Color to pre-select when the Generate tab is opened from a color detail view.
@@ -22,7 +26,13 @@ class AppData: ObservableObject {
 
     /// Single app-wide instance shared by the UI and App Intents so both see
     /// (and persist through) the same in-memory library.
+    #if DEBUG
+    /// In-memory while `ScreenshotSeed` is active, so its demo library never
+    /// overwrites the device's real one.
+    static let shared = AppData(inMemory: ScreenshotSeed.isActive)
+    #else
     static let shared = AppData()
+    #endif
 
     /// Palette id an Open intent asked to show; PaletteView consumes it.
     @Published var pendingOpenPaletteID: UUID?
@@ -694,7 +704,7 @@ class AppData: ObservableObject {
     /// `ColorRole.defaults` or an existing custom tag.
     @discardableResult
     func addCustomTag(_ name: String) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameLimit.clamp(name.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !trimmed.isEmpty else { return false }
         guard !isReservedOrExistingTag(trimmed) else { return false }
         customTags.append(trimmed)
@@ -707,7 +717,7 @@ class AppData: ObservableObject {
     /// existing custom tag.
     func renameCustomTag(_ old: String, to new: String) {
         guard let index = customTags.firstIndex(where: { $0.caseInsensitiveCompare(old) == .orderedSame }) else { return }
-        let trimmed = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameLimit.clamp(new.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !trimmed.isEmpty else { return }
         guard !isReservedOrExistingTag(trimmed, excludingCustomTag: old) else { return }
 

@@ -21,7 +21,9 @@ extension Color {
             return nil
         }
 
-        guard let number = UInt64(cleaned, radix: 16) else {
+        // `UInt64(_:radix:)` also accepts a leading "+" or "-", so check the
+        // digits first; `isHexDigit` alone would let fullwidth digits through.
+        guard cleaned.allSatisfy(\.isHexDigit), let number = UInt64(cleaned, radix: 16) else {
             return nil
         }
 

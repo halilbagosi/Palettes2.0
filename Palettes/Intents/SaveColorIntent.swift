@@ -35,7 +35,7 @@ struct SaveColorIntent: AppIntent {
             throw PalettesIntentError.invalidHex(hex)
         }
 
-        let resolvedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = name.map { NameLimit.clamp($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         if let resolvedName, !resolvedName.isEmpty, let existing = AppData.shared.existingColor(named: resolvedName) {
             throw PalettesIntentError.nameTaken(resolvedName, existing.HEX)
         }

@@ -11,17 +11,25 @@
 
 import SwiftUI
 
-struct PaletteMorphCard: View {
+struct PaletteMorphCard: View, Equatable {
     let paletteName: String
     let colors: [Color]
     var isCompact: Bool
     var isGenerated: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
-    /// Opens the palette; shown as a "View" pill in the normal layout.
-    var onView: (() -> Void)? = nil
     /// Copies the palette's HEX codes; wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
+
+    /// Closures are excluded: callers' closures only read state that is also
+    /// reflected in these value fields (e.g. `isSelecting`), so equal values
+    /// render and behave identically. Lets `.equatable()` skip body re-runs.
+    static func == (lhs: PaletteMorphCard, rhs: PaletteMorphCard) -> Bool {
+        lhs.paletteName == rhs.paletteName && lhs.colors == rhs.colors
+            && lhs.isCompact == rhs.isCompact && lhs.isGenerated == rhs.isGenerated
+            && lhs.isFavorite == rhs.isFavorite && lhs.isSelecting == rhs.isSelecting
+            && (lhs.onCopy == nil) == (rhs.onCopy == nil)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,8 +43,15 @@ struct PaletteMorphCard: View {
                 }
             }
 
-            regularBar.opacity(isCompact ? 0 : 1)
-            compactBar.opacity(isCompact ? 1 : 0)
+            // Only the active layout's glass bar is mounted; the layout
+            // toggle cross-fades them via the surrounding animation.
+            if isCompact {
+                compactBar
+                    .transition(.opacity)
+            } else {
+                regularBar
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
@@ -52,8 +67,7 @@ struct PaletteMorphCard: View {
                 .padding(isCompact ? 8 : 12)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .compositingGroup()
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        .swatchOutline(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     @ViewBuilder
@@ -74,7 +88,7 @@ struct PaletteMorphCard: View {
         .liquidGlass(.regular, in: .circle)
     }
 
-    // MARK: - Normal layout: name + View + copy
+    // MARK: - Normal layout: name + copy
 
     private var regularBar: some View {
         GlassContainer(spacing: 10) {
@@ -87,20 +101,6 @@ struct PaletteMorphCard: View {
                     .liquidGlass(.regular, in: .capsule)
 
                 Spacer(minLength: 0)
-
-                if let onView, !isSelecting {
-                    Button(action: onView) {
-                        Text("View")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlass(.interactive, in: .capsule)
-                }
 
                 if !isSelecting {
                     copyButton(diameter: 38)

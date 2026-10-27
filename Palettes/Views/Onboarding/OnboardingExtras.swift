@@ -210,7 +210,7 @@ struct OnboardingExtrasView: View {
         }
         .sheet(isPresented: $isExporting) {
             ExportPaletteSheet(palette: palette)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
         }
     }
 

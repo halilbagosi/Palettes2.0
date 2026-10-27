@@ -24,6 +24,10 @@ import UIKit
 
 @MainActor
 final class IslandMorphController: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     enum Phase: Equatable {
         /// Waiting for (or retracting from) a pull.
         case idle

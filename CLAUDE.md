@@ -16,6 +16,7 @@ Target and scheme are both named `Palettes`. New Swift files are auto-included v
 - MVVM. `Palettes/App/AppData.swift` is the single source of truth: it publishes value-type view models and owns all persistence.
 - Persistence is a debounced write-back to SwiftData/CloudKit. Do not bypass `AppData` to read/write palettes or colors directly.
 - Deployment target is iOS 17.0. iOS 26-only APIs (Apple Intelligence generation, some Liquid Glass UI) are gated behind `@available(iOS 26.0, *)` and live behind shims in `Palettes/Compatibility/`. Extend those shims rather than raising the minimum deployment target.
+- Every class needs an explicit deinit. With `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, Swift 6.4 synthesizes a main-actor-isolated deinit, and the back-deployed runtime for it aborts on iOS 17/18 ("pointer being freed was not allocated"). Give each new class `nonisolated deinit {}`, or write a plain `deinit { … }`, which is nonisolated. Never use `isolated deinit`. To check, run `nm -a` on `Palettes.debug.dylib`, pipe it through `xcrun swift-demangle`, and grep for `__isolated_deallocating_deinit`. The only expected hit is Xcode's generated `ResourceBundleClass`, which is never deallocated.
 
 ## Known caveat
 

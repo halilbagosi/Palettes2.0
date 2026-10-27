@@ -199,6 +199,10 @@ struct CustomizeAppearanceView: View {
 /// opens it directly; SwiftUI's `ColorPicker` can't be opened from one.
 @MainActor
 final class SystemColorPicker: NSObject, UIColorPickerViewControllerDelegate {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     private var onChange: ((Color) -> Void)?
 
     func present(selecting color: Color, onChange: @escaping (Color) -> Void) {

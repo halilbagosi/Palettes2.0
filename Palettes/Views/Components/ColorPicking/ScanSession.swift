@@ -15,6 +15,10 @@ import UIKit
 /// photo and a load still in flight outlive the full-screen picker.
 @MainActor
 final class ScanSession: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     /// Shown once per install the first time a Scan view appears.
     static let trueToneMessage = "For accurate color scanning, turn off True Tone in Settings → Display & Brightness. True Tone adjusts your screen's warmth, which can affect how scanned colors appear."
 

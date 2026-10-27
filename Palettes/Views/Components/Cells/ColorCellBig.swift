@@ -28,7 +28,7 @@ struct ColorCellBig: View {
 
     var body: some View {
         Rectangle()
-            .fill(color.gradient)
+            .fill(color)
             .frame(height: 180)
             .overlay(alignment: .topLeading) {
                 namePill.padding(Self.overlayInset)
@@ -37,6 +37,7 @@ struct ColorCellBig: View {
                 bottomBar.padding(Self.overlayInset)
             }
             .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+            .swatchOutline(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
             .compositingGroup()
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
             .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))

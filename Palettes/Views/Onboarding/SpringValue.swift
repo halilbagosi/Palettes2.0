@@ -26,6 +26,10 @@ struct SpringParameters: Equatable {
 
 @MainActor
 final class SpringValue: ObservableObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     /// Settled when closer to the target than this and slower than `settleVelocity`.
     nonisolated static let settleDistance = 0.001
     nonisolated static let settleVelocity = 0.01
@@ -184,6 +188,10 @@ final class SpringValue: ObservableObject {
 
 /// Keeps the display link from retaining the spring.
 private final class DisplayLinkProxy: NSObject {
+    /// Not main-actor isolated: the synthesized isolated deinit crashes on
+    /// iOS 17/18 (see CLAUDE.md).
+    nonisolated deinit {}
+
     weak var owner: SpringValue?
 
     init(owner: SpringValue) { self.owner = owner }
