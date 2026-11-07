@@ -7,7 +7,8 @@
 //  palettes below, so a simulator's real library is never touched. Add
 //  `-screenshotOpenPalette <index>` to push that palette's detail,
 //  `-screenshotTab <palettes|colors|search|generate>` to start on a tab, and
-//  `-screenshotSheet <export|edit>` to open that sheet on the open palette.
+//  `-screenshotSheet <export|edit|extras>` to open that sheet on the open
+//  palette (`extras` also needs `-didShowOnboardingExtras NO`).
 //
 
 #if DEBUG

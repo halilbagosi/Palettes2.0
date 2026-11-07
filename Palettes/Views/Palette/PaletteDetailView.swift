@@ -210,6 +210,8 @@ struct PaletteDetailView: View {
                 try? await Task.sleep(for: .milliseconds(800))
                 if sheet == "export" { isExporting = true }
                 if sheet == "edit" { isEditingPalette = true }
+                // Needs -didShowOnboardingExtras NO, as it's shown only once.
+                if sheet == "extras" { appData.extrasPaletteID = palette.id }
             }
             #endif
             .alert("Delete Palette", isPresented: $showDeleteAlert) {

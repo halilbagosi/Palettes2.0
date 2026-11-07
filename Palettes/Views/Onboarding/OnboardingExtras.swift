@@ -362,7 +362,9 @@ private struct PaletteWash: View {
             .mask(SoftFade.linear(from: 0.2))
         }
         .frame(height: 440)
-        .ignoresSafeArea(edges: .top)
+        // Sideways too: on iPhone Duo's outer display in landscape the
+        // trailing safe area (status column, close button) would cut it off.
+        .ignoresSafeArea(edges: [.top, .horizontal])
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
