@@ -16,6 +16,9 @@ struct ColorDetailView: View {
     @State private var showDeleteAlert = false
     /// iPhone Duo's fold while half open (see `FoldCompat`).
     @State private var fold: Fold?
+    /// Two columns (iPad / unfolded Duo in landscape): the title stays inline
+    /// so scrolling the palettes column never grows it over the color.
+    @State private var usesColumns = false
     /// Ties the color and the sections across the folded and unfolded layouts.
     @Namespace private var foldNamespace
 
@@ -57,8 +60,10 @@ struct ColorDetailView: View {
                 .ignoresSafeArea()
             )
             .navigationTitle(liveColor.name)
-            // Folded, the color needs the height a large title would take.
-            .navigationBarTitleDisplayMode(fold == nil ? .large : .inline)
+            // Folded, the color needs the height a large title would take; in
+            // columns the large title would collapse and grow with the
+            // palettes' scrolling, over the color that stays put.
+            .navigationBarTitleDisplayMode(fold == nil && !usesColumns ? .large : .inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -220,43 +225,81 @@ struct ColorDetailView: View {
 
     // MARK: - Layout
 
-    /// The color, then its values and palettes. On iPhone Duo half open, the
-    /// color fills the side before the crease (the top, or the left in
-    /// landscape) and the values and palettes scroll on the other.
+    /// The color, then its values and palettes.
+    /// - iPad and unfolded iPhone Duo in landscape: two columns. The color
+    ///   and its values stay put on the left; only the palettes scroll.
+    /// - iPhone Duo half open in landscape: the color and its values before
+    ///   the crease, the palettes scrolling after it. Half open in portrait,
+    ///   the color fills the top and the values and palettes scroll below.
     private var detailContent: some View {
-        ZStack {
-            if let fold {
-                FoldSplit(fold: fold) {
-                    colorWindow(fillsHeight: true)
-                        .padding()
-                } controls: {
+        GeometryReader { geo in
+            ZStack {
+                if let fold {
+                    FoldSplit(fold: fold) {
+                        if fold.isVertical {
+                            colorAndValues
+                                .padding(.vertical)
+                        } else {
+                            colorWindow(fillsHeight: true)
+                                .padding()
+                        }
+                    } controls: {
+                        ScrollView {
+                            VStack(spacing: 24) {
+                                if !fold.isVertical { valuesSection }
+                                palettesSection
+                            }
+                            .padding(.vertical)
+                            .padding(.vertical, 6)
+                        }
+                        // Content fades out at the cut edges as it scrolls.
+                        .fadingEdges([.top, .bottom], length: 18)
+                    }
+                } else if Self.usesColumns(geo.size) {
+                    HStack(alignment: .top, spacing: 8) {
+                        colorAndValues
+                            .padding(.top, 8)
+                            .padding(.bottom, 24)
+                            .frame(width: geo.size.width * 0.42)
+                        ScrollView {
+                            palettesSection
+                                .padding(.top, 8)
+                                .padding(.bottom, 24)
+                        }
+                        .fadingEdges([.top], length: 18)
+                    }
+                } else {
                     ScrollView {
                         VStack(spacing: 24) {
+                            colorWindow(fillsHeight: false)
+                                .padding(.horizontal)
+                                .padding(.top, 8)
                             valuesSection
                             palettesSection
                         }
-                        .padding(.vertical)
-                        .padding(.vertical, 6)
+                        .padding(.bottom, 24)
                     }
-                    // Content fades out at the cut edges as it scrolls.
-                    .fadingEdges([.top, .bottom], length: 18)
-                }
-            } else {
-                ScrollView {
-                    VStack(spacing: 24) {
-                        colorWindow(fillsHeight: false)
-                            .padding(.horizontal)
-                            .padding(.top, 8)
-                        valuesSection
-                        palettesSection
-                    }
-                    .padding(.bottom, 24)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: Bool.self) { Self.usesColumns($0.size) } action: { usesColumns = $0 }
         .onFoldChange { newFold in
             withAnimation(.smooth(duration: 0.35)) { fold = newFold }
+        }
+    }
+
+    /// Landscape and wide enough for a palette column beside the color.
+    static func usesColumns(_ size: CGSize) -> Bool {
+        size.width > size.height && size.width >= 700
+    }
+
+    /// The color filling the space above its values.
+    private var colorAndValues: some View {
+        VStack(spacing: 20) {
+            colorWindow(fillsHeight: true)
+                .padding(.horizontal)
+            valuesSection
         }
     }
 

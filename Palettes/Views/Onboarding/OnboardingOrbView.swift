@@ -59,7 +59,16 @@ struct OnboardingOrbView: View {
     /// image melts into the glass instead of stopping at a visible circle.
     static func windowDiameter(for orb: CGFloat) -> CGFloat { orb * CGFloat(OrbTuning.live.windowSize) }
 
-    private var windowDiameter: CGFloat { Self.windowDiameter(for: diameter) }
+    /// The live camera gets a larger window than photos and colors, so the
+    /// preview reads as a clear view rather than a tinted glimpse.
+    static let cameraWindowSize: CGFloat = 0.95
+    private var windowDiameter: CGFloat {
+        showsCamera ? diameter * Self.cameraWindowSize : Self.windowDiameter(for: diameter)
+    }
+    /// Camera: stays sharp out to just past half the radius before fading,
+    /// instead of soaking in from 20% out like photos.
+    private var featherStart: Double { showsCamera ? 0.55 : OrbTuning.live.featherStart }
+    private var featherReach: CGFloat { showsCamera ? 0.97 : CGFloat(OrbTuning.live.featherReach) }
 
     private var liquidColors: [Color] {
         switch content {
@@ -112,13 +121,13 @@ struct OnboardingOrbView: View {
                     .transition(.windowSwap)
             }
             windowBody
-                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: CGFloat(OrbTuning.live.featherReach)))
+                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: featherReach, start: featherStart))
                 .id(content.key)
                 .transition(.windowSwap)
             Circle()
                 .fill(.white)
                 .opacity(flash)
-                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: CGFloat(OrbTuning.live.featherReach)))
+                .mask(InkFeather(diameter: windowDiameter, orbDiameter: diameter, reach: featherReach, start: featherStart))
                 .allowsHitTesting(false)
         }
         .frame(width: windowDiameter, height: windowDiameter)
@@ -175,9 +184,11 @@ struct InkFeather: View {
     /// The bubble's diameter, which the wobble's drift is a fraction of.
     var orbDiameter: CGFloat
     var reach: CGFloat = 1
+    /// Where the fade begins, as a fraction of the radius.
+    var start: Double = OrbTuning.live.featherStart
     @Environment(\.bubbleWobble) private var wobble
 
-    /// 1 at the center, easing (smootherstep) to 0 at the edge from 20% out.
+    /// 1 at the center, easing (smootherstep) to 0 at the edge from `start` out.
     private static func stops(start: Double) -> [Gradient.Stop] { (0...12).map { i in
         let x = Double(i) / 12
         let u = min(max((x - start) / (1 - start), 0), 1)
@@ -190,7 +201,7 @@ struct InkFeather: View {
         // the oval's angle, shifted with the drop's center.
         let a = 1 + wobble.oval
         Circle()
-            .fill(RadialGradient(stops: Self.stops(start: OrbTuning.live.featherStart), center: .center,
+            .fill(RadialGradient(stops: Self.stops(start: start), center: .center,
                                  startRadius: 0, endRadius: diameter / 2 * reach))
             .frame(width: diameter, height: diameter)
             .scaleEffect(x: a, y: 1 / a)

@@ -108,13 +108,17 @@ struct GenerateView: View {
                 }
             }
             .background {
-                LiquidGradientView(
-                    speed: 0.25,
-                    intensity: phase == .result ? 0.22 : 0.10,
-                    colors: phase == .result ? resultPaletteColors.map(\.color) : []
-                )
-                .blur(radius: 60)
-                .ignoresSafeArea()
+                // Only the result flows through its palette's colors; the form
+                // and generating stages stay plain, with just the orb's glow.
+                if phase == .result {
+                    LiquidGradientView(
+                        speed: 0.25,
+                        intensity: 0.22,
+                        colors: resultPaletteColors.map(\.color)
+                    )
+                    .blur(radius: 60)
+                    .ignoresSafeArea()
+                }
             }
             .navigationTitle(phase == .form ? "Generate" : "")
             // Folded, the orb needs the height a large title would take.

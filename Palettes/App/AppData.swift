@@ -4,6 +4,7 @@ import SwiftData
 import AppIntents
 import CoreData
 import UIKit
+import os
 
 @MainActor
 class AppData: ObservableObject {
@@ -95,23 +96,43 @@ class AppData: ObservableObject {
     /// Spotlight index.
     private let indexesSpotlight: Bool
 
-    init(inMemory: Bool = false) {
+    /// Which store the library is read from and written to. Published so
+    /// Settings can show the sync toggle's real state.
+    @Published private(set) var storeMode: LibraryStoreMode = .local
+    /// True when sync is on but the iCloud store couldn't be opened, so the
+    /// library fell back to the local store.
+    @Published private(set) var iCloudStoreUnavailable = false
+    /// The most recent finished CloudKit export/import, for Settings.
+    @Published private(set) var lastSyncDate: Date?
+    @Published private(set) var lastSyncError: String?
+
+    /// Opens the store for a mode. Swapped out by tests.
+    private let storeFactory: (LibraryStoreMode) -> ModelContainer?
+
+    init(inMemory: Bool = false,
+         syncEnabled: Bool? = nil,
+         storeFactory: ((LibraryStoreMode) -> ModelContainer?)? = nil) {
         indexesSpotlight = !inMemory
             && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
-        if inMemory {
-            let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: config)
+        if let storeFactory {
+            self.storeFactory = storeFactory
+        } else if inMemory {
+            self.storeFactory = { _ in ICloudSync.makeInMemoryContainer() }
         } else {
-            // Prefer iCloud-synced storage; fall back to a purely local store
-            // (e.g. entitlement missing or iCloud unavailable), then to a
-            // session-only experience rather than crashing.
-            let cloud = ModelConfiguration(cloudKitDatabase: .automatic)
-            if let cloudContainer = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: cloud) {
-                container = cloudContainer
-            } else {
-                let local = ModelConfiguration(cloudKitDatabase: .none)
-                container = try? ModelContainer(for: StoredColor.self, StoredPalette.self, StoredTag.self, configurations: local)
-            }
+            self.storeFactory = ICloudSync.makeContainer
+        }
+        // In-memory instances (previews, tests, screenshots) never sync.
+        let wantsCloud = syncEnabled ?? (!inMemory && ICloudSync.isEnabled())
+        if wantsCloud, let cloud = self.storeFactory(.cloud) {
+            container = cloud
+            storeMode = .cloud
+        } else {
+            // Sync off, or the iCloud store couldn't be opened (entitlement
+            // missing, store damaged): run on the local store rather than
+            // crashing, and say so in Settings.
+            container = self.storeFactory(.local)
+            storeMode = .local
+            iCloudStoreUnavailable = wantsCloud
         }
 
         // Obsolete: sample data is no longer seeded.
@@ -205,9 +226,17 @@ class AppData: ObservableObject {
                 note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
                     as? NSPersistentCloudKitContainer.Event
             }
-            .filter { $0.type == .import && $0.endDate != nil }
+            .filter { $0.endDate != nil && $0.type != .setup }
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.reloadFromStore() }
+            .sink { [weak self] event in
+                guard let self, self.storeMode == .cloud else { return }
+                self.lastSyncDate = event.endDate
+                self.lastSyncError = event.error?.localizedDescription
+                if let error = event.error {
+                    ICloudSync.logger.error("CloudKit \(event.type == .import ? "import" : "export", privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                }
+                if event.type == .import { self.reloadFromStore() }
+            }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
@@ -612,6 +641,90 @@ class AppData: ObservableObject {
         ExportFiles.removeAll()
         if indexesSpotlight, #available(iOS 26.0, *) {
             EntityIndexer.removeAll()
+        }
+        return true
+    }
+
+    // MARK: - iCloud sync
+
+    /// Turns iCloud sync on or off by moving the library to the other store.
+    ///
+    /// - Turning on with `.merge` copies this device's library into the
+    ///   iCloud store alongside whatever is already there; with
+    ///   `.replaceWithICloud` this device's library is left behind and the
+    ///   iCloud store's contents (plus anything still to download) take over.
+    /// - Turning off copies the current library into the local store,
+    ///   replacing what was there, so nothing disappears from this device.
+    ///   Copies already in iCloud stay on the user's other devices.
+    ///
+    /// Returns false, leaving everything as it was, if the target store can't
+    /// be opened or written.
+    @discardableResult
+    func setICloudSync(enabled: Bool, choice: ICloudSyncMergeChoice = .merge,
+                       defaults: UserDefaults = .standard) -> Bool {
+        let target: LibraryStoreMode = enabled ? .cloud : .local
+        guard target != storeMode else {
+            defaults.set(enabled, forKey: ICloudSync.enabledKey)
+            if !enabled { iCloudStoreUnavailable = false }
+            return true
+        }
+        flushPendingChanges()
+        guard let newContainer = storeFactory(target) else {
+            ToastManager.shared.show(enabled ? "Couldn't turn on iCloud sync." : "Couldn't turn off iCloud sync.",
+                                     icon: "exclamationmark.icloud.fill")
+            return false
+        }
+
+        let carried = (colors: colors, palettes: palettes, tags: customTags)
+        let previous = (container: container, mode: storeMode)
+
+        reloadResetTask?.cancel()
+        isReloading = true
+        container = newContainer
+        storeMode = target
+        load()   // what the target store already holds; resets the persisted-id snapshots
+
+        if enabled {
+            if choice == .merge {
+                colors = ICloudSync.merge(carried.colors, colors)
+                palettes = ICloudSync.merge(carried.palettes, palettes)
+                customTags = ICloudSync.mergeTags(carried.tags, customTags)
+            }
+        } else {
+            // The local store becomes an exact copy of the synced library.
+            colors = carried.colors
+            palettes = carried.palettes
+            customTags = carried.tags
+        }
+
+        // The sinks don't mark edits made while reloading; mark them so a
+        // failed write is detectable below.
+        isDirtyColors = true
+        isDirtyPalettes = true
+        isDirtyTags = true
+        persistColors(colors)
+        persistPalettes(palettes)
+        persistTags(customTags)
+        guard !isDirtyColors, !isDirtyPalettes, !isDirtyTags else {
+            // A write failed: go back to the store we came from.
+            container = previous.container
+            storeMode = previous.mode
+            load()
+            isDirtyColors = false
+            isDirtyPalettes = false
+            isDirtyTags = false
+            isReloading = false
+            return false
+        }
+
+        defaults.set(enabled, forKey: ICloudSync.enabledKey)
+        iCloudStoreUnavailable = false
+        lastSyncDate = nil
+        lastSyncError = nil
+        reloadResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            self.isReloading = false
         }
         return true
     }
