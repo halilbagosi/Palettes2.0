@@ -17,10 +17,7 @@ final class OnboardingReplayCoordinator: ObservableObject {
 
     private(set) var isRequested = false
 
-    /// `withAppleIntelligence` replays down the Apple Intelligence path even
-    /// where the model can't run.
-    func request(withAppleIntelligence: Bool = false) {
-        OnboardingPaletteMaker.forcesAI = withAppleIntelligence
+    func request() {
         isRequested = true
     }
 

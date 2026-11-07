@@ -52,5 +52,8 @@ struct HueOrderTests {
         #expect(LibraryTitle.text("Palette", count: 1) == "1 Palette")
         #expect(LibraryTitle.text("Color", count: 12) == "12 Colors")
         #expect(LibraryTitle.plural("Palette") == "Palettes")
+        #expect(LibraryTitle.subtitle("Palette", count: 0) == "")
+        #expect(LibraryTitle.subtitle("Color", count: 1) == "1 color")
+        #expect(LibraryTitle.subtitle("Color", count: 60) == "60 colors")
     }
 }

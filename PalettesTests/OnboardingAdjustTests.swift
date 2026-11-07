@@ -230,6 +230,7 @@ final class OnboardingExtrasLogicTests: XCTestCase {
     func testICloudLineFollowsSignInState() {
         XCTAssertTrue(OnboardingExtrasLogic.icloudLine(signedIn: true).contains("sync across"))
         XCTAssertTrue(OnboardingExtrasLogic.icloudLine(signedIn: false).hasPrefix("Sign in"))
+        XCTAssertTrue(OnboardingExtrasLogic.icloudLine(signedIn: true, syncOn: false).hasPrefix("Turn on"))
     }
 
     func testCoachMarkWordingForVoiceOver() {

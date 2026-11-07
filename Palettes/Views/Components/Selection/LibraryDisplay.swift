@@ -142,4 +142,10 @@ enum LibraryTitle {
     }
 
     static func plural(_ noun: String) -> String { "\(noun)s" }
+
+    /// "12 palettes", "1 color"; empty for none.
+    static func subtitle(_ noun: String, count: Int) -> String {
+        guard count > 0 else { return "" }
+        return "\(count) \(noun.lowercased())\(count == 1 ? "" : "s")"
+    }
 }

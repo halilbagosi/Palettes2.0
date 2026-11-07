@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  Palettes
 //
-//  A header with the user's library, then iCloud status, library export,
+//  A header with the user's library, then the iCloud sync toggle, library export,
 //  help, legal, and — on its own at the bottom — deleting all data.
 //
 
@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var showDeleteConfirmation = false
     @State private var showExportError = false
     @State private var showCustomize = false
+    @State private var showMergeChoice = false
+    @State private var showTurnOffConfirmation = false
     @AppStorage(AppIconVersion.storageKey) private var iconStored = ""
 
     private var iconVersion: AppIconVersion {
@@ -24,6 +26,42 @@ struct SettingsView: View {
 
     private var isSignedInToICloud: Bool {
         FileManager.default.ubiquityIdentityToken != nil
+    }
+
+    private var isSyncOn: Bool { appData.storeMode == .cloud }
+
+    /// On: asks merge-or-replace when this device has a library. Off: confirms.
+    private var syncBinding: Binding<Bool> {
+        Binding(
+            get: { isSyncOn },
+            set: { on in
+                ICloudSync.markPromptAnswered()
+                if on {
+                    if libraryIsEmpty { appData.setICloudSync(enabled: true) } else { showMergeChoice = true }
+                } else {
+                    showTurnOffConfirmation = true
+                }
+            }
+        )
+    }
+
+    private var syncFooter: String {
+        if appData.iCloudStoreUnavailable {
+            return "iCloud sync couldn't start, so your library is stored only on this device. Try turning it off and on again."
+        }
+        guard isSyncOn else {
+            return "Your library is stored only on this device."
+        }
+        guard isSignedInToICloud else {
+            return "Sign in to iCloud in the Settings app to sync your library across devices. Until then, it's stored only on this device."
+        }
+        var text = "Your library syncs privately through your iCloud account to your other devices."
+        if let error = appData.lastSyncError {
+            text += "\n\nLast sync failed: \(error)"
+        } else if let date = appData.lastSyncDate {
+            text += "\n\nLast synced \(date.formatted(.relative(presentation: .named)))."
+        }
+        return text
     }
 
     private var versionString: String {
@@ -59,23 +97,15 @@ struct SettingsView: View {
                 .listRowInsets(EdgeInsets())
 
                 Section {
-                    HStack {
+                    Toggle(isOn: syncBinding) {
                         SettingsRowLabel(
                             title: "iCloud Sync",
                             systemImage: "icloud.fill",
                             tint: .blue
                         )
-                        Label(
-                            isSignedInToICloud ? "On" : "Off",
-                            systemImage: isSignedInToICloud ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
-                        )
-                        .labelStyle(.titleAndIcon)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(isSignedInToICloud ? Color.green : Color.orange)
                     }
-                    .accessibilityElement(children: .combine)
 
-                    if !isSignedInToICloud {
+                    if isSyncOn && !isSignedInToICloud {
                         Button {
                             if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                         } label: {
@@ -85,9 +115,16 @@ struct SettingsView: View {
                 } header: {
                     Text("Sync")
                 } footer: {
-                    Text(isSignedInToICloud
-                         ? "Your library syncs privately through your iCloud account to your other devices."
-                         : "Sign in to iCloud in the Settings app to sync your library across devices. Until then, it's stored only on this device.")
+                    Text(syncFooter)
+                }
+                .iCloudMergeChoice(appData: appData, isPresented: $showMergeChoice)
+                .alert(ICloudSyncCopy.turnOffTitle, isPresented: $showTurnOffConfirmation) {
+                    Button("Turn Off", role: .destructive) {
+                        appData.setICloudSync(enabled: false)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(ICloudSyncCopy.turnOffMessage)
                 }
 
                 Section {
@@ -116,18 +153,6 @@ struct SettingsView: View {
                             systemImage: "sparkles",
                             tint: .purple
                         )
-                    }
-                    if AppleIntelligence.isDeviceSupported {
-                        Button {
-                            replayOnboarding(withAppleIntelligence: true)
-                        } label: {
-                            SettingsRowLabel(
-                                title: "Replay with Apple Intelligence",
-                                subtitle: "Pick a color and generate a palette around it",
-                                systemImage: "wand.and.stars",
-                                tint: .pink
-                            )
-                        }
                     }
                     Link(destination: AppLinks.supportPage) {
                         SettingsRowLabel(title: "Help & Support", systemImage: "questionmark.circle.fill", tint: .teal, accessory: .external)
@@ -227,9 +252,9 @@ struct SettingsView: View {
         }
     }
 
-    private func replayOnboarding(withAppleIntelligence: Bool = false) {
+    private func replayOnboarding() {
         // The presenter restarts onboarding in the sheet's onDismiss.
-        replay.request(withAppleIntelligence: withAppleIntelligence)
+        replay.request()
         dismiss()
     }
 

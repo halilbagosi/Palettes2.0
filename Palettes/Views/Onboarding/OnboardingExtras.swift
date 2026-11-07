@@ -55,8 +55,9 @@ enum OnboardingExtrasLogic {
         usesAI ? "Generate a palette in \(appName)" : "Open \(paletteName) in \(appName)"
     }
 
-    static func icloudLine(signedIn: Bool) -> String {
-        signedIn
+    static func icloudLine(signedIn: Bool, syncOn: Bool = true) -> String {
+        if !syncOn { return "Turn on iCloud Sync in Settings to keep your palettes on all your devices." }
+        return signedIn
             ? "Your palettes sync across your devices with iCloud."
             : "Sign in to iCloud in Settings to sync your palettes across your devices."
     }
@@ -311,7 +312,8 @@ struct OnboardingExtrasView: View {
 
     private func icloudCard(tint: Color) -> some View {
         ExtrasCard(title: "iCloud", symbol: "icloud", tint: tint,
-                   caption: OnboardingExtrasLogic.icloudLine(signedIn: FileManager.default.ubiquityIdentityToken != nil)) {
+                   caption: OnboardingExtrasLogic.icloudLine(signedIn: FileManager.default.ubiquityIdentityToken != nil,
+                                                              syncOn: appData.storeMode == .cloud)) {
             EmptyView()
         }
     }
@@ -360,7 +362,9 @@ private struct PaletteWash: View {
             .mask(SoftFade.linear(from: 0.2))
         }
         .frame(height: 440)
-        .ignoresSafeArea(edges: .top)
+        // Sideways too: on iPhone Duo's outer display in landscape the
+        // trailing safe area (status column, close button) would cut it off.
+        .ignoresSafeArea(edges: [.top, .horizontal])
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

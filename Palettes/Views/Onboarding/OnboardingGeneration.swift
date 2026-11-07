@@ -38,19 +38,10 @@ enum OnboardingPaletteMaker {
 
     /// Whether onboarding takes the Apple Intelligence path on this device
     /// (pick a color, generate around it).
-    static var usesAI: Bool { forcesAI || deviceHasAI }
-
-    /// Set by "Replay with Apple Intelligence" in Settings: takes the Apple
-    /// Intelligence path even where the model can't run (the simulator), with
-    /// the palette built deterministically but presented as generated.
-    @MainActor static var forcesAI = false
-
-    private static var deviceHasAI: Bool {
+    static var usesAI: Bool {
         if #available(iOS 26.0, *) { return modelAvailable }
         return false
     }
-
-    private static var simulatesAI: Bool { usesAI && !deviceHasAI }
 
     /// `onColors` receives the palette's colors as they arrive, for the orb.
     /// `revealDelay` paces the deterministic path (0 = all at once).
@@ -88,7 +79,7 @@ enum OnboardingPaletteMaker {
         } else {
             onColors(colors)
         }
-        return Made(palette: palette, usedAI: simulatesAI, anchorHex: anchorHex)
+        return Made(palette: palette, usedAI: false, anchorHex: anchorHex)
     }
 
     /// Without Apple Intelligence: the photo's most salient colors become the

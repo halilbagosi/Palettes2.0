@@ -15,7 +15,13 @@ struct PaletteTabView: View {
     @StateObject private var router = SceneRouter()
     /// Per window, and restored with it. `appData.activeTab` only carries
     /// requests to switch, which every window follows.
-    @SceneStorage("selectedTab") private var selectedTab: TabValue = .palettes
+    @SceneStorage("selectedTab") private var storedTab: TabValue = .palettes
+    /// What the tab bar is bound to. Plain state rather than the scene
+    /// storage directly: a scene-storage write lands a beat late, and the
+    /// extra update selecting Search triggers (its search field) re-read the
+    /// old tab, so the glass pill slid back before settling on Search.
+    @State private var selectedTab: TabValue = .palettes
+    @State private var restoredTab = false
     @AppStorage(OnboardingKeys.didComplete) private var didCompleteOnboarding = false
     /// What the cover is actually bound to. It follows `showsOnboarding`, but
     /// a replay is presented a beat later: on iOS 17 a cover asked for while
@@ -47,6 +53,7 @@ struct PaletteTabView: View {
         .environment(\.selectedTab, selectedTab)
         .focusedSceneValue(\.sceneCommands, sceneCommands)
         .onReceive(appData.$activeTab.dropFirst()) { selectedTab = $0 }
+        .onChange(of: selectedTab) { _, tab in storedTab = tab }
         .onReceive(QuickActionCenter.shared.$pending.compactMap { $0 }) { _ in
             // On a cold launch this fires during the first layout, when a tab
             // switch or sheet is dropped; wait for the window to settle.
@@ -56,6 +63,10 @@ struct PaletteTabView: View {
             }
         }
         .onAppear {
+            if !restoredTab {
+                restoredTab = true
+                selectedTab = storedTab
+            }
             // First launch: present on the first appearance, without animation
             // (a cover that starts out shown slides up, carrying the island's
             // black pill with it); it fades its content in instead.
@@ -99,6 +110,8 @@ struct PaletteTabView: View {
             .modifier(FadeInOnAppear())
             .presentationBackground(.clear)
         }
+        // Once onboarding is out of the way: "Sync with iCloud?", asked once.
+        .iCloudSyncPrompt(appData: appData, isReady: !isOnboardingPresented && !router.isShowingSettings)
         // Belt and braces for the replay: re-check whenever defaults change.
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             if onboardingWanted, !isOnboardingPresented {
