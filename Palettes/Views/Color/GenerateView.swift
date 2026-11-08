@@ -138,6 +138,11 @@ struct GenerateView: View {
             .toolbar(phase == .form ? .automatic : .hidden, for: .tabBar)
             .onAppear {
                 consumePendingColor()
+                #if DEBUG
+                if let names = ScreenshotSeed.generateSelection {
+                    selectedColorIDs = Set(appData.colors.filter { names.contains($0.name) }.map(\.id))
+                }
+                #endif
             }
             .onChange(of: appData.pendingGenerateColorID) {
                 consumePendingColor()

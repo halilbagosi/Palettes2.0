@@ -9,6 +9,10 @@
 //  `-screenshotTab <palettes|colors|search|generate>` to start on a tab, and
 //  `-screenshotSheet <export|edit|extras>` to open that sheet on the open
 //  palette (`extras` also needs `-didShowOnboardingExtras NO`).
+//  `-screenshotICloudSynced YES` shows Settings with iCloud sync on and
+//  signed in, without touching the real store or iCloud;
+//  `-screenshotSettings YES` opens Settings; `-screenshotGenerateColors
+//  "Lantern Glow,Temple Red"` preselects those swatches on Generate.
 //
 
 #if DEBUG
@@ -16,6 +20,22 @@ import SwiftUI
 
 enum ScreenshotSeed {
     static var isActive: Bool { UserDefaults.standard.bool(forKey: "screenshotSeed") }
+
+    /// Opens Settings shortly after launch.
+    static var opensSettings: Bool {
+        isActive && UserDefaults.standard.bool(forKey: "screenshotSettings")
+    }
+
+    /// Color names Generate starts with selected.
+    static var generateSelection: Set<String>? {
+        guard isActive, let raw = UserDefaults.standard.string(forKey: "screenshotGenerateColors") else { return nil }
+        return Set(raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
+    /// Settings shows iCloud sync as on and signed in (display only).
+    static var showsICloudSynced: Bool {
+        isActive && UserDefaults.standard.bool(forKey: "screenshotICloudSynced")
+    }
 
     private typealias Swatch = (name: String, hex: String, role: String?)
 

@@ -71,6 +71,14 @@ struct PaletteTabView: View {
             // (a cover that starts out shown slides up, carrying the island's
             // black pill with it); it fades its content in instead.
             if onboardingWanted { presentOnboarding(after: .zero) }
+            #if DEBUG
+            if ScreenshotSeed.opensSettings {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(900))
+                    router.isShowingSettings = true
+                }
+            }
+            #endif
             // A window restored onto Generate after Apple Intelligence went away.
             if selectedTab == .generate, !AppleIntelligence.isDeviceSupported {
                 selectedTab = .palettes

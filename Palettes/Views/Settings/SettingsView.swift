@@ -25,10 +25,18 @@ struct SettingsView: View {
     }
 
     private var isSignedInToICloud: Bool {
-        FileManager.default.ubiquityIdentityToken != nil
+        #if DEBUG
+        if ScreenshotSeed.showsICloudSynced { return true }
+        #endif
+        return FileManager.default.ubiquityIdentityToken != nil
     }
 
-    private var isSyncOn: Bool { appData.storeMode == .cloud }
+    private var isSyncOn: Bool {
+        #if DEBUG
+        if ScreenshotSeed.showsICloudSynced { return true }
+        #endif
+        return appData.storeMode == .cloud
+    }
 
     /// On: asks merge-or-replace when this device has a library. Off: confirms.
     private var syncBinding: Binding<Bool> {
