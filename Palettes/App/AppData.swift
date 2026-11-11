@@ -231,9 +231,10 @@ class AppData: ObservableObject {
             .sink { [weak self] event in
                 guard let self, self.storeMode == .cloud else { return }
                 self.lastSyncDate = event.endDate
-                self.lastSyncError = event.error?.localizedDescription
+                self.lastSyncError = event.error.map(ICloudSync.describe)
                 if let error = event.error {
-                    ICloudSync.logger.error("CloudKit \(event.type == .import ? "import" : "export", privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                    // The full error, with its per-record reasons, for Console.
+                    ICloudSync.logger.error("CloudKit \(event.type == .import ? "import" : "export", privacy: .public) failed: \(String(describing: error), privacy: .public)")
                 }
                 if event.type == .import { self.reloadFromStore() }
             }

@@ -120,6 +120,8 @@ struct PaletteTabView: View {
         }
         // Once onboarding is out of the way: "Sync with iCloud?", asked once.
         .iCloudSyncPrompt(appData: appData, isReady: !isOnboardingPresented && !router.isShowingSettings)
+        // After a few saved palettes: the system's rating prompt, once per version.
+        .reviewPrompt(paletteCount: appData.palettes.count, isReady: !isOnboardingPresented && !router.isShowingSettings)
         // Belt and braces for the replay: re-check whenever defaults change.
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             if onboardingWanted, !isOnboardingPresented {
