@@ -100,8 +100,27 @@ struct OnboardingOrbView: View {
         .frame(width: diameter, height: diameter)
         .scaleEffect(isPressed ? 0.97 : 1)
         .animation(.spring(response: 0.25, dampingFraction: 1), value: isPressed)
+        // Pinching anywhere on the drop zooms the live camera inside it.
+        .simultaneousGesture(zoomGesture, including: showsCamera ? .all : .subviews)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
+        .accessibilityZoomAction { action in
+            guard case .camera(let controller, _) = content else { return }
+            controller.pinchChanged(magnification: action.direction == .zoomIn ? 1.5 : 1 / 1.5)
+            controller.pinchEnded()
+        }
+    }
+
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                guard case .camera(let controller, _) = content else { return }
+                controller.pinchChanged(magnification: value.magnification)
+            }
+            .onEnded { _ in
+                guard case .camera(let controller, _) = content else { return }
+                controller.pinchEnded()
+            }
     }
 
     // MARK: Window

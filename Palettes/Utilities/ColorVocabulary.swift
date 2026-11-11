@@ -105,6 +105,8 @@ enum ColorVocabulary {
         "sand": Envelope(maxChroma: 0.09, minLightness: 0.6),
         "taupe": Envelope(maxChroma: 0.07),
         "khaki": Envelope(maxChroma: 0.13),
+        // A brown is a quiet orange; this saturated, the swatch is a red or an orange.
+        "brown": Envelope(maxChroma: 0.14),
         "navy": Envelope(maxLightness: 0.40),
         "midnight": Envelope(maxLightness: 0.40),
     ]

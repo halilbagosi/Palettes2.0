@@ -4,8 +4,9 @@ import SwiftUI
 /// ScrollView), so the drag-to-sample gesture is reliable across the whole
 /// image. A crosshair is drawn at the *exact* sampled point and the touch is
 /// clamped to the on-screen image rect, so "where the finger is" always matches
-/// the sampled color — including at the edges. A liquid-glass panel floats over
-/// the photo showing the live color.
+/// the sampled color — including at the edges. Pinching zooms and pans the
+/// photo for finer picking. A liquid-glass panel floats over the photo showing
+/// the live color.
 struct PhotoColorPickerView: View {
     let image: UIImage
     /// Seeds the preview before the user drags (e.g. the auto-extracted
@@ -31,9 +32,20 @@ struct PhotoColorPickerView: View {
     @State private var currentRGB: (r: Double, g: Double, b: Double) = (128, 128, 128)
     @State private var currentName = ""
     @State private var hasSample = false
-    @State private var marker: CGPoint?   // finger position, clamped to the image rect
+    @State private var zoom = PhotoZoom()
+    /// The selection before the touch in progress, restored if that touch
+    /// turns out to be the first finger of a pinch.
+    @State private var beforeTouch: Selection?
+    @State private var isTouching = false
     @State private var sampler: ImageColorExtractor.PixelSampler?
     @State private var dragVelocity: CGSize = .zero   // finger speed → bubble squish physics
+
+    private struct Selection {
+        var rgb: (r: Double, g: Double, b: Double)
+        var name: String
+        var hasSample: Bool
+        var point: CGPoint?
+    }
 
     private var currentColor: Color {
         Color(red: currentRGB.r / 255, green: currentRGB.g / 255, blue: currentRGB.b / 255)
@@ -48,18 +60,26 @@ struct PhotoColorPickerView: View {
         NavigationStack {
             GeometryReader { geo in
                 // The adaptive stage keeps the photo clear of the bottom panel.
-                let rect = PhotoLoupeGeometry.imageRect(
-                    imageSize: image.size,
-                    in: adaptiveStage ? CGSize(width: geo.size.width, height: max(0, geo.size.height - 130)) : geo.size)
+                let stage = adaptiveStage ? CGSize(width: geo.size.width, height: max(0, geo.size.height - 130)) : geo.size
+                // Where the photo rests, and where it is drawn once zoomed.
+                let base = PhotoLoupeGeometry.imageRect(imageSize: image.size, in: stage)
+                let rect = zoom.rect(for: base)
+                let window = CGRect(origin: .zero, size: stage)
+                let bounds = CGRect(origin: .zero, size: geo.size)
 
                 ZStack {
                     (adaptiveStage && colorScheme == .light ? Color.white : Color.black).ignoresSafeArea()
 
-                    photo(in: rect, container: geo.size)
+                    photo(in: base, container: geo.size)
                         .accessibilityLabel("Photo")
-                        .accessibilityHint("Use the actions to pick the center or the suggested color, or double-tap and hold, then drag.")
+                        .accessibilityHint("Use the actions to pick the center or the suggested color, or double-tap and hold, then drag. Pinch to zoom.")
+                        .accessibilityZoomAction { action in
+                            let center = CGPoint(x: window.midX, y: window.midY)
+                            zoom.pinch(by: action.direction == .zoomIn ? 2 : 0.5, from: center, to: center,
+                                       base: base, window: window)
+                        }
                         .accessibilityAction(named: "Pick Color at Center") {
-                            sample(at: CGPoint(x: rect.midX, y: rect.midY), in: rect)
+                            sample(at: CGPoint(x: window.midX, y: window.midY), in: rect, visible: bounds)
                             currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
                             UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
                         }
@@ -68,7 +88,6 @@ struct PhotoColorPickerView: View {
                                 Button("Use Suggested Color") {
                                     currentRGB = seed
                                     hasSample = true
-                                    marker = nil
                                     sampledPoint = nil
                                     currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
                                     UIAccessibility.post(notification: .announcement, argument: "Selected \(currentName.isEmpty ? currentHex : currentName), \(currentHex)")
@@ -78,23 +97,40 @@ struct PhotoColorPickerView: View {
 
                     // The drag layer sits under the panel, so the panel's own
                     // controls (the system color picker) still get their taps.
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    dragVelocity = value.velocity
-                                    sample(at: value.location, in: rect)
-                                }
-                                .onEnded { _ in
-                                    dragVelocity = .zero   // let the bubble spring back / bounce
-                                    currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
-                                }
-                        )
+                    PhotoTouchLayer(
+                        onSample: { location, velocity in
+                            if !isTouching {
+                                isTouching = true
+                                beforeTouch = Selection(rgb: currentRGB, name: currentName,
+                                                        hasSample: hasSample, point: sampledPoint)
+                            }
+                            dragVelocity = velocity
+                            sample(at: location, in: rect, visible: bounds)
+                        },
+                        onSampleEnded: {
+                            isTouching = false
+                            dragVelocity = .zero   // let the bubble spring back / bounce
+                            currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
+                        },
+                        onPinchBegan: { wasTap in
+                            // The first finger of a pinch isn't a pick: put the selection back.
+                            if wasTap, let before = beforeTouch {
+                                currentRGB = before.rgb
+                                currentName = before.name
+                                hasSample = before.hasSample
+                                sampledPoint = before.point
+                            }
+                        },
+                        onPinch: { factor, previous, current in
+                            zoom.pinch(by: factor, from: previous, to: current, base: base, window: window)
+                        }
+                    )
+                    .accessibilityHidden(true)
 
-                    if let m = marker {
+                    // The marker rides the photo, so it stays on the sampled spot while zooming.
+                    if let point = sampledPoint {
                         PhotoSampleMarker(color: currentColor, dragVelocity: dragVelocity)
-                            .position(m)
+                            .position(PhotoPinGeometry.position(of: point, in: rect))
                     }
 
                     VStack {
@@ -105,8 +141,8 @@ struct PhotoColorPickerView: View {
                     }
                 }
                 // The first layout can be empty; place the marker once the photo has a size.
-                .onAppear { placeInitialMarker(in: rect) }
-                .onChange(of: rect.size) { _, _ in placeInitialMarker(in: rect) }
+                .onAppear { placeInitialMarker(in: base) }
+                .onChange(of: base.size) { _, _ in placeInitialMarker(in: base) }
             }
             .navigationTitle("Pick Color")
             .navigationBarTitleDisplayMode(.inline)
@@ -143,36 +179,44 @@ struct PhotoColorPickerView: View {
         if let onClose { onClose() } else { dismiss() }
     }
 
-    /// The photo, aspect-fit. On the adaptive stage it is drawn in its own rect.
+    /// The photo, aspect-fit and zoomed about its own center. On the adaptive
+    /// stage it is drawn in its own (unzoomed) rect.
     @ViewBuilder
     private func photo(in rect: CGRect, container: CGSize) -> some View {
         if adaptiveStage {
             Image(uiImage: image)
                 .resizable()
                 .frame(width: rect.width, height: rect.height)
+                .scaleEffect(zoom.scale)
                 .position(x: rect.midX, y: rect.midY)
+                .offset(zoom.offset)
         } else {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: container.width, height: container.height)
+                .scaleEffect(zoom.scale)
+                .offset(zoom.offset)
         }
     }
 
     // MARK: - Sampling
 
     private func placeInitialMarker(in rect: CGRect) {
-        guard let initialPoint, marker == nil, rect.width > 0, rect.height > 0 else { return }
-        sample(at: PhotoPinGeometry.position(of: initialPoint, in: rect), in: rect)
+        guard let initialPoint, sampledPoint == nil, rect.width > 0, rect.height > 0 else { return }
+        sample(at: PhotoPinGeometry.position(of: initialPoint, in: rect), in: rect, visible: rect)
         currentName = ColorNamer.name(forHex: String(currentHex.dropFirst()))
     }
 
-    private func sample(at location: CGPoint, in rect: CGRect) {
+    /// Samples under `location`, clamped to the part of the photo (drawn in
+    /// `rect`) that is on screen.
+    private func sample(at location: CGPoint, in rect: CGRect, visible: CGRect) {
+        let shown = rect.intersection(visible)
+        guard !shown.isNull else { return }
         let clamped = CGPoint(
-            x: min(max(location.x, rect.minX), rect.maxX),
-            y: min(max(location.y, rect.minY), rect.maxY)
+            x: min(max(location.x, shown.minX), shown.maxX),
+            y: min(max(location.y, shown.minY), shown.maxY)
         )
-        marker = clamped
         let normalized = PhotoLoupeGeometry.normalizedPoint(in: rect, at: clamped)
         sampledPoint = normalized
         let rgb = sampler?.color(at: normalized, radius: 2)

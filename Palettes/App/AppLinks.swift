@@ -32,6 +32,19 @@ enum AppLinks {
         return components.url!
     }
 
+    /// The app's numeric Apple ID from App Store Connect (App Information),
+    /// e.g. "1234567890". Until it is filled in, Settings has no "Rate
+    /// Palettes" row.
+    static let appStoreID: String? = "6827543855"
+
+    /// Opens the App Store straight on the app's "Write a Review" sheet.
+    static var writeReviewURL: URL? { writeReviewURL(appStoreID: appStoreID) }
+
+    static func writeReviewURL(appStoreID: String?) -> URL? {
+        guard let appStoreID, !appStoreID.isEmpty else { return nil }
+        return URL(string: "https://apps.apple.com/app/id\(appStoreID)?action=write-review")
+    }
+
     static let supportPage = URL(string: "https://palettes.halilbagosi.com/support/")!
     static let privacyPolicy = URL(string: "https://palettes.halilbagosi.com/privacy/")!
 

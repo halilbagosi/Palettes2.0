@@ -225,4 +225,24 @@ final class ColorNamerTests: XCTestCase {
         }
     }
 
+
+    // MARK: Reds are not browns
+
+    /// CSS's "brown" (#A52A2A) is a saturated red; it used to be the
+    /// dictionary's "Brown", so clear reds were named Brown.
+    func testSaturatedRedsAreNeverNamedBrown() {
+        for hex in ["AA2831", "A52A2A", "B22222", "9E2B2F", "B5302C", "C0392B"] {
+            let name = ColorNamer.name(forHex: hex)
+            XCTAssertFalse(name.localizedCaseInsensitiveContains("brown"), "\(hex) was named \(name)")
+            XCTAssertFalse(name.localizedCaseInsensitiveContains("auburn"), "\(hex) was named \(name)")
+        }
+    }
+
+    func testBrownIsABrown() throws {
+        let hex = try XCTUnwrap(ColorNamer.hex(forName: "Brown"))
+        let color = try XCTUnwrap(OKLCH(hex: hex))
+        XCTAssertEqual(ColorVocabulary.family(forHue: color.h), .orange)
+        XCTAssertLessThan(color.C, 0.12)
+        XCTAssertEqual(ColorNamer.name(forHex: String(hex.dropFirst())), "Brown")
+    }
 }

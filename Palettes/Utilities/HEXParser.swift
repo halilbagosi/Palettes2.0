@@ -366,7 +366,9 @@ enum ColorNamer {
         ("Saddle Brown",       139,  69,  19),
         ("Sienna",             160,  82,  45),
         ("Chocolate",          210, 105,  30),
-        ("Brown",              165,  42,  42),
+        // Not CSS's "brown" (165, 42, 42): that is a saturated red, and it
+        // made clear reds come out named Brown.
+        ("Brown",              139,  90,  43),
         ("Peru",               205, 133,  63),
         ("Sandy Brown",        244, 164,  96),
         ("Rosy Brown",         188, 143, 143),
@@ -385,7 +387,7 @@ enum ColorNamer {
         ("Chestnut",           149,  69,  53),
         ("Cacao",              110,  54,  30),
         ("Mahogany",           192,  64,   0),
-        ("Auburn",             165,  42,  42),
+        ("Auburn",             136,  56,  40),
         ("Caramel",            255, 171, 119),
         ("Toffee",             176, 112,  48),
         ("Cider",              185, 121,   0),

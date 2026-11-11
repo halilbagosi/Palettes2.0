@@ -141,6 +141,9 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
     private var onConfigured: (@Sendable (AVCaptureDevice) -> Void)?
     private var onFailure: (@Sendable () -> Void)?
 
+    /// The configured camera; confined to `queue`.
+    private var device: AVCaptureDevice?
+
     private let angleLock = NSLock()
     private var captureAngle: CGFloat = 90
 
@@ -158,6 +161,17 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
         angleLock.lock()
         captureAngle = angle
         angleLock.unlock()
+    }
+
+    /// Zooms the camera, clamped to what the device supports. The preview
+    /// and captured photos both follow the device's zoom.
+    func setZoom(_ factor: CGFloat) {
+        queue.async { [self] in
+            guard let device, (try? device.lockForConfiguration()) != nil else { return }
+            device.videoZoomFactor = min(max(factor, device.minAvailableVideoZoomFactor),
+                                         device.maxAvailableVideoZoomFactor)
+            device.unlockForConfiguration()
+        }
     }
 
     func start() {
@@ -253,8 +267,28 @@ nonisolated final class OrbCameraEngine: @unchecked Sendable {
         session.addInput(input)
         session.addOutput(photoOutput)
         isConfigured = true
+        self.device = device
         onConfigured?(device)
         return true
+    }
+}
+
+// MARK: - Zoom
+
+/// Pinch-to-zoom arithmetic for the orb's camera, kept pure for tests.
+nonisolated enum OrbCameraZoom {
+    /// Beyond this the wide camera is all digital crop and noise.
+    static let maxFactor: CGFloat = 6
+
+    /// The furthest the pinch may zoom on a device whose own limit is `deviceMax`.
+    static func limit(deviceMax: CGFloat) -> CGFloat {
+        max(1, min(deviceMax, maxFactor))
+    }
+
+    /// The zoom for a pinch that began at `base` and has spread by `magnification`.
+    static func factor(base: CGFloat, magnification: CGFloat, limit: CGFloat) -> CGFloat {
+        guard magnification.isFinite, magnification > 0 else { return base }
+        return min(max(base * magnification, 1), max(1, limit))
     }
 }
 
@@ -266,6 +300,10 @@ final class OrbCameraController: ObservableObject {
     @Published private(set) var device: AVCaptureDevice?
     @Published private(set) var didFailToConfigure = false
     @Published private(set) var isInterrupted = false
+    /// The camera's current zoom, 1 being the unzoomed wide camera.
+    @Published private(set) var zoom: CGFloat = 1
+    /// The zoom when the pinch in progress began.
+    private var pinchBase: CGFloat?
 
     private let engine = OrbCameraEngine()
     private var observers: [NSObjectProtocol] = []
@@ -324,6 +362,21 @@ final class OrbCameraController: ObservableObject {
     func setCaptureAngle(_ angle: CGFloat) { engine.setCaptureAngle(angle) }
 
     func capturePhoto() async -> Data? { await engine.capturePhoto() }
+
+    /// A pinch on the orb has spread to `magnification` times its starting width.
+    func pinchChanged(magnification: CGFloat) {
+        guard let device else { return }
+        let base = pinchBase ?? zoom
+        pinchBase = base
+        let next = OrbCameraZoom.factor(
+            base: base, magnification: magnification,
+            limit: OrbCameraZoom.limit(deviceMax: device.maxAvailableVideoZoomFactor))
+        guard next != zoom else { return }
+        zoom = next
+        engine.setZoom(next)
+    }
+
+    func pinchEnded() { pinchBase = nil }
 }
 
 // MARK: - Preview view
