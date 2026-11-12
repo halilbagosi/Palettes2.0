@@ -37,6 +37,8 @@ class AppData: ObservableObject {
 
     /// Palette id an Open intent asked to show; PaletteView consumes it.
     @Published var pendingOpenPaletteID: UUID?
+    /// Color id a widget asked to show; ColorsView consumes it.
+    @Published var pendingOpenColorID: UUID?
     /// Search term a Search/Find intent asked to show; SearchView consumes it.
     @Published var pendingSearchTerm: String?
 
