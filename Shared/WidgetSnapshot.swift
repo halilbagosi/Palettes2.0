@@ -11,7 +11,7 @@ import Foundation
 import os
 
 nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
-    static let currentVersion = 1
+    static let currentVersion = 2
     static let empty = WidgetSnapshot()
 
     var version: Int = WidgetSnapshot.currentVersion
@@ -24,6 +24,8 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
         var id: UUID
         var name: String
         var hexCodes: [String]
+        /// Index-aligned with `hexCodes` (the writer guarantees the same length).
+        var colorNames: [String]
         var isFavorite: Bool
     }
 

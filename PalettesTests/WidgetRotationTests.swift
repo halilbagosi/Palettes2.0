@@ -9,7 +9,7 @@ import XCTest
 final class WidgetRotationTests: XCTestCase {
 
     private func palette(_ name: String, favorite: Bool) -> WidgetSnapshot.Palette {
-        .init(id: UUID(), name: name, hexCodes: ["#000000"], isFavorite: favorite)
+        .init(id: UUID(), name: name, hexCodes: ["#000000"], colorNames: ["Black"], isFavorite: favorite)
     }
 
     private func swatch(_ i: Int) -> WidgetSnapshot.Swatch {

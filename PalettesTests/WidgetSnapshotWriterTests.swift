@@ -49,6 +49,7 @@ final class WidgetSnapshotWriterTests: XCTestCase {
         XCTAssertEqual(snapshot.palettes.map(\.name), ["Sea", "Dusk"])
         XCTAssertEqual(snapshot.palettes.map(\.isFavorite), [true, false])
         XCTAssertEqual(snapshot.palettes[0].hexCodes, ["#1A73A8", "#7FC8F8"])
+        XCTAssertEqual(snapshot.palettes[0].colorNames, ["Deep", "Shallow"])
         XCTAssertEqual(snapshot.palettes[0].id, palettes[0].id)
         XCTAssertEqual(snapshot.colors.map(\.hex), ["#111111", "#FFD60A"])
         XCTAssertEqual(snapshot.colors.map(\.isFavorite), [false, true])

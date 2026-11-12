@@ -25,8 +25,8 @@ final class WidgetSnapshotTests: XCTestCase {
     private func sample() -> WidgetSnapshot {
         WidgetSnapshot(
             palettes: [
-                .init(id: UUID(), name: "Sea", hexCodes: ["#1A73A8", "#7FC8F8"], isFavorite: true),
-                .init(id: UUID(), name: "Dusk", hexCodes: ["#2B1B3D"], isFavorite: false),
+                .init(id: UUID(), name: "Sea", hexCodes: ["#1A73A8", "#7FC8F8"], colorNames: ["Deep", "Shallow"], isFavorite: true),
+                .init(id: UUID(), name: "Dusk", hexCodes: ["#2B1B3D"], colorNames: ["Night"], isFavorite: false),
             ],
             colors: [
                 .init(id: UUID(), name: "Ink", hex: "#111111", isFavorite: false),
@@ -38,7 +38,9 @@ final class WidgetSnapshotTests: XCTestCase {
     func testRoundTripsThroughTheFile() {
         let snapshot = sample()
         XCTAssertTrue(WidgetSnapshotStore.write(snapshot, to: url))
-        XCTAssertEqual(WidgetSnapshotStore.read(from: url), snapshot)
+        let read = WidgetSnapshotStore.read(from: url)
+        XCTAssertEqual(read, snapshot)
+        XCTAssertEqual(read.palettes[0].colorNames, ["Deep", "Shallow"])
     }
 
     func testMissingFileReadsAsEmpty() {
@@ -52,6 +54,7 @@ final class WidgetSnapshotTests: XCTestCase {
 
     func testUnknownVersionReadsAsEmpty() throws {
         var snapshot = sample()
+        XCTAssertEqual(WidgetSnapshot.currentVersion, 2)
         snapshot.version = WidgetSnapshot.currentVersion + 1
         let data = try JSONEncoder().encode(snapshot)
         XCTAssertEqual(WidgetSnapshotStore.decode(data), .empty)

@@ -3,7 +3,7 @@
 //  PalettesWidgets
 //
 //  A different palette from the library each day. Medium: the Palette
-//  widget's bands. Large: bands on top, then one row per color.
+//  widget's bands. Large: bands on top, then a row per color with its name and hex.
 //
 
 import SwiftUI
@@ -91,7 +91,7 @@ struct PaletteOfTheDayLarge: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(0..<shownCount, id: \.self) { index in
-                    row(hex: palette.hexCodes[index])
+                    row(hex: palette.hexCodes[index], name: name(at: index))
                 }
                 HStack {
                     if palette.hexCodes.count > shownCount {
@@ -108,11 +108,25 @@ struct PaletteOfTheDayLarge: View {
         }
     }
 
-    private func row(hex: String) -> some View {
+    /// The color's name, or nil when missing or empty.
+    private func name(at index: Int) -> String? {
+        guard palette.colorNames.indices.contains(index) else { return nil }
+        let name = palette.colorNames[index]
+        return name.isEmpty ? nil : name
+    }
+
+    private func row(hex: String, name: String?) -> some View {
         HStack(spacing: 8) {
             SwatchStrip(hexes: [hex])
                 .frame(width: 14, height: 14)
                 .clipShape(Circle())
+            if let name {
+                Text(name)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+            }
             Text(hex.uppercased())
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)

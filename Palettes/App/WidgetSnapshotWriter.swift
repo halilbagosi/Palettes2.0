@@ -34,7 +34,7 @@ final class WidgetSnapshotWriter {
     static func snapshot(palettes: [PaletteViewModel], colors: [ColorViewModel]) -> WidgetSnapshot {
         WidgetSnapshot(
             palettes: palettes.map {
-                .init(id: $0.id, name: $0.name, hexCodes: $0.hexCodes, isFavorite: $0.isFavorite)
+                .init(id: $0.id, name: $0.name, hexCodes: $0.hexCodes, colorNames: $0.colorNames, isFavorite: $0.isFavorite)
             },
             colors: colors.map {
                 .init(id: $0.id, name: $0.name, hex: $0.HEX, isFavorite: $0.isFavorite)
