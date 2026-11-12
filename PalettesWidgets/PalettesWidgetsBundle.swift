@@ -13,9 +13,6 @@ struct PalettesWidgetsBundle: WidgetBundle {
         PaletteWidget()
         ColorWidget()
         QuickCreateWidget()
-        #if DEBUG
-        CopySpikeWidget()
-        #endif
         if #available(iOS 18.0, *) {
             NewColorControl()
             NewPaletteControl()

@@ -42,7 +42,7 @@ struct ColorFace: View {
                 .lineLimit(2)
                 .foregroundStyle(foreground)
             Spacer(minLength: 0)
-            copy
+            if CopyButton.isAvailable(in: family) { copy }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(14)

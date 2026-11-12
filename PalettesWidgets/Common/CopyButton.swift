@@ -2,11 +2,12 @@
 //  CopyButton.swift
 //  PalettesWidgets
 //
-//  The copy glyph on palette and colour widgets. Display-only until the
-//  copy spike decides how it acts (Task 11 of the widgets plan).
+//  The copy glyph on palette and colour widgets. Opens Palettes, which
+//  copies and shows its toast (iOS blocked silent copy; see the spec).
 //
 
 import SwiftUI
+import WidgetKit
 
 enum CopyTarget {
     case palette(id: UUID, hexCodes: [String])
@@ -26,6 +27,19 @@ struct CopyButton: View {
     var copied: Bool = false
 
     var body: some View {
-        GlassCircle(symbol: copied ? "checkmark" : "doc.on.doc", onLight: onLight)
+        Link(destination: link.url) {
+            GlassCircle(symbol: "doc.on.doc", onLight: onLight)
+        }
     }
+
+    private var link: WidgetLink {
+        switch target {
+        case .palette(let id, _): .copyPalette(id)
+        case .color(let id, _): .copyColor(id)
+        }
+    }
+
+    /// Small widgets have one tap target, so a separate copy link can't
+    /// work there.
+    static func isAvailable(in family: WidgetFamily) -> Bool { family != .systemSmall }
 }
