@@ -11,6 +11,7 @@ struct PalettesWidgetsBundle: WidgetBundle {
     var body: some Widget {
         FavoritePalettesWidget()
         PaletteWidget()
+        ColorWidget()
         QuickCreateWidget()
         #if DEBUG
         CopySpikeWidget()
