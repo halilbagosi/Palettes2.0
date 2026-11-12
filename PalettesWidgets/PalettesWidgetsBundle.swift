@@ -16,5 +16,11 @@ struct PalettesWidgetsBundle: WidgetBundle {
         #if DEBUG
         CopySpikeWidget()
         #endif
+        if #available(iOS 18.0, *) {
+            NewColorControl()
+            NewPaletteControl()
+            ScanColorControl()
+            ScanPaletteControl()
+        }
     }
 }
