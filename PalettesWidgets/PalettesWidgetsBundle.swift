@@ -9,6 +9,7 @@ import WidgetKit
 @main
 struct PalettesWidgetsBundle: WidgetBundle {
     var body: some Widget {
+        FavoritePalettesWidget()
         QuickCreateWidget()
         #if DEBUG
         CopySpikeWidget()
