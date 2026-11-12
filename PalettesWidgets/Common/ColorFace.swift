@@ -3,8 +3,9 @@
 //  PalettesWidgets
 //
 //  One colour filling the widget. Small: name top-left, copy bottom-left.
-//  Medium: name with hex and RGB beneath, copy bottom-right. Used by the
-//  Color and Color of the Day widgets.
+//  Medium: name with hex and RGB beneath, copy bottom-right. Large: the same
+//  stack at a bigger scale, copy bottom-right. The Color widget uses all three
+//  sizes; Color of the Day uses only small and medium.
 //
 
 import SwiftUI
@@ -29,7 +30,11 @@ struct ColorFace: View {
     var body: some View {
         ZStack {
             SwatchStrip(hexes: [swatch.hex])
-            if family == .systemMedium { medium } else { small }
+            switch family {
+            case .systemLarge: large
+            case .systemMedium: medium
+            default: small
+            }
         }
     }
 
@@ -68,5 +73,28 @@ struct ColorFace: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(16)
+    }
+
+    private var large: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let caption { WidgetCaption(text: caption, onLight: onLight) }
+            Text(swatch.name)
+                .font(.title.weight(.bold))
+                .lineLimit(2)
+                .foregroundStyle(foreground)
+            Text(swatch.hex.uppercased())
+                .font(.title3.monospaced())
+                .foregroundStyle(foreground.opacity(0.85))
+            Text(rgbText)
+                .font(.body.monospaced())
+                .foregroundStyle(foreground.opacity(0.75))
+            Spacer(minLength: 0)
+            HStack {
+                Spacer()
+                copy
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(20)
     }
 }

@@ -40,7 +40,7 @@ struct ColorWidget: Widget {
         }
         .configurationDisplayName("Color")
         .description("Keep a color you love in view.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
 }
