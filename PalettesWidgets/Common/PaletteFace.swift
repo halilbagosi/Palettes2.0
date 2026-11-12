@@ -2,8 +2,8 @@
 //  PaletteFace.swift
 //  PalettesWidgets
 //
-//  A palette as full-height vertical bands, name bottom-left, copy
-//  bottom-right. Used by the Palette and Palette of the Day widgets.
+//  A palette as full-height vertical bands with its name bottom-left. Used
+//  by the Palette and Palette of the Day widgets.
 //
 
 import SwiftUI
@@ -13,7 +13,6 @@ struct PaletteFace: View {
     var caption: String? = nil
 
     private var firstLight: Bool { HexRGB.isLight(palette.hexCodes.first ?? HexRGB.fallbackGrey) }
-    private var lastLight: Bool { HexRGB.isLight(palette.hexCodes.last ?? HexRGB.fallbackGrey) }
 
     var body: some View {
         ZStack {
@@ -23,11 +22,7 @@ struct PaletteFace: View {
                     WidgetCaption(text: caption, onLight: firstLight)
                 }
                 Spacer(minLength: 0)
-                HStack(alignment: .bottom) {
-                    NameCapsule(text: palette.name, onLight: firstLight)
-                    Spacer(minLength: 8)
-                    CopyButton(link: .copyPalette(palette.id), onLight: lastLight)
-                }
+                NameCapsule(text: palette.name, onLight: firstLight)
             }
             .padding(14)
         }

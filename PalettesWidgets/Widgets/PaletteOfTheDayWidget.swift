@@ -65,8 +65,6 @@ struct PaletteOfTheDayView: View {
 /// Bands across the top half; name, "Today" and one row per color below.
 struct PaletteOfTheDayLarge: View {
     let palette: WidgetSnapshot.Palette
-    /// The copy button sits on the widget background here, not on a swatch.
-    @Environment(\.colorScheme) private var colorScheme
 
     static let maxRows = 5
 
@@ -93,14 +91,10 @@ struct PaletteOfTheDayLarge: View {
                 ForEach(0..<shownCount, id: \.self) { index in
                     row(hex: palette.hexCodes[index], name: name(at: index))
                 }
-                HStack {
-                    if palette.hexCodes.count > shownCount {
-                        Text("+\(palette.hexCodes.count - shownCount) more")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    CopyButton(link: .copyPalette(palette.id), onLight: colorScheme == .light)
+                if palette.hexCodes.count > shownCount {
+                    Text("+\(palette.hexCodes.count - shownCount) more")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(14)

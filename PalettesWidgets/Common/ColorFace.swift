@@ -2,10 +2,10 @@
 //  ColorFace.swift
 //  PalettesWidgets
 //
-//  One colour filling the widget. Small: name top-left, copy bottom-left.
-//  Medium: name with hex and RGB beneath, copy bottom-right. Large: the same
-//  stack at a bigger scale, copy bottom-right. The Color widget uses all three
-//  sizes; Color of the Day uses only small and medium.
+//  One colour filling the widget. Small: name top-left. Medium: name with hex
+//  and RGB beneath. Large: the same stack at a bigger scale. Tapping opens the
+//  colour. The Color widget uses all three sizes; Color of the Day uses only
+//  small and medium.
 //
 
 import SwiftUI
@@ -18,9 +18,6 @@ struct ColorFace: View {
 
     private var onLight: Bool { HexRGB.isLight(swatch.hex) }
     private var foreground: Color { .widgetForeground(onLight: onLight) }
-    private var copy: CopyButton {
-        CopyButton(link: .copyColor(swatch.id), onLight: onLight)
-    }
 
     private var rgbText: String {
         guard let c = HexRGB.components(swatch.hex) else { return "" }
@@ -46,7 +43,6 @@ struct ColorFace: View {
                 .lineLimit(2)
                 .foregroundStyle(foreground)
             Spacer(minLength: 0)
-            if CopyButton.isAvailable(in: family) { copy }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(14)
@@ -70,10 +66,6 @@ struct ColorFace: View {
                 .minimumScaleFactor(0.6)
                 .foregroundStyle(foreground.opacity(0.75))
             Spacer(minLength: 0)
-            HStack {
-                Spacer()
-                copy
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(16)
@@ -97,10 +89,6 @@ struct ColorFace: View {
                 .minimumScaleFactor(0.6)
                 .foregroundStyle(foreground.opacity(0.75))
             Spacer(minLength: 0)
-            HStack {
-                Spacer()
-                copy
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(20)
