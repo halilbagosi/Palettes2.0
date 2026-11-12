@@ -7,6 +7,7 @@
   "groups" : [
     {
       "blur-material" : 0.78,
+      "hidden" : true,
       "layers" : [
         {
           "blend-mode-specializations" : [
@@ -38,6 +39,7 @@
         }
       ],
       "lighting" : "combined",
+      "name" : "Group",
       "opacity" : 0.78,
       "refractivity" : {
         "depth" : 0,
@@ -52,6 +54,42 @@
       "translucency" : {
         "enabled" : true,
         "value" : 1
+      }
+    },
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "overlap-center.svg",
+          "name" : "overlap-center"
+        },
+        {
+          "glass" : false,
+          "image-name" : "overlap-coral-violet.svg",
+          "name" : "overlap-coral-violet"
+        },
+        {
+          "glass" : false,
+          "image-name" : "overlap-coral-amber.svg",
+          "name" : "overlap-coral-amber"
+        },
+        {
+          "glass" : false,
+          "image-name" : "overlap-amber-violet.svg",
+          "name" : "overlap-amber-violet"
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Overlaps",
+      "opacity" : 1,
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0
+      },
+      "specular" : "inside",
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
       }
     },
     {
@@ -75,11 +113,6 @@
           "glass" : true,
           "image-name" : "circle-coral.svg",
           "name" : "circle-coral"
-        },
-        {
-          "glass" : false,
-          "image-name" : "lens-coral-amber.svg",
-          "name" : "lens-coral-amber"
         },
         {
           "blend-mode-specializations" : [
