@@ -630,7 +630,7 @@ class AppData: ObservableObject {
         if isDirtyColors { persistColors(colors) }
         if isDirtyPalettes { persistPalettes(palettes) }
         if isDirtyTags { persistTags(customTags) }
-        // Inside the widget sink's debounce too when the app is backgrounded.
+        // Also write the widget snapshot now, in case its 1 s debounce hasn't fired.
         widgetWriter?.update(palettes: palettes, colors: colors)
     }
 

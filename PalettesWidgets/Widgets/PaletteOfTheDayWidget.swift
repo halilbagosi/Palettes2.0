@@ -3,7 +3,7 @@
 //  PalettesWidgets
 //
 //  A different palette from the library each day. Medium: the Palette
-//  widget's bands. Large: bands on top, then each color's name and hex.
+//  widget's bands. Large: bands on top, then one row per color.
 //
 
 import SwiftUI

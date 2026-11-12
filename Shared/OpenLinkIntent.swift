@@ -10,6 +10,8 @@
 import AppIntents
 import Foundation
 
+// Not `nonisolated`, unlike the rest of Shared (WidgetLinkInbox is the other
+// exception): `@Parameter` storage warns when the type is nonisolated.
 struct OpenLinkIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Palettes"
     static let isDiscoverable = false

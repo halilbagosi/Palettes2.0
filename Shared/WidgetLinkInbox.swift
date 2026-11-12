@@ -3,8 +3,9 @@
 //  Palettes (app + widgets)
 //
 //  The link OpenLinkIntent asked the app to open, waiting for a library
-//  window (see PaletteTabView). Compiled into the extension too, where it
-//  is never used.
+//  window (see PaletteTabView). Compiled into the extension too because
+//  OpenLinkIntent.perform() references it, though perform() only runs in
+//  the app.
 //
 
 import Combine
