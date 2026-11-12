@@ -51,7 +51,7 @@ struct ScanPaletteControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "ScanPaletteControl") {
             ControlWidgetButton(action: OpenLinkIntent(.scanPalette)) {
-                Label("Scan Palette", systemImage: "camera.viewfinder")
+                Label("Scan Palette", image: "palette.viewfinder")
             }
         }
         .displayName("Scan Palette")
