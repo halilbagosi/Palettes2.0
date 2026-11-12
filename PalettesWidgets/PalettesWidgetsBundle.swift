@@ -10,6 +10,7 @@ import WidgetKit
 struct PalettesWidgetsBundle: WidgetBundle {
     var body: some Widget {
         FavoritePalettesWidget()
+        FavoriteColorsWidget()
         PaletteWidget()
         ColorWidget()
         ColorOfTheDayWidget()

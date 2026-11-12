@@ -73,6 +73,16 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot.palette(id: UUID()))
     }
 
+    func testFavoriteColorsKeepLibraryOrder() {
+        let snapshot = WidgetSnapshot(colors: [
+            .init(id: UUID(), name: "A", hex: "#111111", isFavorite: true),
+            .init(id: UUID(), name: "B", hex: "#222222", isFavorite: false),
+            .init(id: UUID(), name: "C", hex: "#333333", isFavorite: true),
+        ])
+        XCTAssertEqual(snapshot.favoriteColors.map(\.name), ["A", "C"])
+        XCTAssertTrue(WidgetSnapshot.empty.favoriteColors.isEmpty)
+    }
+
     func testDefaultColorFallsBackToFirstColor() {
         var snapshot = sample()
         snapshot.colors[1].isFavorite = false

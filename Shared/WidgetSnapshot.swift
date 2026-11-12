@@ -37,6 +37,7 @@ nonisolated struct WidgetSnapshot: Codable, Equatable, Sendable {
     }
 
     var favoritePalettes: [Palette] { palettes.filter(\.isFavorite) }
+    var favoriteColors: [Swatch] { colors.filter(\.isFavorite) }
 
     /// What an unconfigured Color widget shows: the first favorite colour,
     /// else the first colour.
