@@ -57,13 +57,14 @@ struct FavoritePalettesView: View {
                     Link(destination: WidgetLink.palette(palette.id).url) {
                         VStack(alignment: .leading, spacing: 4) {
                             SwatchStrip(hexes: palette.hexCodes)
-                                .frame(height: 40)
+                                .frame(minHeight: 18, maxHeight: 40)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             Text(palette.name)
                                 .font(.caption.weight(.semibold))
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                         }
+                        .layoutPriority(1)
                     }
                 }
                 Spacer(minLength: 0)
