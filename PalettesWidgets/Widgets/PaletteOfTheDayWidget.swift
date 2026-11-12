@@ -10,18 +10,20 @@ import SwiftUI
 import WidgetKit
 
 struct PaletteOfTheDayProvider: TimelineProvider {
+    static let emptyMessage = "Create a palette to see it here"
+
     func placeholder(in context: Context) -> PaletteEntry { PaletteEntry(date: .now, palette: WidgetSample.palette) }
 
     func getSnapshot(in context: Context, completion: @escaping (PaletteEntry) -> Void) {
         let palette = WidgetRotation.paletteOfTheDay(in: WidgetSnapshotStore.read(), at: .now)
-        completion(context.isPreview && palette == nil ? placeholder(in: context) : PaletteEntry(date: .now, palette: palette))
+        completion(context.isPreview && palette == nil ? placeholder(in: context) : PaletteEntry(date: .now, palette: palette, emptyMessage: Self.emptyMessage))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PaletteEntry>) -> Void) {
         let snapshot = WidgetSnapshotStore.read()
         let entries = WidgetRotation.dayDates(from: .now, calendar: .current).map { date in
             PaletteEntry(date: date, palette: WidgetRotation.paletteOfTheDay(in: snapshot, at: date),
-                         emptyMessage: "Create a palette to see it here")
+                         emptyMessage: Self.emptyMessage)
         }
         completion(Timeline(entries: entries, policy: .atEnd))
     }
