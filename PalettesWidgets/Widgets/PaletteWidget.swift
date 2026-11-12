@@ -13,7 +13,6 @@ struct PaletteEntry: TimelineEntry {
     let date: Date
     let palette: WidgetSnapshot.Palette?
     var emptyMessage: String = "Favorite a palette to see it here"
-    var copiedID: UUID? = nil
 }
 
 struct PaletteProvider: AppIntentTimelineProvider {
@@ -63,7 +62,7 @@ struct PaletteWidgetView: View {
 
     var body: some View {
         if let palette = entry.palette {
-            PaletteFace(palette: palette, copied: entry.copiedID == palette.id)
+            PaletteFace(palette: palette)
                 .widgetURL(WidgetLink.palette(palette.id).url)
         } else {
             EmptyWidgetView(message: entry.emptyMessage)

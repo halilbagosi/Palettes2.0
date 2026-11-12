@@ -45,7 +45,7 @@ struct ColorOfTheDayView: View {
 
     var body: some View {
         if let swatch = entry.swatch {
-            ColorFace(swatch: swatch, family: family, caption: "Today", copied: entry.copiedID == swatch.id)
+            ColorFace(swatch: swatch, family: family, caption: "Today")
                 .widgetURL(WidgetLink.color(swatch.id).url)
         } else {
             EmptyWidgetView(message: "Add a color to see it here")

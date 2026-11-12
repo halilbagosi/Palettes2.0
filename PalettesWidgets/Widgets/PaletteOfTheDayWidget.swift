@@ -48,9 +48,9 @@ struct PaletteOfTheDayView: View {
         if let palette = entry.palette {
             Group {
                 if family == .systemLarge {
-                    PaletteOfTheDayLarge(palette: palette, copied: entry.copiedID == palette.id)
+                    PaletteOfTheDayLarge(palette: palette)
                 } else {
-                    PaletteFace(palette: palette, caption: "Today", copied: entry.copiedID == palette.id)
+                    PaletteFace(palette: palette, caption: "Today")
                 }
             }
             .widgetURL(WidgetLink.palette(palette.id).url)
@@ -63,7 +63,6 @@ struct PaletteOfTheDayView: View {
 /// Bands across the top half; name, "Today" and one row per color below.
 struct PaletteOfTheDayLarge: View {
     let palette: WidgetSnapshot.Palette
-    var copied: Bool = false
     /// The copy button sits on the widget background here, not on a swatch.
     @Environment(\.colorScheme) private var colorScheme
 
@@ -99,8 +98,7 @@ struct PaletteOfTheDayLarge: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    CopyButton(target: .palette(id: palette.id, hexCodes: palette.hexCodes),
-                               onLight: colorScheme == .light, copied: copied)
+                    CopyButton(link: .copyPalette(palette.id), onLight: colorScheme == .light)
                 }
             }
             .padding(14)

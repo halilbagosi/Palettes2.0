@@ -11,7 +11,6 @@ import WidgetKit
 struct ColorEntry: TimelineEntry {
     let date: Date
     let swatch: WidgetSnapshot.Swatch?
-    var copiedID: UUID? = nil
 }
 
 struct ColorProvider: AppIntentTimelineProvider {
@@ -52,7 +51,7 @@ struct ColorWidgetView: View {
 
     var body: some View {
         if let swatch = entry.swatch {
-            ColorFace(swatch: swatch, family: family, copied: entry.copiedID == swatch.id)
+            ColorFace(swatch: swatch, family: family)
                 .widgetURL(WidgetLink.color(swatch.id).url)
         } else {
             EmptyWidgetView(message: "Add a color to see it here")

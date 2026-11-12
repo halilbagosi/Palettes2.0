@@ -14,12 +14,11 @@ struct ColorFace: View {
     let swatch: WidgetSnapshot.Swatch
     let family: WidgetFamily
     var caption: String? = nil
-    var copied: Bool = false
 
     private var onLight: Bool { HexRGB.isLight(swatch.hex) }
     private var foreground: Color { .widgetForeground(onLight: onLight) }
     private var copy: CopyButton {
-        CopyButton(target: .color(id: swatch.id, hex: swatch.hex), onLight: onLight, copied: copied)
+        CopyButton(link: .copyColor(swatch.id), onLight: onLight)
     }
 
     private var rgbText: String {

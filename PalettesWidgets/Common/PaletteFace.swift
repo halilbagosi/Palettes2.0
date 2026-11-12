@@ -11,7 +11,6 @@ import SwiftUI
 struct PaletteFace: View {
     let palette: WidgetSnapshot.Palette
     var caption: String? = nil
-    var copied: Bool = false
 
     private var firstLight: Bool { HexRGB.isLight(palette.hexCodes.first ?? HexRGB.fallbackGrey) }
     private var lastLight: Bool { HexRGB.isLight(palette.hexCodes.last ?? HexRGB.fallbackGrey) }
@@ -27,8 +26,7 @@ struct PaletteFace: View {
                 HStack(alignment: .bottom) {
                     NameCapsule(text: palette.name, onLight: firstLight)
                     Spacer(minLength: 8)
-                    CopyButton(target: .palette(id: palette.id, hexCodes: palette.hexCodes),
-                               onLight: lastLight, copied: copied)
+                    CopyButton(link: .copyPalette(palette.id), onLight: lastLight)
                 }
             }
             .padding(14)
