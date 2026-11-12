@@ -6,7 +6,7 @@
 //  delegates here, so both read hex exactly the same way.
 //
 
-import SwiftUI
+import Foundation
 
 nonisolated enum HexRGB {
     /// Drawn wherever a stored hex can't be parsed.
@@ -36,11 +36,6 @@ nonisolated enum HexRGB {
         // For 8-digit (RRGGBBAA) input, shift past the discarded alpha byte.
         let shifted = number >> (cleaned.count == 8 ? 8 : 0)
         return (Int((shifted >> 16) & 0xFF), Int((shifted >> 8) & 0xFF), Int(shifted & 0xFF))
-    }
-
-    static func color(_ hex: String) -> Color? {
-        guard let c = components(hex) else { return nil }
-        return Color(red: Double(c.r) / 255, green: Double(c.g) / 255, blue: Double(c.b) / 255)
     }
 
     /// WCAG relative luminance: 0 for black, 1 for white.
