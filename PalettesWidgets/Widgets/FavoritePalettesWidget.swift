@@ -64,7 +64,6 @@ struct FavoritePalettesView: View {
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                         }
-                        .layoutPriority(1)
                     }
                 }
                 Spacer(minLength: 0)
