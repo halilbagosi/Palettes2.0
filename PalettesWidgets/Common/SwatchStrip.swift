@@ -20,6 +20,7 @@ struct SwatchStrip: View {
             .resizable()
             .interpolation(.none)
             .fullColorInAccentedModes()
+            .accessibilityHidden(true)
     }
 
     static func image(for hexes: [String]) -> UIImage {

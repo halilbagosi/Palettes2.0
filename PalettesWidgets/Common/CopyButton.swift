@@ -18,6 +18,7 @@ struct CopyButton: View {
         Link(destination: link.url) {
             GlassCircle(symbol: "doc.on.doc", onLight: onLight)
         }
+        .accessibilityLabel("Copy")
     }
 
     /// Small widgets have one tap target, so a separate copy link can't

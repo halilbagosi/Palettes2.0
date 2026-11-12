@@ -45,6 +45,7 @@ struct QuickCreateEntryView: View {
                 Image(systemName: "plus")
                     .font(.title2.weight(.semibold))
             }
+            .accessibilityLabel("New Color")
             .widgetURL(WidgetLink.newColor.url)
         } else {
             QuickCreateView()
