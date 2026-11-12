@@ -69,6 +69,12 @@ nonisolated enum WidgetSnapshotStore {
         return snapshot
     }
 
+    /// Logs that the App Group container can't be resolved (the app or
+    /// extension lacks the group entitlement). Callers do it once, not per write.
+    static func logMissingContainer() {
+        log.error("App Group container unavailable; widget snapshot can't be shared")
+    }
+
     /// Atomic write. False (and logged) on failure; the caller retries on
     /// its next change.
     @discardableResult

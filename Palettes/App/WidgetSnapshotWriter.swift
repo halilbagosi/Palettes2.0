@@ -27,6 +27,7 @@ final class WidgetSnapshotWriter {
         reload: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }
     ) {
         self.url = url
+        if url == nil { WidgetSnapshotStore.logMissingContainer() }
         self.reload = reload
     }
 
