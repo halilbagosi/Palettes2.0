@@ -99,6 +99,10 @@ struct PaletteEditor: View {
     /// and the Add button).
     @ScaledMetric(relativeTo: .body) private var panelMinHeight: CGFloat = 260
     @AppStorage("paletteAddSource") private var sourceRaw = PaletteAddSource.pick.rawValue
+    /// True once, when Scan Palette opened this sheet (see QuickActions.swift).
+    @Environment(\.consumeScanRequest) private var consumeScanRequest
+    /// Set when the Scan source should open the camera by itself.
+    @State private var scanOnAppear = false
 
     private static let blockSpacing: CGFloat = 12
     private static let panelID = "addPanel"
@@ -209,7 +213,13 @@ struct PaletteEditor: View {
         .toastOverlay()
         // A swipe down mustn't silently throw away changes; Cancel asks first.
         .interactiveDismissDisabled(hasChanges)
-        .onAppear { updateSuggestedName() }
+        .onAppear {
+            updateSuggestedName()
+            if isCreating, consumeScanRequest() {
+                sourceRaw = PaletteAddSource.scan.rawValue
+                scanOnAppear = true
+            }
+        }
         // A pending Undo mustn't outlive the draft it would act on.
         .onDisappear { ToastManager.shared.dismissUndo() }
         .onChange(of: draft.colors.map(\.hex)) { _, _ in
@@ -268,7 +278,8 @@ struct PaletteEditor: View {
             onScan: { add($0, replacing: $1) },
             onPicked: applyPicked,
             onRemovePhoto: removePhoto,
-            onRemoveHarmony: removeHarmony
+            onRemoveHarmony: removeHarmony,
+            startScan: $scanOnAppear
         )
         .frame(maxHeight: .infinity)
         .frame(minHeight: panelMinHeight)

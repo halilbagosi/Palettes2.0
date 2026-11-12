@@ -18,6 +18,8 @@ struct PaletteScanSource: View {
     /// survive switching sources.
     @ObservedObject var session: PaletteScanSession
     let draft: PaletteDraft
+    /// Scan Palette asked for the camera; cleared once acted on.
+    var startScan: Binding<Bool> = .constant(false)
     /// The colors moved in the picker, with their new values.
     var onPicked: ([PaletteColor]) -> Void
     /// The photo was removed; its colors come out of the palette (with Undo).
@@ -39,6 +41,8 @@ struct PaletteScanSource: View {
     @State private var showChangeDialog = false
     @State private var pickerInput: PickerInput?
     @State private var showTrueToneAlert = false
+    /// Scan Palette arrived while the True Tone alert was up.
+    @State private var scanAfterAlert = false
     @AppStorage("didAcknowledgeTrueToneWarning") private var didAcknowledgeTrueToneWarning = false
 
     private static let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
@@ -59,8 +63,20 @@ struct PaletteScanSource: View {
         .onAppear {
             if !didAcknowledgeTrueToneWarning { showTrueToneAlert = true }
         }
+        .onChange(of: startScan.wrappedValue, initial: true) { _, wanted in
+            guard wanted else { return }
+            startScan.wrappedValue = false
+            // The True Tone alert comes first; the camera follows "Got It".
+            if didAcknowledgeTrueToneWarning { openScanAfterSheet() } else { scanAfterAlert = true }
+        }
         .alert("Turn Off True Tone", isPresented: $showTrueToneAlert) {
-            Button("Got It") { didAcknowledgeTrueToneWarning = true }
+            Button("Got It") {
+                didAcknowledgeTrueToneWarning = true
+                if scanAfterAlert {
+                    scanAfterAlert = false
+                    openScanAfterSheet()
+                }
+            }
         } message: {
             Text(ScanSession.trueToneMessage)
         }
@@ -121,6 +137,15 @@ struct PaletteScanSource: View {
     }
 
     // MARK: - Empty
+
+    /// After the sheet has finished presenting: the camera, or the photo
+    /// library where there's no camera.
+    private func openScanAfterSheet() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            if Self.cameraAvailable { showCamera = true } else { showLibrary = true }
+        }
+    }
 
     private var emptyState: some View {
         VStack(spacing: 10) {

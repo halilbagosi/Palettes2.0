@@ -157,9 +157,10 @@ struct PaletteView: View {
                 .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
                 .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
                 .toolbar { toolbarContent }
-                .sheet(isPresented: $router.isCreatingPalette) {
+                .sheet(isPresented: $router.isCreatingPalette, onDismiss: { router.isScanRequested = false }) {
                     NewPaletteView()
                         .environmentObject(appData)
+                        .environment(\.consumeScanRequest, router.consumeScanRequest)
                         .presentationDetents([.large])
                         .formPresentationSizing()
                 }

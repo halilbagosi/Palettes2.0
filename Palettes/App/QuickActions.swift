@@ -7,7 +7,8 @@
 //  (see PaletteTabView) takes it and opens the matching sheet or tab.
 //
 //  Scan Color opens New Color and then the camera (the photo library where
-//  there's no camera), through `consumeScanRequest`.
+//  there's no camera); Scan Palette does the same in New Palette's Scan
+//  source. Both go through `consumeScanRequest`.
 //
 
 import Combine
@@ -15,7 +16,7 @@ import SwiftUI
 import UIKit
 
 enum QuickAction: String, CaseIterable {
-    case newPalette, newColor, scanColor, generatePalette
+    case newPalette, newColor, scanColor, scanPalette, generatePalette
 
     private static let typePrefix = "com.halilbagosi.palettes.quickaction."
 
@@ -29,6 +30,7 @@ enum QuickAction: String, CaseIterable {
         case .newPalette: "New Palette"
         case .newColor: "New Color"
         case .scanColor: "Scan Color"
+        case .scanPalette: "Scan Palette"
         case .generatePalette: "Generate Palette"
         }
     }
@@ -38,6 +40,7 @@ enum QuickAction: String, CaseIterable {
         case .newPalette: "swatchpalette"
         case .newColor: "plus.circle"
         case .scanColor: "eyedropper"
+        case .scanPalette: "camera.viewfinder"
         case .generatePalette: "sparkles"
         }
     }
@@ -51,9 +54,13 @@ enum QuickAction: String, CaseIterable {
         )
     }
 
-    /// Generate only where Apple Intelligence can run it.
+    /// The Home Screen menu shows at most four, so Scan Palette is left out
+    /// (it has a control and a deep link). Generate only where Apple
+    /// Intelligence can run it.
     static var available: [QuickAction] {
-        allCases.filter { $0 != .generatePalette || AppleIntelligence.isDeviceSupported }
+        allCases.filter {
+            $0 != .scanPalette && ($0 != .generatePalette || AppleIntelligence.isDeviceSupported)
+        }
     }
 }
 
@@ -124,8 +131,8 @@ private struct ConsumeScanRequestKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    /// True once, when Scan Color opened the sheet this editor is in:
-    /// the editor then opens the camera by itself.
+    /// True once, when Scan Color or Scan Palette opened the sheet this
+    /// editor is in: the editor then opens the camera by itself.
     var consumeScanRequest: () -> Bool {
         get { self[ConsumeScanRequestKey.self] }
         set { self[ConsumeScanRequestKey.self] = newValue }

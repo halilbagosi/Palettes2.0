@@ -50,6 +50,8 @@ struct PaletteAddPanel: View {
 
     /// A harmony was taken out; the hexes to remove from the palette.
     var onRemoveHarmony: ([String]) -> Void
+    /// Set by Scan Palette: the Scan source opens the camera once.
+    var startScan: Binding<Bool> = .constant(false)
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -80,7 +82,7 @@ struct PaletteAddPanel: View {
                         }
                     )
                 case .scan:
-                    PaletteScanSource(session: scan, draft: draft, onPicked: onPicked) { removed in
+                    PaletteScanSource(session: scan, draft: draft, startScan: startScan, onPicked: onPicked) { removed in
                         onRemovePhoto(removed) { [scan] in scan.restore(removed) }
                     }
                 case .library:

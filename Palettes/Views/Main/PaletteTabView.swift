@@ -201,30 +201,34 @@ struct PaletteTabView: View {
     /// onboarding is done: its cover would hide whatever opened.
     private func perform(_ action: QuickAction) {
         guard !onboardingWanted else { return }
-        // Start from the library, not on top of a sheet already up: close it
-        // and open the new one once it has gone.
+        afterClosingSheets {
+            switch action {
+            case .newPalette, .scanPalette:
+                router.isScanRequested = action == .scanPalette
+                selectedTab = .palettes
+                router.isCreatingPalette = true
+            case .newColor, .scanColor:
+                router.isScanRequested = action == .scanColor
+                selectedTab = .colors
+                router.isCreatingColor = true
+            case .generatePalette:
+                if AppleIntelligence.isDeviceSupported { selectedTab = .generate }
+            }
+        }
+    }
+
+    /// Start from the library, not on top of a sheet already up: close
+    /// Settings or a creation sheet, and run `body` once it has gone.
+    private func afterClosingSheets(_ body: @escaping () -> Void) {
         let sheetWasUp = router.isShowingSettings || router.isCreatingPalette || router.isCreatingColor
         router.isShowingSettings = false
         router.isCreatingPalette = false
         router.isCreatingColor = false
         router.isScanRequested = false
-        guard !sheetWasUp else {
-            Task {
-                try? await Task.sleep(for: .milliseconds(600))
-                perform(action)
-            }
-            return
-        }
-        switch action {
-        case .newPalette:
-            selectedTab = .palettes
-            router.isCreatingPalette = true
-        case .newColor, .scanColor:
-            router.isScanRequested = action == .scanColor
-            selectedTab = .colors
-            router.isCreatingColor = true
-        case .generatePalette:
-            if AppleIntelligence.isDeviceSupported { selectedTab = .generate }
+        guard sheetWasUp else { return body() }
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            body()
         }
     }
 
