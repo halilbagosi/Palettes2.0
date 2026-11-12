@@ -549,7 +549,7 @@
 				DEVELOPMENT_TEAM = KCH5545G6F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PalettesWidgets/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PalettesWidgets;
+				INFOPLIST_KEY_CFBundleDisplayName = Palettes;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -583,7 +583,7 @@
 				DEVELOPMENT_TEAM = KCH5545G6F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PalettesWidgets/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = PalettesWidgets;
+				INFOPLIST_KEY_CFBundleDisplayName = Palettes;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
