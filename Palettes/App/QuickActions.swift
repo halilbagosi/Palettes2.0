@@ -25,6 +25,17 @@ enum QuickAction: String, CaseIterable {
         self.init(rawValue: String(item.type.dropFirst(Self.typePrefix.count)))
     }
 
+    /// The creation links widgets and controls open (see WidgetLink).
+    init?(_ link: WidgetLink) {
+        switch link {
+        case .newPalette: self = .newPalette
+        case .newColor: self = .newColor
+        case .scanColor: self = .scanColor
+        case .scanPalette: self = .scanPalette
+        case .palette, .color, .copyPalette, .copyColor, .library: return nil
+        }
+    }
+
     private var title: String {
         switch self {
         case .newPalette: "New Palette"
