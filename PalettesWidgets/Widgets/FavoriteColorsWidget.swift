@@ -93,8 +93,11 @@ struct FavoriteColorsView: View {
                     Text(swatch.name)
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(swatch.hex.uppercased())
                         .font(.caption2.monospaced())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .opacity(0.8)
                 }
                 .foregroundStyle(Color.widgetForeground(onLight: HexRGB.isLight(swatch.hex)))
@@ -103,6 +106,6 @@ struct FavoriteColorsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(swatch.name), \(swatch.hex)")
+        .accessibilityLabel("\(swatch.name), \(swatch.hex.uppercased())")
     }
 }
