@@ -98,6 +98,10 @@ class AppData: ObservableObject {
     /// Spotlight index.
     private let indexesSpotlight: Bool
 
+    /// Keeps the widgets' copy of the library current. Nil for previews and
+    /// tests, so they never touch the real App Group file.
+    private let widgetWriter: WidgetSnapshotWriter?
+
     /// Which store the library is read from and written to. Published so
     /// Settings can show the sync toggle's real state.
     @Published private(set) var storeMode: LibraryStoreMode = .local
@@ -116,6 +120,15 @@ class AppData: ObservableObject {
          storeFactory: ((LibraryStoreMode) -> ModelContainer?)? = nil) {
         indexesSpotlight = !inMemory
             && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
+        #if DEBUG
+        // The screenshot seed runs in memory, but widget screenshots need its
+        // library, so it writes the snapshot too (outside tests).
+        let writesWidgets = indexesSpotlight
+            || (ScreenshotSeed.isActive && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil)
+        #else
+        let writesWidgets = indexesSpotlight
+        #endif
+        widgetWriter = writesWidgets ? WidgetSnapshotWriter() : nil
         if let storeFactory {
             self.storeFactory = storeFactory
         } else if inMemory {
@@ -191,6 +204,17 @@ class AppData: ObservableObject {
                             PalettesShortcuts.updateAppShortcutParameters()
                         }
                     }
+                }
+                .store(in: &cancellables)
+        }
+
+        // Keep the widgets' snapshot current. No dropFirst(): the initial
+        // load is written too.
+        if let widgetWriter {
+            $palettes.combineLatest($colors)
+                .debounce(for: .seconds(1), scheduler: RunLoop.main)
+                .sink { palettes, colors in
+                    Task { @MainActor in widgetWriter.update(palettes: palettes, colors: colors) }
                 }
                 .store(in: &cancellables)
         }
@@ -606,6 +630,8 @@ class AppData: ObservableObject {
         if isDirtyColors { persistColors(colors) }
         if isDirtyPalettes { persistPalettes(palettes) }
         if isDirtyTags { persistTags(customTags) }
+        // Inside the widget sink's debounce too when the app is backgrounded.
+        widgetWriter?.update(palettes: palettes, colors: colors)
     }
 
     /// Deletes every color, palette and custom tag (with CloudKit on, the
