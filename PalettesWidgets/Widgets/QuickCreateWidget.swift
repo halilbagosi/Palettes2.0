@@ -26,12 +26,29 @@ struct QuickCreateProvider: TimelineProvider {
 struct QuickCreateWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "QuickCreateWidget", provider: QuickCreateProvider()) { _ in
-            QuickCreateView()
+            QuickCreateEntryView()
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Quick Create")
         .description("Start a new color or palette.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies([.systemSmall, .accessoryCircular])
+    }
+}
+
+struct QuickCreateEntryView: View {
+    @Environment(\.widgetFamily) private var family
+
+    var body: some View {
+        if family == .accessoryCircular {
+            ZStack {
+                AccessoryWidgetBackground()
+                Image(systemName: "plus")
+                    .font(.title2.weight(.semibold))
+            }
+            .widgetURL(WidgetLink.newColor.url)
+        } else {
+            QuickCreateView()
+        }
     }
 }
 

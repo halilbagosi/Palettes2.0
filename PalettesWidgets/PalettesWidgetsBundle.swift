@@ -13,6 +13,7 @@ struct PalettesWidgetsBundle: WidgetBundle {
         PaletteWidget()
         ColorWidget()
         ColorOfTheDayWidget()
+        PaletteOfTheDayWidget()
         QuickCreateWidget()
         if #available(iOS 18.0, *) {
             NewColorControl()
