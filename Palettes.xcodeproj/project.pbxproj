@@ -6,6 +6,12 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C1B8997930A5BFA60080D37C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1B8997830A5BFA60080D37C /* WidgetKit.framework */; };
+		C1B8997B30A5BFA60080D37C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1B8997A30A5BFA60080D37C /* SwiftUI.framework */; };
+		C1B8998630A5BFB70080D37C /* PalettesWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1B8997630A5BFA60080D37C /* PalettesWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		503F22D633354CEBB325BB83 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -14,11 +20,34 @@
 			remoteGlobalIDString = C169F7852FFD40B100366ED6;
 			remoteInfo = Palettes;
 		};
+		C1B8998430A5BFB70080D37C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C169F77E2FFD40B100366ED6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1B8997530A5BFA60080D37C;
+			remoteInfo = PalettesWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C1B8998730A5BFB70080D37C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				C1B8998630A5BFB70080D37C /* PalettesWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		C0948DA932314999A7A4CF38 /* PalettesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PalettesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C169F7862FFD40B100366ED6 /* Palettes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Palettes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1B8997630A5BFA60080D37C /* PalettesWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PalettesWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1B8997830A5BFA60080D37C /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		C1B8997A30A5BFA60080D37C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		C1B8998D30A5C1CF0080D37C /* PalettesWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PalettesWidgetsExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -28,6 +57,13 @@
 				AppInfo.plist,
 			);
 			target = C169F7852FFD40B100366ED6 /* Palettes */;
+		};
+		C1B8998B30A5BFB70080D37C /* Exceptions for "PalettesWidgets" folder in "PalettesWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C1B8997530A5BFA60080D37C /* PalettesWidgetsExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -45,6 +81,19 @@
 			path = Palettes;
 			sourceTree = "<group>";
 		};
+		C1B8997C30A5BFA60080D37C /* PalettesWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C1B8998B30A5BFB70080D37C /* Exceptions for "PalettesWidgets" folder in "PalettesWidgetsExtension" target */,
+			);
+			path = PalettesWidgets;
+			sourceTree = "<group>";
+		};
+		C1B8998C30A5C06B0080D37C /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,14 +107,25 @@
 			files = (
 			);
 		};
+		C1B8997330A5BFA60080D37C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				C1B8997B30A5BFA60080D37C /* SwiftUI.framework in Frameworks */,
+				C1B8997930A5BFA60080D37C /* WidgetKit.framework in Frameworks */,
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		C169F77D2FFD40B100366ED6 = {
 			isa = PBXGroup;
 			children = (
+				C1B8998D30A5C1CF0080D37C /* PalettesWidgetsExtension.entitlements */,
+				C1B8998C30A5C06B0080D37C /* Shared */,
 				C169F7882FFD40B100366ED6 /* Palettes */,
 				812AFFCFF8254D4E9891FBD3 /* PalettesTests */,
+				C1B8997C30A5BFA60080D37C /* PalettesWidgets */,
+				C1B8997730A5BFA60080D37C /* Frameworks */,
 				C169F7872FFD40B100366ED6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -75,8 +135,18 @@
 			children = (
 				C169F7862FFD40B100366ED6 /* Palettes.app */,
 				C0948DA932314999A7A4CF38 /* PalettesTests.xctest */,
+				C1B8997630A5BFA60080D37C /* PalettesWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C1B8997730A5BFA60080D37C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C1B8997830A5BFA60080D37C /* WidgetKit.framework */,
+				C1B8997A30A5BFA60080D37C /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -110,16 +180,40 @@
 				C169F7822FFD40B100366ED6 /* Sources */,
 				C169F7832FFD40B100366ED6 /* Frameworks */,
 				C169F7842FFD40B100366ED6 /* Resources */,
+				C1B8998730A5BFB70080D37C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				C1B8998530A5BFB70080D37C /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				C169F7882FFD40B100366ED6 /* Palettes */,
+				C1B8998C30A5C06B0080D37C /* Shared */,
 			);
 			name = Palettes;
 			productName = Palettes;
 			productReference = C169F7862FFD40B100366ED6 /* Palettes.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C1B8997530A5BFA60080D37C /* PalettesWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1B8998A30A5BFB70080D37C /* Build configuration list for PBXNativeTarget "PalettesWidgetsExtension" */;
+			buildPhases = (
+				C1B8997230A5BFA60080D37C /* Sources */,
+				C1B8997330A5BFA60080D37C /* Frameworks */,
+				C1B8997430A5BFA60080D37C /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				C1B8997C30A5BFA60080D37C /* PalettesWidgets */,
+				C1B8998C30A5C06B0080D37C /* Shared */,
+			);
+			name = PalettesWidgetsExtension;
+			productName = PalettesWidgetsExtension;
+			productReference = C1B8997630A5BFA60080D37C /* PalettesWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -128,7 +222,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2700;
+				LastSwiftUpdateCheck = 2720;
 				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					4F92C7437D2E46078ACA52ED = {
@@ -137,6 +231,9 @@
 					};
 					C169F7852FFD40B100366ED6 = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					C1B8997530A5BFA60080D37C = {
+						CreatedOnToolsVersion = 27.2;
 					};
 				};
 			};
@@ -156,6 +253,7 @@
 			targets = (
 				C169F7852FFD40B100366ED6 /* Palettes */,
 				4F92C7437D2E46078ACA52ED /* PalettesTests */,
+				C1B8997530A5BFA60080D37C /* PalettesWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -167,6 +265,11 @@
 			);
 		};
 		C169F7842FFD40B100366ED6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		C1B8997430A5BFA60080D37C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -184,6 +287,11 @@
 			files = (
 			);
 		};
+		C1B8997230A5BFA60080D37C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -191,6 +299,11 @@
 			isa = PBXTargetDependency;
 			target = C169F7852FFD40B100366ED6 /* Palettes */;
 			targetProxy = 503F22D633354CEBB325BB83 /* PBXContainerItemProxy */;
+		};
+		C1B8998530A5BFB70080D37C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1B8997530A5BFA60080D37C /* PalettesWidgetsExtension */;
+			targetProxy = C1B8998430A5BFB70080D37C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -203,7 +316,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Palettes/Palettes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = KCH5545G6F;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -213,7 +326,7 @@
 				INFOPLIST_FILE = Palettes/AppInfo.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Palettes;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Palettes uses the camera to take a photo you can pick colors from. The photo is processed on your device and isn't saved or uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -233,7 +346,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halilbagosi.Palettes;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -258,7 +371,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Palettes/Palettes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = KCH5545G6F;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -268,7 +381,7 @@
 				INFOPLIST_FILE = Palettes/AppInfo.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Palettes;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Palettes uses the camera to take a photo you can pick colors from. The photo is processed on your device and isn't saved or uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -288,7 +401,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.halilbagosi.Palettes;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -425,6 +538,75 @@
 			};
 			name = Release;
 		};
+		C1B8998830A5BFB70080D37C /* Debug configuration for PBXNativeTarget "PalettesWidgetsExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = PalettesWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = KCH5545G6F;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PalettesWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PalettesWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halilbagosi.Palettes.PalettesWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C1B8998930A5BFB70080D37C /* Release configuration for PBXNativeTarget "PalettesWidgetsExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = PalettesWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = KCH5545G6F;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PalettesWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PalettesWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.halilbagosi.Palettes.PalettesWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		E9861E55AA5249E88AE9933E /* Release configuration for PBXNativeTarget "PalettesTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -489,6 +671,14 @@
 			buildConfigurations = (
 				C169F7952FFD40B300366ED6 /* Debug configuration for PBXNativeTarget "Palettes" */,
 				C169F7962FFD40B300366ED6 /* Release configuration for PBXNativeTarget "Palettes" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		C1B8998A30A5BFB70080D37C /* Build configuration list for PBXNativeTarget "PalettesWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1B8998830A5BFB70080D37C /* Debug configuration for PBXNativeTarget "PalettesWidgetsExtension" */,
+				C1B8998930A5BFB70080D37C /* Release configuration for PBXNativeTarget "PalettesWidgetsExtension" */,
 			);
 			defaultConfigurationName = Release;
 		};
