@@ -10,5 +10,8 @@ import WidgetKit
 struct PalettesWidgetsBundle: WidgetBundle {
     var body: some Widget {
         QuickCreateWidget()
+        #if DEBUG
+        CopySpikeWidget()
+        #endif
     }
 }
