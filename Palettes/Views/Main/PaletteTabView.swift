@@ -71,6 +71,14 @@ struct PaletteTabView: View {
                 open(link)
             }
         }
+        .onReceive(WidgetLinkInbox.shared.$pending.compactMap { $0 }) { _ in
+            // A widget button or control (OpenLinkIntent). Same settle delay
+            // as quick actions.
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                if let link = WidgetLinkInbox.shared.take() { open(link) }
+            }
+        }
         .onAppear {
             if !restoredTab {
                 restoredTab = true
