@@ -8,34 +8,10 @@
 import SwiftUI
 
 extension Color {
+    /// See `HexRGB.components` for what's accepted.
     init?(hex: String) {
-        var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleaned.hasPrefix("#") { cleaned.removeFirst() }
-
-        switch cleaned.count {
-        case 3, 4:
-            cleaned = cleaned.map { "\($0)\($0)" }.joined()
-        case 6, 8:
-            break
-        default:
-            return nil
-        }
-
-        // `UInt64(_:radix:)` also accepts a leading "+" or "-", so check the
-        // digits first; `isHexDigit` alone would let fullwidth digits through.
-        guard cleaned.allSatisfy(\.isHexDigit), let number = UInt64(cleaned, radix: 16) else {
-            return nil
-        }
-
-        // For 8-digit (RRGGBBAA) input, shift past the discarded alpha byte.
-        let shift: UInt64 = cleaned.count == 8 ? 8 : 0
-        let shifted = number >> shift
-
-        let r = Double((shifted >> 16) & 0xFF) / 255.0
-        let g = Double((shifted >> 8) & 0xFF) / 255.0
-        let b = Double(shifted & 0xFF) / 255.0
-
-        self.init(red: r, green: g, blue: b)
+        guard let c = HexRGB.components(hex) else { return nil }
+        self.init(red: Double(c.r) / 255.0, green: Double(c.g) / 255.0, blue: Double(c.b) / 255.0)
     }
 }
 

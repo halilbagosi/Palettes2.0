@@ -150,6 +150,11 @@ struct ColorsView: View {
                 .navigationDestination(for: PaletteViewModel.self) { palette in
                     PaletteDetailView(paletteName: palette.name, palette: palette)
                 }
+                .onReceive(appData.$pendingOpenColorID) { id in
+                    guard let id, let color = appData.colors.first(where: { $0.id == id }) else { return }
+                    appData.pendingOpenColorID = nil
+                    path = NavigationPath([color])
+                }
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
                 .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
                 .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)

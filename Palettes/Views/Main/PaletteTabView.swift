@@ -62,6 +62,23 @@ struct PaletteTabView: View {
                 if let action = QuickActionCenter.shared.take() { perform(action) }
             }
         }
+        .onOpenURL { url in
+            guard let link = WidgetLink(url: url) else { return }
+            // Same settle delay as quick actions: on a cold launch the URL
+            // arrives during the first layout, when a tab switch is dropped.
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                open(link)
+            }
+        }
+        .onReceive(WidgetLinkInbox.shared.$pending.compactMap { $0 }) { _ in
+            // A widget button or control (OpenLinkIntent). Same settle delay
+            // as quick actions.
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                if let link = WidgetLinkInbox.shared.take() { open(link) }
+            }
+        }
         .onAppear {
             if !restoredTab {
                 restoredTab = true
@@ -201,30 +218,65 @@ struct PaletteTabView: View {
     /// onboarding is done: its cover would hide whatever opened.
     private func perform(_ action: QuickAction) {
         guard !onboardingWanted else { return }
-        // Start from the library, not on top of a sheet already up: close it
-        // and open the new one once it has gone.
+        afterClosingSheets {
+            switch action {
+            case .newPalette, .scanPalette:
+                router.isScanRequested = action == .scanPalette
+                selectedTab = .palettes
+                router.isCreatingPalette = true
+            case .newColor, .scanColor:
+                router.isScanRequested = action == .scanColor
+                selectedTab = .colors
+                router.isCreatingColor = true
+            case .generatePalette:
+                if AppleIntelligence.isDeviceSupported { selectedTab = .generate }
+            }
+        }
+    }
+
+    /// A palettes:// link from a widget or control (see WidgetLink).
+    /// Ids that no longer exist open the tab and nothing else.
+    private func open(_ link: WidgetLink) {
+        if let action = QuickAction(link) { return perform(action) }
+        switch link {
+        case .copyPalette(let id):
+            guard let palette = appData.palettes.first(where: { $0.id == id }) else { return }
+            copyToClipboard(WidgetCopyText.palette(palette.hexCodes), label: "Copied Palette")
+        case .copyColor(let id):
+            guard let color = appData.colors.first(where: { $0.id == id }) else { return }
+            copyToClipboard(WidgetCopyText.color(color.HEX), label: "Copied HEX")
+        case .palette(let id):
+            guard !onboardingWanted else { return }
+            afterClosingSheets {
+                selectedTab = .palettes
+                if appData.palettes.contains(where: { $0.id == id }) { appData.pendingOpenPaletteID = id }
+            }
+        case .color(let id):
+            guard !onboardingWanted else { return }
+            afterClosingSheets {
+                selectedTab = .colors
+                if appData.colors.contains(where: { $0.id == id }) { appData.pendingOpenColorID = id }
+            }
+        case .library:
+            guard !onboardingWanted else { return }
+            afterClosingSheets { selectedTab = .palettes }
+        case .newPalette, .newColor, .scanColor, .scanPalette:
+            break // QuickAction above
+        }
+    }
+
+    /// Start from the library, not on top of a sheet already up: close
+    /// Settings or a creation sheet, and run `body` once it has gone.
+    private func afterClosingSheets(_ body: @escaping () -> Void) {
         let sheetWasUp = router.isShowingSettings || router.isCreatingPalette || router.isCreatingColor
         router.isShowingSettings = false
         router.isCreatingPalette = false
         router.isCreatingColor = false
         router.isScanRequested = false
-        guard !sheetWasUp else {
-            Task {
-                try? await Task.sleep(for: .milliseconds(600))
-                perform(action)
-            }
-            return
-        }
-        switch action {
-        case .newPalette:
-            selectedTab = .palettes
-            router.isCreatingPalette = true
-        case .newColor, .scanColor:
-            router.isScanRequested = action == .scanColor
-            selectedTab = .colors
-            router.isCreatingColor = true
-        case .generatePalette:
-            if AppleIntelligence.isDeviceSupported { selectedTab = .generate }
+        guard sheetWasUp else { return body() }
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            body()
         }
     }
 
