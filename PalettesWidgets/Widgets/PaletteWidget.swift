@@ -52,17 +52,24 @@ struct PaletteWidget: Widget {
         }
         .configurationDisplayName("Palette")
         .description("One palette, or your favorites in turn.")
-        .supportedFamilies([.systemMedium])
+        .supportedFamilies([.systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
 }
 
 struct PaletteWidgetView: View {
     let entry: PaletteEntry
+    @Environment(\.widgetFamily) private var family
 
     var body: some View {
         if let palette = entry.palette {
-            PaletteFace(palette: palette)
+            Group {
+                if family == .systemLarge {
+                    PaletteListFace(palette: palette)
+                } else {
+                    PaletteFace(palette: palette)
+                }
+            }
                 .widgetURL(WidgetLink.palette(palette.id).url)
         } else {
             EmptyWidgetView(message: entry.emptyMessage)
