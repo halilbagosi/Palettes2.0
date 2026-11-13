@@ -1,91 +1,91 @@
 {
-  "features": [
+  "features" : [
     "refractivity",
     "specular-location"
   ],
-  "fill": {
-    "solid": "srgb:0.10980,0.10980,0.11765,1.00000"
+  "fill" : {
+    "solid" : "srgb:0.10980,0.10980,0.11765,1.00000"
   },
-  "groups": [
+  "groups" : [
     {
-      "blur-material": 0.5,
-      "hidden": false,
-      "layers": [
+      "name" : "Overlaps",
+      "layers" : [
         {
-          "fill": "none",
-          "glass": false,
-          "image-name": "lens-center.svg",
-          "name": "lens-center",
-          "opacity": 0.76,
-          "blend-mode": "hard-light"
+          "glass" : false,
+          "image-name" : "overlap-center.svg",
+          "name" : "overlap-center"
         },
         {
-          "glass": true,
-          "image-name": "circle-coral.svg",
-          "name": "circle-coral",
-          "blend-mode": "hard-light"
+          "glass" : false,
+          "image-name" : "overlap-coral-violet.svg",
+          "name" : "overlap-coral-violet"
         },
         {
-          "glass": false,
-          "image-name": "lens-coral-violet.svg",
-          "name": "lens-coral-violet"
+          "glass" : false,
+          "image-name" : "overlap-coral-amber.svg",
+          "name" : "overlap-coral-amber"
         },
         {
-          "glass": false,
-          "image-name": "lens-coral-amber.svg",
-          "name": "lens-coral-amber"
-        },
-        {
-          "glass": false,
-          "image-name": "lens-amber-violet.svg",
-          "name": "lens-amber-violet",
-          "opacity": 0.57,
-          "blend-mode": "darken"
-        },
-        {
-          "image-name": "circle-amber.svg",
-          "name": "circle-amber",
-          "blend-mode": "hard-light"
-        },
-        {
-          "blend-mode": "overlay",
-          "image-name": "circle-violet.svg",
-          "name": "circle-violet"
+          "glass" : false,
+          "image-name" : "overlap-amber-violet.svg",
+          "name" : "overlap-amber-violet"
         }
       ],
-      "lighting": "individual",
-      "opacity": 1,
-      "refractivity": {
-        "depth": 0.0981640625,
-        "enabled": true,
-        "strength": 0.1001171875
+      "opacity" : 1,
+      "lighting" : "individual",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0
       },
-      "shadow": {
-        "kind": "layer-color",
-        "opacity": 0.6
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
       },
-      "specular": "inside",
-      "translucency": {
-        "enabled": true,
-        "value": 0.4
-      }
+      "specular" : "inside"
     },
     {
-      "layers": [],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
+      "blur-material" : 0.5,
+      "hidden" : false,
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name" : "circle-coral.svg",
+          "name" : "circle-coral",
+          "blend-mode" : "hard-light"
+        },
+        {
+          "image-name" : "circle-amber.svg",
+          "name" : "circle-amber",
+          "blend-mode" : "hard-light"
+        },
+        {
+          "blend-mode" : "overlay",
+          "image-name" : "circle-violet.svg",
+          "name" : "circle-violet"
+        }
+      ],
+      "lighting" : "individual",
+      "opacity" : 1,
+      "refractivity" : {
+        "depth" : 0.0981640625,
+        "enabled" : true,
+        "strength" : 0.1001171875
       },
-      "translucency": {
-        "enabled": true,
-        "value": 0.3
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.6
+      },
+      "specular" : "inside",
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.4
       }
     }
   ],
-  "supported-platforms": {
-    "circles": [
+  "supported-platforms" : {
+    "circles" : [
       "watchOS"
     ],
-    "squares": "shared"
+    "squares" : "shared"
   }
 }

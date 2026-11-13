@@ -5,6 +5,7 @@
 
 import XCTest
 import SwiftData
+import CloudKit
 @testable import Palettes
 
 @MainActor
@@ -141,5 +142,44 @@ final class ICloudSyncTests: XCTestCase {
         XCTAssertTrue(appData.iCloudStoreUnavailable)
         XCTAssertFalse(appData.setICloudSync(enabled: true, defaults: defaults))
         XCTAssertEqual(appData.storeMode, .local)
+    }
+
+    // MARK: Sync errors
+
+    private func ckError(_ code: CKError.Code, server: String? = nil, partial: [AnyHashable: Error]? = nil) -> NSError {
+        var info: [String: Any] = [:]
+        if let server { info["ServerErrorDescription"] = server }
+        if let partial { info[CKPartialErrorsByItemIDKey] = partial }
+        return NSError(domain: CKErrorDomain, code: code.rawValue, userInfo: info)
+    }
+
+    func testPartialFailureIsDescribedByItsCommonestRecordError() {
+        let error = ckError(.partialFailure, partial: [
+            "a": ckError(.batchRequestFailed),
+            "b": ckError(.quotaExceeded),
+            "c": ckError(.batchRequestFailed),
+            "d": ckError(.quotaExceeded),
+            "e": ckError(.serverRecordChanged),
+        ])
+        XCTAssertEqual(ICloudSync.underlyingCause(of: error).code, CKError.Code.quotaExceeded.rawValue)
+        XCTAssertEqual(ICloudSync.describe(error), "Your iCloud storage is full. (CloudKit error 25)")
+    }
+
+    func testMissingProductionSchemaIsNamed() {
+        let error = ckError(.partialFailure, partial: [
+            "a": ckError(.invalidArguments, server: "Cannot create new type CD_StoredTag in production schema"),
+        ])
+        XCTAssertEqual(ICloudSync.describe(error),
+                       "iCloud isn't set up for this version of Palettes yet. (CloudKit error 12)")
+    }
+
+    func testPartialFailureWithoutRecordErrorsFallsBackToItself() {
+        let error = ckError(.partialFailure)
+        XCTAssertEqual(ICloudSync.underlyingCause(of: error), error)
+    }
+
+    func testNonCloudKitErrorKeepsItsOwnDescription() {
+        let error = NSError(domain: "Other", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk is full"])
+        XCTAssertEqual(ICloudSync.describe(error), "Disk is full")
     }
 }
