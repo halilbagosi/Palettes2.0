@@ -12,6 +12,10 @@ final class WidgetRotationTests: XCTestCase {
         .init(id: UUID(), name: name, hexCodes: ["#000000"], colorNames: ["Black"], isFavorite: favorite)
     }
 
+    private func color(_ name: String, favorite: Bool) -> WidgetSnapshot.Swatch {
+        .init(id: UUID(), name: name, hex: "#000000", isFavorite: favorite)
+    }
+
     private func swatch(_ i: Int) -> WidgetSnapshot.Swatch {
         .init(id: UUID(), name: "C\(i)", hex: "#000000", isFavorite: false)
     }
@@ -54,6 +58,29 @@ final class WidgetRotationTests: XCTestCase {
     func testRotationWithoutFavoritesIsNil() {
         let snapshot = WidgetSnapshot(palettes: [palette("x", favorite: false)])
         XCTAssertNil(WidgetRotation.favoritePalette(in: snapshot, at: .now))
+    }
+
+    func testColorRotationCyclesFavoritesInLibraryOrder() {
+        let snapshot = WidgetSnapshot(colors: [
+            color("A", favorite: true), color("x", favorite: false),
+            color("B", favorite: true), color("C", favorite: true),
+        ])
+        let k = 900_000 // divisible by 3
+        let names = (0..<6).map { WidgetRotation.favoriteColor(in: snapshot, at: hour(k + $0, plus: 60))!.name }
+        XCTAssertEqual(names, ["A", "B", "C", "A", "B", "C"])
+    }
+
+    func testColorRotationIsStableWithinAnHour() {
+        let snapshot = WidgetSnapshot(colors: [color("A", favorite: true), color("B", favorite: true)])
+        XCTAssertEqual(
+            WidgetRotation.favoriteColor(in: snapshot, at: hour(41, plus: 1))?.name,
+            WidgetRotation.favoriteColor(in: snapshot, at: hour(41, plus: 3599))?.name
+        )
+    }
+
+    func testColorRotationWithoutFavoritesIsNil() {
+        let snapshot = WidgetSnapshot(colors: [color("x", favorite: false)])
+        XCTAssertNil(WidgetRotation.favoriteColor(in: snapshot, at: .now))
     }
 
     func testHourlyDatesStartAtTheCurrentHour() {

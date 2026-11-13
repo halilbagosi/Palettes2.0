@@ -28,7 +28,14 @@ nonisolated enum WidgetRotation {
     }
 
     static func favoritePalette(in snapshot: WidgetSnapshot, at date: Date) -> WidgetSnapshot.Palette? {
-        let favorites = snapshot.favoritePalettes
+        hourlyPick(from: snapshot.favoritePalettes, at: date)
+    }
+
+    static func favoriteColor(in snapshot: WidgetSnapshot, at date: Date) -> WidgetSnapshot.Swatch? {
+        hourlyPick(from: snapshot.favoriteColors, at: date)
+    }
+
+    private static func hourlyPick<T>(from favorites: [T], at date: Date) -> T? {
         guard !favorites.isEmpty else { return nil }
         return favorites[positiveModulo(hourIndex(at: date), favorites.count)]
     }
