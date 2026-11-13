@@ -10,6 +10,7 @@
 //
 
 import CoreGraphics
+import os
 import SwiftUI
 
 /// New Color's face: a luminous field of hues that says "any colour".
@@ -57,10 +58,12 @@ struct CreateFace: View {
                     .font(.headline)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                // Up to two lines: at large Dynamic Type sizes the subtitle
+                // wraps rather than truncating.
                 Text(subtitle)
                     .font(.caption2)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
                     .opacity(0.85)
                     .padding(.top, 1)
             }
@@ -76,11 +79,14 @@ struct CreateFace: View {
 /// draw the real material), like `GlassCircle` but larger and brighter.
 struct CreatePlusBadge: View {
     var size: CGFloat = 40
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Image(systemName: "plus")
             .font(.system(size: size * 0.45, weight: .semibold))
             .foregroundStyle(.white)
+            // Light mode's brighter artwork needs a little help for the +.
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.3), radius: 1.5, y: 0.5)
             .frame(width: size, height: size)
             .background(Color.white.opacity(0.26), in: Circle())
             .overlay(
@@ -89,6 +95,7 @@ struct CreatePlusBadge: View {
                                    startPoint: .top, endPoint: .bottom),
                     lineWidth: 0.75)
             )
+            .overlay(Circle().stroke(Color.black.opacity(colorScheme == .dark ? 0 : 0.12), lineWidth: 0.5))
             .accessibilityHidden(true)
     }
 }
@@ -96,9 +103,10 @@ struct CreatePlusBadge: View {
 // MARK: - Artwork
 
 nonisolated enum CreateArt {
-    /// Pixel size of the square artwork. Soft gradients upscale cleanly, so
-    /// this stays small to keep the widget's memory use low.
-    static let pixels = 384
+    /// Pixel size of the square artwork: a 170pt tile at @3x, so the fan's
+    /// edges and hairlines stay crisp. About 1.2 MB per image; each one is
+    /// drawn once per process and cached.
+    static let pixels = 540
 
     /// Curated five-colour palettes the New Palette widget rotates through,
     /// one a day.
@@ -113,33 +121,41 @@ nonisolated enum CreateArt {
         ["#006D77", "#83C5BE", "#EDF6F9", "#FFDDD2", "#E29578"],
     ]
 
-    /// The palette shown on a given day; deterministic across processes.
+    /// The palette shown on a given day (`WidgetRotation.dayIndex`). Cycles
+    /// through the list so consecutive days never repeat.
     static func palette(forDay day: Int) -> [String] {
-        palettes[WidgetRotation.dailyIndex(day: day, salt: salt, count: palettes.count)]
+        let count = palettes.count
+        return palettes[((day % count) + count) % count]
     }
-
-    static let salt: UInt64 = 0x0E3D_A1E7_0E3D_A1E7
 
     // MARK: New Color
 
-    /// A soft, luminous field of hues: large blurred blobs of the app
-    /// icon's coral, amber and violet joined by teal and sky.
+    /// A soft, luminous field of hues arranged like a colour wheel around
+    /// the edges: coral, amber, teal, blue and violet, meeting in magenta
+    /// on the left. The darker coral sits under the + so it reads clearly.
     static func hueField(dark: Bool) -> CGImage? {
+        dark ? hueFieldDark : hueFieldLight
+    }
+
+    private static let hueFieldLight = drawHueField(dark: false)
+    private static let hueFieldDark = drawHueField(dark: true)
+
+    private static func drawHueField(dark: Bool) -> CGImage? {
         draw { ctx, s in
             fill(ctx, s, hex: dark ? "#1B1626" : "#FFF6EE")
             let blobs: [(hex: String, x: CGFloat, y: CGFloat, r: CGFloat)] = [
-                ("#FFB020", 0.00, 0.05, 0.75),
-                ("#FF5E7A", 1.00, 0.00, 0.80),
-                ("#7A5CFF", 1.00, 0.95, 0.80),
-                ("#3D8BFF", 0.45, 1.05, 0.60),
-                ("#2EC4B6", 0.00, 0.90, 0.70),
+                ("#FF5E7A", 0.00, 0.05, 0.75),
+                ("#FFB020", 1.00, 0.00, 0.75),
+                ("#2EC4B6", 1.00, 0.95, 0.70),
+                ("#3D8BFF", 0.55, 1.05, 0.60),
+                ("#7A5CFF", 0.00, 0.95, 0.75),
             ]
             for blob in blobs {
                 radial(ctx, center: CGPoint(x: blob.x * s, y: blob.y * s), radius: blob.r * s * (dark ? 0.9 : 1),
                        hex: blob.hex, alpha: 1)
             }
-            // A luminous core.
-            radial(ctx, center: CGPoint(x: 0.5 * s, y: 0.42 * s), radius: 0.45 * s,
+            // A luminous core, right of centre and clear of the +.
+            radial(ctx, center: CGPoint(x: 0.6 * s, y: 0.45 * s), radius: 0.42 * s,
                    hex: dark ? "#C7B8FF" : "#FFFFFF", alpha: dark ? 0.32 : 0.6)
             bottomScrim(ctx, s, strength: dark ? 0.45 : 0.32)
         }
@@ -147,21 +163,43 @@ nonisolated enum CreateArt {
 
     // MARK: New Palette
 
+    private struct FanKey: Hashable {
+        let hexes: [String]
+        let dark: Bool
+    }
+
+    /// Fans already drawn in this process. Only the curated palettes are
+    /// ever passed in, so it stays small.
+    private static let fanCache = OSAllocatedUnfairLock(initialState: [FanKey: CGImage]())
+
     /// A palette as a fan of rounded swatch cards, like a paint fan deck,
-    /// over a deep wash of its darkest colour.
+    /// over a deep wash of its darkest colour. Drawn once per palette and
+    /// appearance, then cached.
     static func paletteFan(hexes: [String], dark: Bool) -> CGImage? {
+        let key = FanKey(hexes: hexes, dark: dark)
+        if let cached = fanCache.withLock({ $0[key] }) { return cached }
+        guard let image = drawPaletteFan(hexes: hexes, dark: dark) else { return nil }
+        fanCache.withLock { $0[key] = image }
+        return image
+    }
+
+    private static func drawPaletteFan(hexes: [String], dark: Bool) -> CGImage? {
         let list = hexes.isEmpty ? [HexRGB.fallbackGrey] : hexes
+        // Darkest card at the back, lightest at the front.
         let byLuminance = list.sorted { (HexRGB.luminance($0) ?? 0) < (HexRGB.luminance($1) ?? 0) }
         let darkest = byLuminance.first ?? HexRGB.fallbackGrey
         return draw { ctx, s in
-            ctx.setFillColor(mix(darkest, toward: 0, by: dark ? 0.5 : 0.25))
+            // Well below the darkest card so even that card stands out.
+            ctx.setFillColor(mix(darkest, toward: 0, by: dark ? 0.72 : 0.58))
             ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
-            radialColor(ctx, center: CGPoint(x: 0.05 * s, y: 0.0), radius: 1.0 * s,
-                        color: mix(darkest, toward: 1, by: dark ? 0.12 : 0.3), alpha: 0.9)
+            // A soft lift behind the light end of the fan, away from the
+            // darkest card and the +.
+            radialColor(ctx, center: CGPoint(x: 0.95 * s, y: -0.05 * s), radius: 0.85 * s,
+                        color: mix(darkest, toward: 1, by: dark ? 0.08 : 0.22), alpha: 0.7)
             // The cards hinge on a point below the bottom-right corner.
             let pivot = CGPoint(x: 0.90 * s, y: 1.20 * s)
             let angles: [CGFloat] = [-50, -36, -22, -8, 6]
-            for (i, hex) in list.prefix(angles.count).enumerated() {
+            for (i, hex) in byLuminance.prefix(angles.count).enumerated() {
                 ctx.saveGState()
                 ctx.translateBy(x: pivot.x, y: pivot.y)
                 ctx.rotate(by: angles[i] * .pi / 180)
