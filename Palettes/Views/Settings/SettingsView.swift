@@ -171,6 +171,13 @@ struct SettingsView: View {
                     Link(destination: AppLinks.feedbackEmailURL) {
                         SettingsRowLabel(title: "Send Feedback", systemImage: "bubble.left.and.text.bubble.right.fill", tint: .orange, accessory: .external)
                     }
+                    // A link, not the in-app prompt: the system may decline to
+                    // show that, and a row must always do something.
+                    if let reviewURL = AppLinks.writeReviewURL {
+                        Link(destination: reviewURL) {
+                            SettingsRowLabel(title: "Rate Palettes", systemImage: "star.fill", tint: .yellow, accessory: .external)
+                        }
+                    }
                 }
 
                 Section("Legal") {
