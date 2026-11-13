@@ -2,7 +2,7 @@
 //  FavoritePalettesWidget.swift
 //  PalettesWidgets
 //
-//  Up to five favorite (three in medium) palettes as strips. Each row opens its palette.
+//  Up to five favorite palettes (three in medium) as strips. Each row opens its palette.
 //
 
 import SwiftUI
@@ -75,8 +75,9 @@ struct FavoritePalettesView: View {
                         }
                     }
                 }
-                Spacer(minLength: 0)
             }
+            // Top-aligned without a trailing Spacer, which would cost a row gap.
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 }
