@@ -76,6 +76,11 @@ struct WidgetCaption: View {
         Text(text.uppercased())
             .font(.caption2.weight(.bold))
             .tracking(0.6)
-            .foregroundStyle(Color.widgetForeground(onLight: onLight).opacity(0.8))
+            .lineLimit(1)
+            .foregroundStyle(Color.widgetForeground(onLight: onLight))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            // Same pill as NameCapsule, so it reads on any colour.
+            .background(onLight ? Color.white.opacity(0.45) : Color.black.opacity(0.22), in: Capsule())
     }
 }

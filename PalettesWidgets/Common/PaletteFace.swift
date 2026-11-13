@@ -24,6 +24,8 @@ struct PaletteFace: View {
                 Spacer(minLength: 0)
                 NameCapsule(text: palette.name, onLight: firstLight)
             }
+            // Pin to the leading edge, over the first band that `firstLight` judges.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .padding(14)
         }
     }
