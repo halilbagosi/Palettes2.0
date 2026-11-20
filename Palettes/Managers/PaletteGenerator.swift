@@ -45,6 +45,9 @@ struct GeneratedBrief {
     @Guide(description: "One plain color word for the vibe's main color, such as terracotta, navy, sage, mustard or plum")
     var mainColor: String
 
+    @Guide(description: "A second plain color word when the vibe names two things with different colors, such as 'ocean sunset' (main color blue, second color orange) or 'forest at dusk'. Empty when the vibe is about a single color.")
+    var secondColor: String
+
     @Guide(description: "How light or dark the palette should feel overall")
     var lightness: BriefLightness
 
@@ -71,7 +74,7 @@ struct GeneratedColorName {
 @available(iOS 26.0, *)
 @Generable
 struct GeneratedNames {
-    @Guide(description: "A specific two or three word title for this palette, drawn from its colors or mood, for example 'Harbor Dusk' or 'Terracotta Bloom'. Never generic: do not use the words palette, colors, scheme, theme, custom, generated, whisper, horizon, harmony, dream, or serene.")
+    @Guide(description: "A specific two or three word title for this palette, drawn from its colors or mood, and from the vibe's own words when there is one (an 'ocean sunset' vibe: 'Ocean Sunset', 'Sunset Tide'), for example 'Harbor Dusk' or 'Terracotta Bloom'. Never generic: do not use the words palette, colors, scheme, theme, custom, generated, whisper, horizon, harmony, dream, or serene.")
     var title: String
 
     @Guide(description: "One name for every color in the list")
@@ -176,8 +179,16 @@ extension PaletteBrief {
         case .triadic: scheme = .triadic
         case .monochromatic: scheme = .monochromatic
         }
+        let read = PaletteBrief.heuristic(from: vibe)
+        let hue = PaletteBrief.hue(forColorWord: model.mainColor) ?? read.hue
+        let second = model.secondColor.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The model's second color, else the second hue the vibe's own words
+        // carry; either only counts when it sits clear of the main hue.
+        let secondary = PaletteBrief.hue(forColorWord: second).flatMap { PaletteBrief.secondHue(after: hue, in: [$0]) }
+            ?? PaletteBrief.secondHue(after: hue, in: PaletteBrief.vibeHues(in: ColorVocabulary.tokens(vibe)))
         self.init(
-            hue: PaletteBrief.hue(forColorWord: model.mainColor) ?? PaletteBrief.heuristic(from: vibe).hue,
+            hue: hue,
+            secondaryHue: secondary,
             tone: PaletteTone(lightness: lightness, chroma: chroma),
             scheme: scheme,
             suggestedSize: model.suggestedSize
@@ -251,6 +262,7 @@ enum PaletteGenerator {
                 // as a vibe and take whatever it says over the old brief.
                 let brief = await makeBrief(vibe: refining.change)
                 recipe.brief.hue = brief.hue ?? recipe.brief.hue
+                recipe.brief.secondaryHue = brief.secondaryHue
                 recipe.brief.tone = brief.tone
                 if let suggested = brief.scheme, !recipe.scheme.isUIMode { recipe.scheme = suggested }
             }
@@ -261,7 +273,9 @@ enum PaletteGenerator {
             // The user's mode always wins. Auto follows the brief's harmony,
             // unless two or more chosen colors already imply one.
             var resolvedScheme = scheme
-            if scheme == .auto, locked.count < 2, let suggested = brief.scheme {
+            // A vibe that names two colors is not one-hue, whatever the model's harmony.
+            if scheme == .auto, locked.count < 2, let suggested = brief.scheme,
+               !(suggested == .monochromatic && brief.secondaryHue != nil) {
                 resolvedScheme = suggested
             }
             recipe = GenerationRecipe(
@@ -280,6 +294,7 @@ enum PaletteGenerator {
             scheme: recipe.scheme,
             tone: recipe.brief.tone,
             hue: recipe.brief.hue,
+            secondaryHue: recipe.brief.secondaryHue,
             seed: recipe.seed
         ))
         recipe.builtHue = built.mainHue
@@ -316,7 +331,7 @@ enum PaletteGenerator {
                 // The model's title is kept only when it's specific, names only
                 // colors the palette has, and is unused; otherwise a descriptive
                 // title is derived from the palette's main color.
-                name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames),
+                name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames, vibe: modelVibe),
                 colors: colors,
                 hexCodes: hexCodes,
                 colorNames: ColorNamer.uniqueNames(forHexes: hexCodes, preferred: preferred),
@@ -430,7 +445,9 @@ enum PaletteGenerator {
         do {
             let session = LanguageModelSession(instructions: """
                 You are a color designer. Read the mood or theme someone describes and \
-                decide what its color palette should be like. Answer only with the fields asked for.
+                decide what its color palette should be like. When the vibe names two things with \
+                different colors, such as an ocean sunset, give the color of each. \
+                Answer only with the fields asked for.
                 """)
             let response = try await session.respond(
                 to: "Describe the palette for this vibe: \(vibe)",

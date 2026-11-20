@@ -14,6 +14,10 @@ import Foundation
 struct PaletteBrief: Equatable {
     /// OKLCH hue (degrees) of the palette's main color, if the vibe names one.
     var hue: Double?
+    /// OKLCH hue of a second color family the vibe names ("ocean sunset":
+    /// blue, then orange). The builder gives it to the secondary and accent
+    /// slots instead of a scheme's rotation. nil for a one-color vibe.
+    var secondaryHue: Double?
     var tone: PaletteTone
     /// A harmonic scheme the vibe calls for. Never `.auto` or an interface mode.
     var scheme: HarmonyScheme?
@@ -28,8 +32,9 @@ struct PaletteBrief: Equatable {
     /// and saturation, and harmony words set the scheme.
     static func heuristic(from vibe: String) -> PaletteBrief {
         let words = ColorVocabulary.tokens(vibe)
-        let hue = words.lazy.compactMap { ColorVocabulary.hueWords[$0] }.first
-            ?? words.lazy.compactMap { ColorVocabulary.moodHues[$0] }.first
+        let hues = vibeHues(in: words)
+        let hue = hues.first
+        let secondaryHue = secondHue(after: hue, in: hues)
 
         var tone = PaletteTone.balanced
         if words.contains(where: ColorVocabulary.darkToneWords.contains) {
@@ -53,7 +58,21 @@ struct PaletteBrief: Equatable {
         } else if words.contains("triadic") {
             scheme = .triadic
         }
-        return PaletteBrief(hue: hue, tone: tone, scheme: scheme)
+        return PaletteBrief(hue: hue, secondaryHue: secondaryHue, tone: tone, scheme: scheme)
+    }
+
+    /// The hues a vibe's words imply, in the order the main color is chosen:
+    /// color words first, then place and mood words, each in reading order.
+    static func vibeHues(in words: [String]) -> [Double] {
+        words.compactMap { ColorVocabulary.hueWords[$0] }
+            + words.compactMap { ColorVocabulary.moodHues[$0] }
+    }
+
+    /// The first hue clearly apart from `main`: "ocean sunset" is a blue and
+    /// an orange, "ocean sea" is only a blue.
+    static func secondHue(after main: Double?, in hues: [Double]) -> Double? {
+        guard let main else { return nil }
+        return hues.first { OKLCH.hueDistance($0, main) >= 45 }
     }
 
     /// The final palette size: an explicit request wins, else the model's

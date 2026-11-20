@@ -355,4 +355,17 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertEqual(result.hexCodes.first, "#3366CC")
         XCTAssertEqual(result.colorNames.first, "Ocean Blue")
     }
+
+
+    /// Plan 021 B3, end to end on the Simulator path: the vibe's words drive
+    /// both the colors (blue and orange) and the palette's name.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testOceanSunsetVibeDrivesColorsAndName() async throws {
+        let result = try await PaletteGenerator.generate(baseColors: [], size: 6, vibe: "ocean sunset")
+        let hues = result.hexCodes.compactMap { OKLCH(hex: $0) }.filter { $0.C >= 0.05 }.map(\.h)
+        XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 240) <= 30 }, "no blue in \(result.hexCodes)")
+        XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 45) <= 35 }, "no orange in \(result.hexCodes)")
+        XCTAssertEqual(result.name, "Ocean Sunset")
+    }
 }

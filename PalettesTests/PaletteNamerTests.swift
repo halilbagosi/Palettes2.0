@@ -191,4 +191,53 @@ final class PaletteNamerTests: XCTestCase {
         let dullFirst = PaletteNamer.descriptiveName(forHexes: ["#8E7F7A", "#1F5FFF"], existingNames: [])
         XCTAssertTrue(dullFirst.contains("Cornflower"), dullFirst)
     }
+
+
+    // MARK: - Vibe titles (plan 021 B3)
+
+    private let blues = ["#1A89C5", "#00314D", "#A3D9FF", "#BD6783", "#8CA600", "#EEF6FD"]
+
+    func testVibeKeywordsDropFillerAndToneWords() {
+        XCTAssertEqual(PaletteNamer.vibeKeywords("ocean sunset"), ["ocean", "sunset"])
+        XCTAssertEqual(PaletteNamer.vibeKeywords("a calm, warm autumn forest"), ["autumn", "forest"])
+        XCTAssertEqual(PaletteNamer.vibeKeywords("ocean sunset. darker. more vivid"), ["ocean", "sunset"])
+        XCTAssertEqual(PaletteNamer.vibeKeywords("   "), [])
+        XCTAssertEqual(PaletteNamer.vibeKeywords(nil), [])
+    }
+
+    func testAModelTitleThatRelatesToTheVibeIsKept() {
+        // Shares a word.
+        XCTAssertEqual(
+            PaletteNamer.resolvedName(aiName: "Sunset Tide", hexes: blues, existingNames: [], vibe: "ocean sunset"),
+            "Sunset Tide")
+        // No word in common, but "harbor" reads blue like "ocean".
+        XCTAssertEqual(
+            PaletteNamer.resolvedName(aiName: "Harbor Light", hexes: blues, existingNames: [], vibe: "ocean sunset"),
+            "Harbor Light")
+    }
+
+    func testAModelTitleThatIgnoresTheVibeIsReplacedByTheVibe() {
+        let name = PaletteNamer.resolvedName(aiName: "Quiet Meadow", hexes: blues, existingNames: [], vibe: "ocean sunset")
+        XCTAssertEqual(name, "Ocean Sunset")
+    }
+
+    func testTheVibeNamesThePaletteWhenThereIsNoModelTitle() {
+        XCTAssertEqual(PaletteNamer.resolvedName(aiName: nil, hexes: blues, existingNames: [], vibe: "ocean sunset"), "Ocean Sunset")
+        // A single word gets a character or closing word from the colors.
+        let forest = PaletteNamer.resolvedName(aiName: nil, hexes: ["#2F6B3F", "#A7C4A0", "#1B2E22", "#D8E6D0"], existingNames: [], vibe: "forest")
+        XCTAssertTrue(forest.contains("Forest"), forest)
+        XCTAssertGreaterThan(forest.split(separator: " ").count, 1, forest)
+    }
+
+    func testVibeTitlesStayUnique() {
+        let name = PaletteNamer.resolvedName(aiName: nil, hexes: blues, existingNames: ["Ocean Sunset", "ocean sunset"], vibe: "ocean sunset")
+        XCTAssertNotEqual(name.lowercased(), "ocean sunset")
+        XCTAssertTrue(name.contains("Ocean Sunset"), name)
+    }
+
+    func testNoVibeKeepsTheColorTitle() {
+        let without = PaletteNamer.resolvedName(aiName: nil, hexes: blues, existingNames: [])
+        XCTAssertEqual(PaletteNamer.resolvedName(aiName: nil, hexes: blues, existingNames: [], vibe: ""), without)
+        XCTAssertEqual(PaletteNamer.resolvedName(aiName: "Quiet Meadow", hexes: blues, existingNames: [], vibe: nil), "Quiet Meadow")
+    }
 }

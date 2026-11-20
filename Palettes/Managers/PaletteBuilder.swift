@@ -38,6 +38,10 @@ struct PaletteBuildRequest {
     /// OKLCH hue (degrees) of the main color when there are no anchors,
     /// usually read from the vibe. nil lets the seed choose.
     var hue: Double? = nil
+    /// A second hue the vibe names, for the secondary and accent colors of a
+    /// palette with none of the user's colors. Ignored by monochromatic and
+    /// interface palettes.
+    var secondaryHue: Double? = nil
     var seed: UInt64
 }
 
@@ -133,7 +137,10 @@ enum PaletteBuilder {
         let size = max(request.size, anchorHexes.count)
         var rng = SplitMix64(seed: request.seed)
 
-        let scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
+        // A vibe that names two colors ("ocean sunset") is not a one-hue palette.
+        let secondaryHue = anchors.isEmpty ? request.secondaryHue : nil
+        var scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
+        if request.scheme == .auto, secondaryHue != nil, scheme == .monochromatic { scheme = .complementary }
         let anchorEntries = anchorHexes.indices.map { index in
             BuiltPalette.Entry(hex: anchorHexes[index], role: anchorRole(index, scheme: scheme), group: .anchor)
         }
@@ -147,7 +154,7 @@ enum PaletteBuilder {
 
         let generated = scheme.isUIMode
             ? interfaceEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, tone: request.tone, isDark: scheme == .uiDark)
-            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, scheme: scheme, tone: request.tone, rotation: rotation)
+            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: request.tone, rotation: rotation)
 
         var entries = anchorEntries + generated
         // With none of the user's colors, nothing anchors "Primary" and the
@@ -204,6 +211,7 @@ enum PaletteBuilder {
         anchors: [OKLCH],
         placed initial: [String],
         main: OKLCH,
+        secondaryHue: Double? = nil,
         size: Int,
         scheme: HarmonyScheme,
         tone: PaletteTone,
@@ -234,7 +242,13 @@ enum PaletteBuilder {
         // extra secondaries, then the accent give way first.
         slots = Array(slots.prefix(size - placed.count))
 
-        let schemeOffsets = offsets(for: scheme)
+        // The vibe's own second hue replaces the scheme's rotation: the
+        // secondary tones sit on it, the accent a little past it.
+        var schemeOffsets = offsets(for: scheme)
+        if let secondaryHue {
+            let delta = (secondaryHue - roots[0].h).truncatingRemainder(dividingBy: 360)
+            schemeOffsets = [delta, delta + 20]
+        }
         let accentOffset = schemeOffsets.count > 1 ? schemeOffsets[1] : schemeOffsets[0]
         let neutralOrder: [Bool] = counts.neutral == 1 ? [tone.lightness != .dark] : [true, false]
         var dominantIndex = 0

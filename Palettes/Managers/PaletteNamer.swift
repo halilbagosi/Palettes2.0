@@ -27,17 +27,103 @@ enum PaletteNamer {
     ///   - hexes: the palette's colors, as "#RRGGBB".
     ///   - existingNames: names already in the user's library (any casing);
     ///     the result is guaranteed not to match one of these.
-    static func resolvedName(aiName: String?, hexes: [String], existingNames: [String]) -> String {
+    ///   - vibe: what the user asked for, when they described one. The title
+    ///     then follows it: the model's title is kept only when it relates to
+    ///     the vibe's words, and otherwise the title is made from them.
+    static func resolvedName(aiName: String?, hexes: [String], existingNames: [String], vibe: String? = nil) -> String {
         let taken = Set(existingNames.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        let keywords = vibeKeywords(vibe)
         if let candidate = aiName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !candidate.isEmpty,
            !isGeneric(candidate),
            !usesClichedTitleLanguage(candidate),
            ColorVocabulary.isPlausibleTitle(candidate, forHexes: hexes),
-           !taken.contains(candidate.lowercased()) {
+           !taken.contains(candidate.lowercased()),
+           keywords.isEmpty || relatesToVibe(candidate, keywords: keywords) {
             return candidate
         }
+        if !keywords.isEmpty, let name = vibeName(keywords: keywords, hexes: hexes, taken: taken) {
+            return name
+        }
         return descriptiveName(forHexes: hexes, existingNames: existingNames)
+    }
+
+    // MARK: - Vibe titles
+
+    /// Words that say nothing about what the palette is of.
+    private static let fillerWords: Set<String> = [
+        "a", "an", "the", "of", "and", "or", "with", "in", "on", "at", "for", "to", "from", "like",
+        "feel", "feeling", "feels", "vibe", "vibes", "color", "colors", "colour", "colours", "palette",
+        "theme", "style", "look", "something", "make", "give", "me", "my", "some", "very", "more", "less",
+        "i", "want", "it", "is", "are", "be", "that", "this", "scheme", "inspired", "by", "mood",
+    ]
+
+    /// The vibe's words that can name a palette, in reading order: no filler
+    /// and no words that only say how light, vivid or warm it should be.
+    /// At most three.
+    static func vibeKeywords(_ vibe: String?) -> [String] {
+        guard let vibe else { return [] }
+        let tone = ColorVocabulary.darkToneWords
+            .union(ColorVocabulary.lightToneWords)
+            .union(ColorVocabulary.mutedToneWords)
+            .union(ColorVocabulary.vividToneWords)
+            .union(PaletteChange.darkerWords).union(PaletteChange.lighterWords)
+            .union(PaletteChange.mutedWords).union(PaletteChange.vividWords)
+            .union(PaletteChange.warmerWords).union(PaletteChange.coolerWords)
+            // Places and color words ("autumn", "midnight") still name a palette.
+            .subtracting(ColorVocabulary.moodHues.keys)
+            .subtracting(ColorVocabulary.hueWords.keys)
+        let harmony: Set<String> = ["monochrome", "monochromatic", "tonal", "complementary", "analogous", "triadic", "harmonious"]
+        var seen = Set<String>()
+        var result: [String] = []
+        for word in ColorVocabulary.tokens(vibe) {
+            guard word.count >= 3, !fillerWords.contains(word), !tone.contains(word), !harmony.contains(word),
+                  seen.insert(word).inserted else { continue }
+            result.append(word)
+            if result.count == 3 { break }
+        }
+        return result
+    }
+
+    /// Whether `title` shares a word or a color family with the vibe's
+    /// keywords: "Harbor Light" relates to "ocean" (both read blue), "Quiet
+    /// Meadow" does not.
+    static func relatesToVibe(_ title: String, keywords: [String]) -> Bool {
+        func hue(_ word: String) -> Double? { ColorVocabulary.hueWords[word] ?? ColorVocabulary.moodHues[word] }
+        for word in ColorVocabulary.tokens(title) where word.count >= 3 {
+            for keyword in keywords {
+                if word == keyword { return true }
+                if word.count >= 4, keyword.count >= 4, word.hasPrefix(keyword) || keyword.hasPrefix(word) { return true }
+                if let a = hue(word), let b = hue(keyword),
+                   ColorVocabulary.family(forHue: a) == ColorVocabulary.family(forHue: b) { return true }
+            }
+        }
+        return false
+    }
+
+    /// A title made of the vibe's own words, in Title Case ("Ocean Sunset");
+    /// a single word is given a character or closing word from the palette's
+    /// colors ("Misty Forest", "Ocean Tide"). Never one of `taken`.
+    private static func vibeName(keywords: [String], hexes: [String], taken: Set<String>) -> String? {
+        let base = keywords.map(titleCased).joined(separator: " ")
+        let traits = traits(forHexes: hexes)
+        let character = rotated(characterWords(for: traits), by: traits.seed)
+        let closers = rotated(closerWords(for: traits), by: traits.seed / 7)
+
+        var candidates: [String] = []
+        if keywords.count >= 2 { candidates.append(base) }
+        for word in character.prefix(3) { candidates.append("\(word) \(base)") }
+        for closer in closers { candidates.append("\(base) \(closer)") }
+        if keywords.count == 1 { candidates.append("\(base) \(familyWord(for: traits))") }
+        for word in character.prefix(2) {
+            for closer in closers.prefix(2) { candidates.append("\(word) \(base) \(closer)") }
+        }
+        return candidates.first { !taken.contains($0.lowercased()) }
+    }
+
+    // Local on purpose; the controller swaps in the shared `NameCase.titled`.
+    private static func titleCased(_ word: String) -> String {
+        word.prefix(1).uppercased() + word.dropFirst()
     }
 
     /// Builds a title from what the palette actually looks like: a character

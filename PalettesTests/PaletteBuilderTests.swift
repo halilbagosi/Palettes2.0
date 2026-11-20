@@ -254,4 +254,29 @@ final class PaletteBuilderTests: XCTestCase {
         }
         XCTAssertFalse(differing.isEmpty, "the seed should vary the palette")
     }
+
+
+    // MARK: - Two-color vibes (plan 021 B3)
+
+    /// "Ocean sunset": blue main, orange second hue. The palette must carry
+    /// both, whichever scheme Auto draws (monochromatic included).
+    func testSecondaryHueShowsUpInTheGeneratedColors() {
+        for seed in seeds {
+            for scheme in [HarmonyScheme.auto, .complementary, .analogous, .triadic] {
+                let palette = PaletteBuilder.build(PaletteBuildRequest(
+                    anchors: [], size: 6, scheme: scheme, tone: .balanced, hue: 240, secondaryHue: 45, seed: seed))
+                let hues = palette.hexes.compactMap { OKLCH(hex: $0) }.filter { $0.C >= 0.05 }.map(\.h)
+                XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 240) <= 30 }, "\(scheme) \(seed) no blue in \(palette.hexes)")
+                XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 45) <= 35 }, "\(scheme) \(seed) no orange in \(palette.hexes)")
+            }
+        }
+    }
+
+    func testSecondaryHueIsIgnoredWithTheUsersColors() {
+        let with = PaletteBuilder.build(PaletteBuildRequest(
+            anchors: ["#3366CC"], size: 6, scheme: .complementary, hue: 240, secondaryHue: 45, seed: 3))
+        let without = PaletteBuilder.build(PaletteBuildRequest(
+            anchors: ["#3366CC"], size: 6, scheme: .complementary, hue: 240, seed: 3))
+        XCTAssertEqual(with, without)
+    }
 }
