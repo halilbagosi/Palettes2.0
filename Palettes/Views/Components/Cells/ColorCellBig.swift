@@ -18,6 +18,9 @@ struct ColorCellBig: View {
     /// Shown as a "View" pill; opens the color detail view.
     var onViewPalettes: (() -> Void)? = nil
 
+    @EnvironmentObject private var appData: AppData
+    @State private var quickCopyRequest: QuickCopyRequest?
+
     /// Corner radius of the card itself. Overlays that want to sit
     /// concentric with the card (same center of curvature) should derive
     /// their own radius from this value rather than hardcoding one — see
@@ -38,6 +41,7 @@ struct ColorCellBig: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
             .swatchOutline(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+            .quickCopyDialog($quickCopyRequest)
             .compositingGroup()
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
             .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
@@ -96,7 +100,7 @@ struct ColorCellBig: View {
 
     private var copyButton: some View {
         Button {
-            copyToClipboard(hexCode, label: "Copied HEX")
+            QuickCopy.perform(.color(hex: hexCode, color: color), appData: appData, ask: $quickCopyRequest)
         } label: {
             Image(systemName: "doc.on.doc")
                 .font(.subheadline.weight(.semibold))
@@ -107,7 +111,7 @@ struct ColorCellBig: View {
                 .padding(-3)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Copy HEX")
+        .accessibilityLabel("Copy")
     }
 }
 
@@ -145,4 +149,5 @@ private struct OptionalTapModifier: ViewModifier {
         }
         .padding()
     }
+    .environmentObject(AppData(inMemory: true))
 }

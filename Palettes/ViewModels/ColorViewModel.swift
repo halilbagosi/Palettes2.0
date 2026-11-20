@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ColorViewModel: Identifiable, Sendable, Hashable {
     var id = UUID()
-    var name: String { didSet { name = NameLimit.clamp(name) } }
+    var name: String { didSet { name = NameLimit.display(name) } }
     var color: Color
     var HEX: String
     var usedInPalette: Bool
@@ -26,7 +26,7 @@ struct ColorViewModel: Identifiable, Sendable, Hashable {
         isGenerated: Bool = false
     ) {
         self.id = id
-        self.name = NameLimit.clamp(name)
+        self.name = NameLimit.display(name)
         self.color = color
         self.HEX = HEX
         self.usedInPalette = usedInPalette

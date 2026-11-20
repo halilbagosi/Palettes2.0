@@ -241,10 +241,13 @@ struct PaletteTabView: View {
         switch link {
         case .copyPalette(let id):
             guard let palette = appData.palettes.first(where: { $0.id == id }) else { return }
-            copyToClipboard(WidgetCopyText.palette(palette.hexCodes), label: "Copied Palette")
+            // The widget can't ask which format: it uses the saved one, else Plain HEX.
+            let copy = CopyPreference.widgetPaletteText(palette)
+            copyToClipboard(copy.text, label: copy.label)
         case .copyColor(let id):
             guard let color = appData.colors.first(where: { $0.id == id }) else { return }
-            copyToClipboard(WidgetCopyText.color(color.HEX), label: "Copied HEX")
+            let copy = CopyPreference.widgetColorText(hex: color.HEX, color: color.color)
+            copyToClipboard(copy.text, label: copy.label)
         case .palette(let id):
             guard !onboardingWanted else { return }
             afterClosingSheets {

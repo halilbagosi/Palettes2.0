@@ -470,6 +470,31 @@ enum ColorNamer {
         return String(format: "#%02X%02X%02X", Int(entry.r), Int(entry.g), Int(entry.b))
     }
 
+    /// The dictionary entry nearest to `hex`, ignoring modifiers.
+    static func nearestEntryName(forHex hex: String) -> String? {
+        guard let c = parseHexComponents(hex) else { return nil }
+        let lab = sRGBtoLab(r: c.r, g: c.g, b: c.b)
+        return namedColorsLab
+            .min { ciede2000(lab, $0.lab) < ciede2000(lab, $1.lab) }?
+            .name
+    }
+
+    /// Whether `name` is one the app itself would have given `hex`: the
+    /// descriptive auto-name, the same avoiding `taken` (names already in the
+    /// library when the color was named), or the nearest dictionary entry.
+    /// Comparison is case-insensitive and ignores surrounding whitespace.
+    /// Names the user typed that match none of these are never auto.
+    static func looksAutoNamed(_ name: String, hex: String, taken: Set<String> = []) -> Bool {
+        let key = NameCase.titled(name).lowercased()
+        guard !key.isEmpty else { return false }
+        var candidates = [
+            ColorNamer.name(forHex: hex),
+            ColorNamer.name(forHex: hex, avoiding: taken)
+        ]
+        if let nearest = nearestEntryName(forHex: hex) { candidates.append(nearest) }
+        return candidates.contains { $0.lowercased() == key }
+    }
+
     /// The best name for one color: the same descriptive naming a whole
     /// palette gets ("Dusty Rose", "Deep Teal"), not just the nearest
     /// dictionary entry. Names in `taken` (case-insensitive) are skipped,
@@ -578,7 +603,7 @@ enum ColorNamer {
             // 1. AI-supplied / user-supplied preferred name, if present,
             // non-empty, and not already claimed by an earlier index.
             if i < preferred.count, let raw = preferred[i] {
-                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = NameCase.titled(raw)
                 if !trimmed.isEmpty, !used.contains(trimmed.lowercased()) {
                     result[i] = trimmed
                     used.insert(trimmed.lowercased())

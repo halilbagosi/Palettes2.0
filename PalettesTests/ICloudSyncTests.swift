@@ -92,7 +92,7 @@ final class ICloudSyncTests: XCTestCase {
 
     func testTurningOnWithMergeCombinesBothLibraries() throws {
         let stores = Stores()
-        try seed(stores, .local, palettes: ["On this device"])
+        try seed(stores, .local, palettes: ["On This Device"])
         try seed(stores, .cloud, palettes: ["From iCloud"])
         let appData = AppData(inMemory: true, syncEnabled: false, storeFactory: stores.container)
         XCTAssertEqual(appData.storeMode, .local)
@@ -100,14 +100,14 @@ final class ICloudSyncTests: XCTestCase {
         XCTAssertTrue(appData.setICloudSync(enabled: true, choice: .merge, defaults: defaults))
 
         XCTAssertEqual(appData.storeMode, .cloud)
-        XCTAssertEqual(Set(appData.palettes.map(\.name)), ["On this device", "From iCloud"])
-        XCTAssertEqual(try stores.paletteNames(.cloud), ["On this device", "From iCloud"])
+        XCTAssertEqual(Set(appData.palettes.map(\.name)), ["On This Device", "From iCloud"])
+        XCTAssertEqual(try stores.paletteNames(.cloud), ["On This Device", "From iCloud"])
         XCTAssertTrue(defaults.bool(forKey: ICloudSync.enabledKey))
     }
 
     func testTurningOnWithReplaceUsesOnlyICloud() throws {
         let stores = Stores()
-        try seed(stores, .local, palettes: ["On this device"])
+        try seed(stores, .local, palettes: ["On This Device"])
         try seed(stores, .cloud, palettes: ["From iCloud"])
         let appData = AppData(inMemory: true, syncEnabled: false, storeFactory: stores.container)
 
