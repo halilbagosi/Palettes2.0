@@ -13,6 +13,7 @@ struct ColorsView: View {
     @State private var colorForNewPalette: ColorViewModel?
     @State private var colorToDelete: ColorViewModel?
     @State private var colorToEdit: ColorBindingWrapper?
+    @State private var quickCopyRequest: QuickCopyRequest?
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
@@ -144,6 +145,7 @@ struct ColorsView: View {
                 .onChange(of: favoritesOnly) { refreshDisplayed() }
                 .libraryTitle("Color", count: displayedColors.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .featureIntro(.colors)
+                .quickCopyDialog($quickCopyRequest)
                 .navigationDestination(for: ColorViewModel.self) { color in
                     ColorDetailView(colorItem: color)
                 }
@@ -291,7 +293,7 @@ struct ColorsView: View {
             isGenerated: color.isGenerated,
             isFavorite: color.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onCopy: { copyToClipboard(color.HEX, label: "Copied HEX") }
+            onCopy: { QuickCopy.perform(.color(hex: color.HEX, color: color.color), ask: $quickCopyRequest) }
         )
         .equatable()
         .hoverEffect(.lift)
