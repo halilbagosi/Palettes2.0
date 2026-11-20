@@ -211,6 +211,31 @@ final class PaletteBuilderTests: XCTestCase {
         XCTAssertGreaterThan(OKLCH(hex: dark.hexes[2])!.L, 0.9)
     }
 
+    /// Regression (plan 021 B1): with several of the user's colors chosen they
+    /// take Primary, Secondary and Accent, and the few colors left over were
+    /// Background and Text, which Light and Dark both make as a near-white
+    /// and a near-black. The three modes then built the same set of swatches.
+    /// The leftovers must be the mode's own surfaces instead.
+    func testInterfaceModesDifferWhenTheUsersColorsFillTheRoles() {
+        let anchors = ["#3366CC", "#CC6633", "#339966"]
+        for seed in seeds {
+            let light = build(anchors, size: 5, scheme: .uiLight, seed: seed)
+            let dark = build(anchors, size: 5, scheme: .uiDark, seed: seed)
+            XCTAssertEqual(Array(light.hexes.prefix(3)), anchors)
+            XCTAssertEqual(Array(dark.hexes.prefix(3)), anchors)
+            for hex in light.hexes.dropFirst(3) {
+                XCTAssertGreaterThan(OKLCH(hex: hex)!.L, 0.85, "light generated \(light.hexes)")
+            }
+            for hex in dark.hexes.dropFirst(3) {
+                XCTAssertLessThan(OKLCH(hex: hex)!.L, 0.35, "dark generated \(dark.hexes)")
+            }
+            XCTAssertEqual(Array(light.roles.dropFirst(3)), ["Background", "Surface"])
+        }
+        // Auto builds tones of the user's colors, not interface surfaces.
+        let auto = build(anchors, size: 5, scheme: .auto, seed: 1)
+        XCTAssertNotEqual(auto.hexes, build(anchors, size: 5, scheme: .uiLight, seed: 1).hexes)
+    }
+
     func testInterfaceModeKeepsTheUsersColorAsPrimary() {
         let palette = build(["#3060A0"], size: 5, scheme: .uiLight, seed: 1)
         XCTAssertEqual(palette.hexes.first, "#3060A0")

@@ -403,7 +403,19 @@ enum PaletteBuilder {
         let taken = Set(anchors.indices.compactMap { anchorRole($0, scheme: .uiLight) })
         let factor = chromaFactor(tone.chroma)
 
-        for recipe in interfaceRecipes where placed.count < size && !taken.contains(recipe.role) {
+        // Several of the user's colors already take Primary, Secondary and
+        // Accent, leaving few colors to generate. Background and Text are
+        // near-mirror images in Light and Dark (a near-white and a
+        // near-black either way), so those few would build the same set of
+        // swatches in both modes: the mode's own surfaces come first instead.
+        var recipes = interfaceRecipes
+        if anchors.count >= 2,
+           let surface = recipes.firstIndex(where: { $0.role == "Surface" }),
+           let text = recipes.firstIndex(where: { $0.role == "Text" }) {
+            recipes.insert(recipes.remove(at: surface), at: text)
+        }
+
+        for recipe in recipes where placed.count < size && !taken.contains(recipe.role) {
             let spec = isDark ? recipe.dark : recipe.light
             let hue: Double
             switch recipe.hue {
