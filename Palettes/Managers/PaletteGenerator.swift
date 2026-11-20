@@ -206,13 +206,17 @@ enum PaletteGenerator {
 
     /// Generates a palette, streaming its colors to `onPartialColors` one at
     /// a time for the generation orb. The streamed colors are the final
-    /// ones: the builder knows them before the model names them.
+    /// ones, and they start only once the names are back (or `namingTimeout`
+    /// passes), so the result never changes after the orb has filled.
     /// - Parameter existingNames: names already in the user's library, so
     ///   the generated palette's title stays distinct from them.
     /// - Parameter refining: rebuilds that palette with a change applied
     ///   instead of generating a new one; `size` and `scheme` are ignored.
     /// - Parameter onRecipe: receives what the palette was built from, to
     ///   refine it later.
+    /// - Parameter namingTimeout: how long the colors wait for the model's
+    ///   names before filling on fallback names (see `onLateNaming`).
+    /// - Parameter namer: replaces the model's naming step (tests).
     static func generate(
         baseColors: [BaseColor],
         size: Int?,
@@ -220,6 +224,8 @@ enum PaletteGenerator {
         scheme: HarmonyScheme = .auto,
         existingNames: [String] = [],
         refining: Refinement? = nil,
+        namingTimeout: Duration = GenerationPacing.namingTimeout,
+        namer: Namer? = nil,
         onRecipe: (@MainActor (GenerationRecipe) -> Void)? = nil,
         onPartialColors: (@MainActor ([Color]) -> Void)? = nil,
         onLateNaming: (@MainActor (PaletteViewModel) -> Void)? = nil,
@@ -294,24 +300,12 @@ enum PaletteGenerator {
         }
         let unnamed = hexCodes.indices.filter { preferred[$0] == nil }
         let modelVibe = trimmedVibe.isEmpty ? nil : trimmedVibe
-        let namingTask = Task { await modelNames(hexes: hexCodes, unnamed: unnamed, vibe: modelVibe) }
+        let namingTask = Task { @MainActor in
+            if let namer { return await namer(hexCodes, unnamed, modelVibe) }
+            return await modelNames(hexes: hexCodes, unnamed: unnamed, vibe: modelVibe)
+        }
         var finished = false
         defer { if !finished { namingTask.cancel() } }
-
-        if let onPartialColors {
-            let firstGenerated = min(locked.count, colors.count)
-            if firstGenerated == colors.count {
-                // Nothing to reveal one by one (e.g. a photo palette): show it whole.
-                await MainActor.run { onPartialColors(colors) }
-            }
-            for index in firstGenerated..<colors.count {
-                if GenerationPacing.waitsBeforeRevealing(colorAt: index) {
-                    try await Task.sleep(for: GenerationPacing.colorInterval)
-                }
-                let preview = Array(colors.prefix(index + 1))
-                await MainActor.run { onPartialColors(preview) }
-            }
-        }
 
         func assemble(_ names: Naming) -> PaletteViewModel {
             var preferred = preferred
@@ -330,32 +324,53 @@ enum PaletteGenerator {
             )
         }
 
-        // With a late-naming callback the palette is ready after a short
-        // grace period, on fallback names; the model's names follow if they
-        // arrive. Without one, wait for the model as before.
-        let names: Naming
-        if let onLateNaming {
-            if let arrived = await NamingRace.firstResult(of: namingTask, within: GenerationPacing.namingGrace) {
-                names = arrived
-            } else {
-                try Task.checkCancellation()
-                finished = true
-                // The caller owns this task: cancelling it stops the model call
-                // and guarantees `onLateNaming` never fires afterwards.
-                let lateTask = lateNamingTask(
-                    awaiting: namingTask,
-                    isUseful: { !$0.colorNames.isEmpty || $0.title != nil },
-                    assemble: { assemble($0) },
-                    deliver: onLateNaming)
-                await MainActor.run { onLateNamingTask?(lateTask) }
-                return assemble(Naming(title: nil, colorNames: [:]))
-            }
+        // The orb stays in its working state until the names are back: the
+        // result then ships exactly what the orb shows, and nothing is
+        // renamed afterwards. With a late-naming callback the wait is
+        // bounded; at the timeout the colors fill on fallback names and the
+        // model's names follow if they arrive.
+        let names: Naming?
+        if onLateNaming != nil {
+            names = await withTaskCancellationHandler {
+                await NamingRace.firstResult(of: namingTask, within: namingTimeout)
+            } onCancel: { namingTask.cancel() }
         } else {
             names = await withTaskCancellationHandler { await namingTask.value } onCancel: { namingTask.cancel() }
         }
         try Task.checkCancellation()
+
+        if let onPartialColors {
+            let firstGenerated = min(locked.count, colors.count)
+            if firstGenerated == colors.count {
+                // Nothing to reveal one by one (e.g. a photo palette): show it whole.
+                await MainActor.run { onPartialColors(colors) }
+            }
+            for index in firstGenerated..<colors.count {
+                if GenerationPacing.waitsBeforeRevealing(colorAt: index) {
+                    try await Task.sleep(for: GenerationPacing.colorInterval)
+                }
+                let preview = Array(colors.prefix(index + 1))
+                await MainActor.run { onPartialColors(preview) }
+            }
+        }
+        try Task.checkCancellation()
+
+        if let names {
+            finished = true
+            return assemble(names)
+        }
+        // Timed out: the caller owns the late task. Cancelling it stops the
+        // model call and guarantees `onLateNaming` never fires afterwards.
         finished = true
-        return assemble(names)
+        if let onLateNaming {
+            let lateTask = lateNamingTask(
+                awaiting: namingTask,
+                isUseful: { !$0.colorNames.isEmpty || $0.title != nil },
+                assemble: { assemble($0) },
+                deliver: onLateNaming)
+            await MainActor.run { onLateNamingTask?(lateTask) }
+        }
+        return assemble(Naming(title: nil, colorNames: [:]))
     }
 
     /// Waits for the naming task and hands the assembled palette to
@@ -460,10 +475,14 @@ enum PaletteGenerator {
         #endif
     }
 
-    fileprivate struct Naming {
+    struct Naming: Sendable {
         var title: String?
         var colorNames: [Int: String]
     }
+
+    /// Names a palette's colors: their hexes, the indices still unnamed,
+    /// and the vibe. The model's naming step, or a stand-in for it.
+    typealias Namer = @MainActor (_ hexes: [String], _ unnamed: [Int], _ vibe: String?) async -> Naming
 
     /// Asks the model for a title and for names of the colors at `unnamed`.
     /// Every color is described in words, so the model never names from a
@@ -543,8 +562,10 @@ enum PaletteGenerator {
 enum GenerationPacing {
     /// Gap between one color landing and the next.
     static let colorInterval: Duration = .milliseconds(380)
-    /// How long "ready" waits for the model's names after the last color.
-    static let namingGrace: Duration = .milliseconds(600)
+    /// How long the orb waits, empty, for the model's names before it fills
+    /// on fallback names and lets the names follow. A model that answers
+    /// takes a second or two.
+    static let namingTimeout: Duration = .seconds(5)
 
     /// Whether the reveal pauses before showing the color at `index` of the
     /// final palette. Locked colors occupy the first indices and are already

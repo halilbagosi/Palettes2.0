@@ -72,6 +72,68 @@ final class PaletteGeneratorTests: XCTestCase {
         }
     }
 
+    /// Plan 021 B2: the orb used to fill while the model was still naming, the
+    /// result then showed fallback names and the model's names swapped in
+    /// afterwards. The orb must now stay empty until the names are back, then
+    /// fill with exactly the colors the result ships.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testOrbFillsOnlyOnceNamesAreBack() async throws {
+        var namesBack = false
+        var previewsBeforeNames = 0
+        var previews: [[String]] = []
+        var late = 0
+        let result = try await PaletteGenerator.generate(
+            baseColors: [],
+            size: 4,
+            vibe: "calm ocean",
+            namer: { _, _, _ in
+                try? await Task.sleep(for: .milliseconds(300))
+                namesBack = true
+                return PaletteGenerator.Naming(title: "Harbor Light", colorNames: [:])
+            },
+            onPartialColors: { colors in
+                if !namesBack { previewsBeforeNames += 1 }
+                previews.append(colors.map(ColorAdjustment.hexString(from:)))
+            },
+            onLateNaming: { _ in late += 1 }
+        )
+        XCTAssertEqual(previewsBeforeNames, 0, "the orb filled before the names were back")
+        XCTAssertEqual(previews.last, result.hexCodes, "the last fill must be the result's colors")
+        XCTAssertEqual(result.name, "Harbor Light")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(late, 0, "nothing may change after the fill")
+    }
+
+    /// A model that never answers must not hold the orb forever: at the
+    /// timeout the colors fill on fallback names and the late names follow.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testOrbFillsOnFallbackNamesAtTheNamingTimeout() async throws {
+        let late = expectation(description: "late names")
+        var previews = 0
+        let start = ContinuousClock.now
+        let result = try await PaletteGenerator.generate(
+            baseColors: [],
+            size: 3,
+            vibe: nil,
+            namingTimeout: .milliseconds(150),
+            namer: { _, _, _ in
+                try? await Task.sleep(for: .milliseconds(600))
+                return PaletteGenerator.Naming(title: "Harbor Light", colorNames: [:])
+            },
+            onPartialColors: { _ in previews += 1 },
+            onLateNaming: { palette in
+                XCTAssertEqual(palette.name, "Harbor Light")
+                late.fulfill()
+            }
+        )
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - start, .milliseconds(150))
+        XCTAssertEqual(previews, 3)
+        XCTAssertNotEqual(result.name, "Harbor Light")
+        await fulfillment(of: [late], timeout: 3)
+    }
+
     // MARK: - Role assignment on generation (Task 5)
 
     /// Generating from a single base color should tag it "Primary".
