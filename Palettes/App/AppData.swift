@@ -154,6 +154,7 @@ class AppData: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "didSeedSampleData")
 
         load()
+        migrateTitleCaseNamesIfNeeded()
 
         // Persist whenever the arrays change, debounced so bursts of edits
         // (e.g. saving a generated palette) write once.
@@ -320,6 +321,21 @@ class AppData: ObservableObject {
         while reloadGeneration == startGeneration, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
+    }
+
+    static let titleCaseMigrationKey = "didTitleCaseNames.v1"
+
+    /// One-time pass: names stored entirely lowercase ("dusty rose") become
+    /// Title Case. The view models already title names as they load, so this
+    /// only has to write the result back. The flag is set only once there is
+    /// a library to migrate (a fresh install, or a CloudKit import still
+    /// pending, tries again next launch).
+    func migrateTitleCaseNamesIfNeeded(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: Self.titleCaseMigrationKey) else { return }
+        guard !colors.isEmpty || !palettes.isEmpty else { return }
+        defaults.set(true, forKey: Self.titleCaseMigrationKey)
+        persistColors(colors)
+        persistPalettes(palettes)
     }
 
     private func load() {
@@ -806,7 +822,7 @@ class AppData: ObservableObject {
 
     /// `preferred` if no library color uses it, else a fresh name for `hex`.
     func uniqueColorName(preferred: String, forHex hex: String) -> String {
-        let trimmed = preferred.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameCase.titled(preferred)
         guard !trimmed.isEmpty, existingColor(named: trimmed) == nil else { return uniqueColorName(forHex: hex) }
         return trimmed
     }
