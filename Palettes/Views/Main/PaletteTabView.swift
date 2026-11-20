@@ -260,6 +260,9 @@ struct PaletteTabView: View {
         case .library:
             guard !onboardingWanted else { return }
             afterClosingSheets { selectedTab = .palettes }
+        case .colors:
+            guard !onboardingWanted else { return }
+            afterClosingSheets { selectedTab = .colors }
         case .newPalette, .newColor, .scanColor, .scanPalette:
             break // QuickAction above
         }

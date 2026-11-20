@@ -18,6 +18,7 @@ nonisolated enum WidgetLink: Equatable, Sendable {
     case copyPalette(UUID)
     case copyColor(UUID)
     case library
+    case colors
 
     static let scheme = "palettes"
 
@@ -33,6 +34,7 @@ nonisolated enum WidgetLink: Equatable, Sendable {
         case .copyPalette(let id): path = "copy/palette/\(id.uuidString)"
         case .copyColor(let id): path = "copy/color/\(id.uuidString)"
         case .library: path = "library"
+        case .colors: path = "colors"
         }
         return URL(string: "\(Self.scheme)://\(path)")!
     }
@@ -46,6 +48,8 @@ nonisolated enum WidgetLink: Equatable, Sendable {
         switch (host, parts.count) {
         case ("library", 0):
             self = .library
+        case ("colors", 0):
+            self = .colors
         case ("palette", 1):
             guard let id = UUID(uuidString: parts[0]) else { return nil }
             self = .palette(id)

@@ -2,8 +2,9 @@
 //  FavoriteColorsWidget.swift
 //  PalettesWidgets
 //
-//  Favorite colors as tiles: a row of four (medium) or a 2x3 grid (large).
-//  Each tile opens its color.
+//  Favorite colors as tiles: a 2x2 grid (small), a row of four (medium) or a
+//  2x3 grid (large). Medium and large tiles open their color; small opens
+//  the Colors tab. Shows the favorites, or colors chosen in Edit Widget.
 //
 
 import SwiftUI
@@ -14,41 +15,47 @@ struct FavoriteColorsEntry: TimelineEntry {
     let colors: [WidgetSnapshot.Swatch]
 }
 
-struct FavoriteColorsProvider: TimelineProvider {
-    private func capacity(for family: WidgetFamily) -> Int {
+struct FavoriteColorsProvider: AppIntentTimelineProvider {
+    static func capacity(for family: WidgetFamily) -> Int {
         family == .systemLarge ? 6 : 4
     }
 
-    private func entry(from snapshot: WidgetSnapshot, family: WidgetFamily) -> FavoriteColorsEntry {
-        FavoriteColorsEntry(date: .now, colors: Array(snapshot.favoriteColors.prefix(capacity(for: family))))
+    private func entry(for configuration: FavoriteColorsIntent, snapshot: WidgetSnapshot, family: WidgetFamily) -> FavoriteColorsEntry {
+        FavoriteColorsEntry(date: .now, colors: FavoritesSelection.colors(
+            mode: configuration.mode,
+            chosenIDs: (configuration.colors ?? []).map(\.id),
+            in: snapshot,
+            capacity: Self.capacity(for: family)))
+    }
+
+    private func sampleEntry(family: WidgetFamily) -> FavoriteColorsEntry {
+        FavoriteColorsEntry(date: .now, colors: Array(WidgetSample.favoriteColorsSnapshot.favoriteColors.prefix(Self.capacity(for: family))))
     }
 
     func placeholder(in context: Context) -> FavoriteColorsEntry {
-        entry(from: WidgetSample.favoriteColorsSnapshot, family: context.family)
+        sampleEntry(family: context.family)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (FavoriteColorsEntry) -> Void) {
-        let real = entry(from: WidgetSnapshotStore.read(), family: context.family)
-        completion(context.isPreview && real.colors.isEmpty
-                   ? entry(from: WidgetSample.favoriteColorsSnapshot, family: context.family)
-                   : real)
+    func snapshot(for configuration: FavoriteColorsIntent, in context: Context) async -> FavoriteColorsEntry {
+        let real = entry(for: configuration, snapshot: WidgetSnapshotStore.read(), family: context.family)
+        return context.isPreview && real.colors.isEmpty ? sampleEntry(family: context.family) : real
     }
 
     /// Redrawn when the app reloads timelines after a library change.
-    func getTimeline(in context: Context, completion: @escaping (Timeline<FavoriteColorsEntry>) -> Void) {
-        completion(Timeline(entries: [entry(from: WidgetSnapshotStore.read(), family: context.family)], policy: .never))
+    func timeline(for configuration: FavoriteColorsIntent, in context: Context) async -> Timeline<FavoriteColorsEntry> {
+        Timeline(entries: [entry(for: configuration, snapshot: WidgetSnapshotStore.read(), family: context.family)], policy: .never)
     }
 }
 
 struct FavoriteColorsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "FavoriteColorsWidget", provider: FavoriteColorsProvider()) { entry in
+        AppIntentConfiguration(kind: "FavoriteColorsWidget", intent: FavoriteColorsIntent.self, provider: FavoriteColorsProvider()) { entry in
             FavoriteColorsView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Favorite Colors")
-        .description("Your favorite colors at a glance.")
-        .supportedFamilies([.systemMedium, .systemLarge])
+        .description("Your favorite colors, or ones you pick.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -56,19 +63,30 @@ struct FavoriteColorsView: View {
     let entry: FavoriteColorsEntry
     @Environment(\.widgetFamily) private var family
 
-    private var columns: Int { family == .systemLarge ? 2 : 4 }
-    private var rows: Int { family == .systemLarge ? 3 : 1 }
+    private var isSmall: Bool { family == .systemSmall }
+    private var columns: Int { family == .systemMedium ? 4 : 2 }
+    private var rows: Int { family == .systemMedium ? 1 : family == .systemLarge ? 3 : 2 }
 
     var body: some View {
         if entry.colors.isEmpty {
             EmptyWidgetView(message: "Favorite a color to see it here")
+        } else if isSmall {
+            grid
+                // Small widgets have one tap target, so tiles can't be Links.
+                .widgetURL(WidgetLink.colors.url)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Favorite colors: " + entry.colors.map(\.name).joined(separator: ", "))
         } else {
-            VStack(spacing: 8) {
-                ForEach(0..<rows, id: \.self) { row in
-                    HStack(spacing: 8) {
-                        ForEach(0..<columns, id: \.self) { column in
-                            slot(row * columns + column)
-                        }
+            grid
+        }
+    }
+
+    private var grid: some View {
+        VStack(spacing: isSmall ? 6 : 8) {
+            ForEach(0..<rows, id: \.self) { row in
+                HStack(spacing: isSmall ? 6 : 8) {
+                    ForEach(0..<columns, id: \.self) { column in
+                        slot(row * columns + column)
                     }
                 }
             }
@@ -78,10 +96,17 @@ struct FavoriteColorsView: View {
     @ViewBuilder
     private func slot(_ index: Int) -> some View {
         if entry.colors.indices.contains(index) {
-            tile(entry.colors[index])
+            if isSmall { smallTile(entry.colors[index]) } else { tile(entry.colors[index]) }
         } else {
             Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Colors only, no text: small tiles are too tight for names.
+    private func smallTile(_ swatch: WidgetSnapshot.Swatch) -> some View {
+        SwatchStrip(hexes: [swatch.hex])
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func tile(_ swatch: WidgetSnapshot.Swatch) -> some View {

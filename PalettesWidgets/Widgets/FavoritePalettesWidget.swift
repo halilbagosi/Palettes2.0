@@ -13,40 +13,46 @@ struct FavoritePalettesEntry: TimelineEntry {
     let palettes: [WidgetSnapshot.Palette]
 }
 
-struct FavoritePalettesProvider: TimelineProvider {
-    private func capacity(for family: WidgetFamily) -> Int {
+struct FavoritePalettesProvider: AppIntentTimelineProvider {
+    static func capacity(for family: WidgetFamily) -> Int {
         family == .systemLarge ? 5 : 3
     }
 
-    private func entry(from snapshot: WidgetSnapshot, family: WidgetFamily) -> FavoritePalettesEntry {
-        FavoritePalettesEntry(date: .now, palettes: Array(snapshot.favoritePalettes.prefix(capacity(for: family))))
+    private func entry(for configuration: FavoritePalettesIntent, snapshot: WidgetSnapshot, family: WidgetFamily) -> FavoritePalettesEntry {
+        FavoritePalettesEntry(date: .now, palettes: FavoritesSelection.palettes(
+            mode: configuration.mode,
+            chosenIDs: (configuration.palettes ?? []).map(\.id),
+            in: snapshot,
+            capacity: Self.capacity(for: family)))
+    }
+
+    private func sampleEntry(family: WidgetFamily) -> FavoritePalettesEntry {
+        FavoritePalettesEntry(date: .now, palettes: Array(WidgetSample.snapshot.favoritePalettes.prefix(Self.capacity(for: family))))
     }
 
     func placeholder(in context: Context) -> FavoritePalettesEntry {
-        entry(from: WidgetSample.snapshot, family: context.family)
+        sampleEntry(family: context.family)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (FavoritePalettesEntry) -> Void) {
-        let real = entry(from: WidgetSnapshotStore.read(), family: context.family)
-        completion(context.isPreview && real.palettes.isEmpty
-                   ? entry(from: WidgetSample.snapshot, family: context.family)
-                   : real)
+    func snapshot(for configuration: FavoritePalettesIntent, in context: Context) async -> FavoritePalettesEntry {
+        let real = entry(for: configuration, snapshot: WidgetSnapshotStore.read(), family: context.family)
+        return context.isPreview && real.palettes.isEmpty ? sampleEntry(family: context.family) : real
     }
 
     /// Redrawn when the app reloads timelines after a library change.
-    func getTimeline(in context: Context, completion: @escaping (Timeline<FavoritePalettesEntry>) -> Void) {
-        completion(Timeline(entries: [entry(from: WidgetSnapshotStore.read(), family: context.family)], policy: .never))
+    func timeline(for configuration: FavoritePalettesIntent, in context: Context) async -> Timeline<FavoritePalettesEntry> {
+        Timeline(entries: [entry(for: configuration, snapshot: WidgetSnapshotStore.read(), family: context.family)], policy: .never)
     }
 }
 
 struct FavoritePalettesWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "FavoritePalettesWidget", provider: FavoritePalettesProvider()) { entry in
+        AppIntentConfiguration(kind: "FavoritePalettesWidget", intent: FavoritePalettesIntent.self, provider: FavoritePalettesProvider()) { entry in
             FavoritePalettesView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Favorite Palettes")
-        .description("Your favorite palettes at a glance.")
+        .description("Your favorite palettes, or ones you pick.")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
