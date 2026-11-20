@@ -22,7 +22,7 @@ struct FavoriteColorsProvider: AppIntentTimelineProvider {
 
     private func entry(for configuration: FavoriteColorsIntent, snapshot: WidgetSnapshot, family: WidgetFamily) -> FavoriteColorsEntry {
         FavoriteColorsEntry(date: .now, colors: FavoritesSelection.colors(
-            mode: configuration.mode,
+            useChosen: configuration.mode == .chosen,
             chosenIDs: (configuration.colors ?? []).map(\.id),
             in: snapshot,
             capacity: Self.capacity(for: family)))
@@ -69,7 +69,7 @@ struct FavoriteColorsView: View {
 
     var body: some View {
         if entry.colors.isEmpty {
-            EmptyWidgetView(message: "Favorite a color to see it here")
+            EmptyWidgetView(message: "Favorite a color to see it here", link: .colors)
         } else if isSmall {
             grid
                 // Small widgets have one tap target, so tiles can't be Links.

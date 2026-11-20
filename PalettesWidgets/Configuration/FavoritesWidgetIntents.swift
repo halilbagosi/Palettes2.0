@@ -68,29 +68,3 @@ struct FavoriteColorsIntent: WidgetConfigurationIntent {
         }
     }
 }
-
-/// Which items a favorites widget shows. Pure, so it can be reasoned about
-/// (and tested) apart from WidgetKit.
-enum FavoritesSelection {
-    /// `chosenIDs` is only used in `.chosen` mode. Ids no longer in the
-    /// snapshot are skipped; if none remain, the favorites are shown.
-    static func palettes(
-        mode: FavoritesWidgetMode, chosenIDs: [UUID], in snapshot: WidgetSnapshot, capacity: Int
-    ) -> [WidgetSnapshot.Palette] {
-        if mode == .chosen {
-            let chosen = chosenIDs.compactMap { snapshot.palette(id: $0) }
-            if !chosen.isEmpty { return Array(chosen.prefix(capacity)) }
-        }
-        return Array(snapshot.favoritePalettes.prefix(capacity))
-    }
-
-    static func colors(
-        mode: FavoritesWidgetMode, chosenIDs: [UUID], in snapshot: WidgetSnapshot, capacity: Int
-    ) -> [WidgetSnapshot.Swatch] {
-        if mode == .chosen {
-            let chosen = chosenIDs.compactMap { snapshot.color(id: $0) }
-            if !chosen.isEmpty { return Array(chosen.prefix(capacity)) }
-        }
-        return Array(snapshot.favoriteColors.prefix(capacity))
-    }
-}

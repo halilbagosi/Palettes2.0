@@ -20,7 +20,7 @@ struct FavoritePalettesProvider: AppIntentTimelineProvider {
 
     private func entry(for configuration: FavoritePalettesIntent, snapshot: WidgetSnapshot, family: WidgetFamily) -> FavoritePalettesEntry {
         FavoritePalettesEntry(date: .now, palettes: FavoritesSelection.palettes(
-            mode: configuration.mode,
+            useChosen: configuration.mode == .chosen,
             chosenIDs: (configuration.palettes ?? []).map(\.id),
             in: snapshot,
             capacity: Self.capacity(for: family)))

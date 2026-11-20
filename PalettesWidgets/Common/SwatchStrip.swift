@@ -36,32 +36,28 @@ struct SwatchStrip: View {
         }
     }
 
-    /// The strip drawn at exactly the pixel size it is shown at (one point
-    /// size times the display scale), so it maps 1:1 onto device pixels.
-    /// Stretching a one-pixel-per-colour image to a fractional size instead
-    /// snaps band edges unevenly and leaves stair-steps under the rounded clip.
+    /// The strip as a `pixelWidth` x 1 image, where `pixelWidth` is the point
+    /// width times the display scale. Only the width needs pixel precision
+    /// (bands are vertical), and the single row stretches vertically without
+    /// smoothing, so the image stays tiny. Stretching a one-pixel-per-colour
+    /// image to a fractional width instead snaps band edges unevenly and
+    /// leaves stair-steps under the rounded clip.
     static func image(for hexes: [String], size: CGSize, scale: CGFloat) -> UIImage {
         let list = hexes.isEmpty ? [HexRGB.fallbackGrey] : hexes
-        let scale = max(scale, 1)
-        let pixelWidth = max(Int((size.width * scale).rounded()), 1)
-        let pixelHeight = max(Int((size.height * scale).rounded()), 1)
+        let pixelWidth = max(Int((size.width * max(scale, 1)).rounded()), 1)
         let format = UIGraphicsImageRendererFormat()
-        format.scale = scale
+        format.scale = 1
         format.opaque = true
         format.preferredRange = .standard
-        // Whole pixels, expressed back in points.
-        let pointSize = CGSize(width: CGFloat(pixelWidth) / scale, height: CGFloat(pixelHeight) / scale)
         let edges = bandEdges(count: list.count, pixelWidth: pixelWidth)
-        return UIGraphicsImageRenderer(size: pointSize, format: format).image { context in
+        return UIGraphicsImageRenderer(size: CGSize(width: pixelWidth, height: 1), format: format).image { context in
             let cg = context.cgContext
             cg.interpolationQuality = .none
             cg.setShouldAntialias(false)
             for (index, hex) in list.enumerated() {
                 let c = HexRGB.components(hex) ?? HexRGB.components(HexRGB.fallbackGrey)!
                 UIColor(red: CGFloat(c.r) / 255, green: CGFloat(c.g) / 255, blue: CGFloat(c.b) / 255, alpha: 1).setFill()
-                cg.fill(CGRect(x: CGFloat(edges[index]) / scale, y: 0,
-                               width: CGFloat(edges[index + 1] - edges[index]) / scale,
-                               height: pointSize.height))
+                cg.fill(CGRect(x: edges[index], y: 0, width: edges[index + 1] - edges[index], height: 1))
             }
         }
     }
