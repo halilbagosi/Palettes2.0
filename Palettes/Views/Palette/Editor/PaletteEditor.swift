@@ -573,6 +573,7 @@ private struct EditColorPage: View {
             name: $name,
             tinted: true,
             naming: .followsIfAuto(originalHex: originalHex),
+            extraTakenNames: Set(draft.colors.filter { $0.id != id }.map(\.name)),
             notice: isDuplicate ? "Already in this palette" : nil,
             tag: (role: draft.colors.first(where: { $0.id == id })?.role, onTap: onTag)
         )

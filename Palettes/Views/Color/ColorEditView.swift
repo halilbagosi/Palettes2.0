@@ -13,6 +13,9 @@ struct ColorEditView: View {
     @Binding var colorValue: Color
 
     var onSave: () -> Void = {}
+    /// Names of the palette's other colors, so a following name never
+    /// duplicates a sibling.
+    var siblingNames: Set<String> = []
     /// A palette's color: a Tag row opens the tag list, and the chosen tag
     /// is handed to `save` on Save. Library colors have no tag (nil).
     var tag: (current: String?, save: (String?) -> Void)? = nil
@@ -29,8 +32,10 @@ struct ColorEditView: View {
         hexCode: Binding<String>,
         colorValue: Binding<Color>,
         tag: (current: String?, save: (String?) -> Void)? = nil,
+        siblingNames: Set<String> = [],
         onSave: @escaping () -> Void = {}
     ) {
+        self.siblingNames = siblingNames
         _colorName = colorName
         _hexCode = hexCode
         _colorValue = colorValue
@@ -48,6 +53,7 @@ struct ColorEditView: View {
                 name: $internalName,
                 tinted: true,
                 naming: .followsIfAuto(originalHex: hexCode),
+                extraTakenNames: siblingNames,
                 tag: tag.map { _ in (role: internalRole, onTap: { showsTags = true }) }
             )
                 .navigationTitle("Edit Color")
@@ -63,7 +69,7 @@ struct ColorEditView: View {
                 .alert("Name Already Exists", isPresented: $showNameTakenAlert) {
                     Button("OK", role: .cancel) {}
                 } message: {
-                    Text("Another color is already named \"\(internalName.trimmingCharacters(in: .whitespacesAndNewlines))\". Choose a different name.")
+                    Text("Another color is already named \"\(NameCase.titled(internalName))\". Choose a different name.")
                 }
                 .navigationDestination(isPresented: $showsTags) {
                     RoleList(
@@ -91,7 +97,7 @@ struct ColorEditView: View {
     /// colors (`tag` set) name only their slot, so they aren't checked.
     private var nameIsTaken: Bool {
         guard tag == nil else { return false }
-        let trimmed = internalName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameCase.titled(internalName)
         return appData.colors.contains {
             $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
                 && $0.HEX.caseInsensitiveCompare(hexCode) != .orderedSame

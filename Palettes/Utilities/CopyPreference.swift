@@ -108,17 +108,15 @@ enum CopyPreference {
         }
     }
 
-    /// What a widget's copy link copies: the saved format, or HEX if the user
-    /// hasn't picked one (a widget tap can't ask).
+    /// What a widget's copy link copies: the saved format, or HEX (the in-app HEX text) if
+    /// the user hasn't picked one (a widget tap can't ask).
     static func widgetColorText(hex: String, color: Color, in defaults: UserDefaults = sharedDefaults) -> (text: String, label: String) {
         let format = colorFormat(in: defaults) ?? .hex
         return (text(hex: hex, color: color, as: format), "Copied \(format.displayName)")
     }
 
     static func widgetPaletteText(_ palette: PaletteViewModel, in defaults: UserDefaults = sharedDefaults) -> (text: String, label: String) {
-        guard let format = paletteFormat(in: defaults) else {
-            return (WidgetCopyText.palette(palette.hexCodes), "Copied Palette")
-        }
+        let format = paletteFormat(in: defaults) ?? .hex
         return (text(for: palette, as: format), "Copied \(format.displayName)")
     }
 }
@@ -128,12 +126,14 @@ enum CopyPreference {
 /// A one-tap copy waiting on (or about to use) the saved format.
 enum QuickCopyRequest: Identifiable {
     case color(hex: String, color: Color)
-    case palette(PaletteViewModel)
+    /// Carries only the id: cards compare equal while names and roles change,
+    /// so the live palette is looked up when the copy actually runs.
+    case palette(id: UUID)
 
     var id: String {
         switch self {
         case .color(let hex, _): return "color-\(hex)"
-        case .palette(let palette): return "palette-\(palette.id)"
+        case .palette(let id): return "palette-\(id)"
         }
     }
 }
@@ -142,7 +142,7 @@ enum QuickCopyRequest: Identifiable {
 enum QuickCopy {
     /// Copies with the saved format, or, if none is saved for this kind,
     /// parks the request in `ask` so `quickCopyDialog` can ask first.
-    static func perform(_ request: QuickCopyRequest, ask: Binding<QuickCopyRequest?>) {
+    static func perform(_ request: QuickCopyRequest, appData: AppData, ask: Binding<QuickCopyRequest?>) {
         switch request {
         case .color(let hex, let color):
             if let format = CopyPreference.colorFormat() {
@@ -150,7 +150,8 @@ enum QuickCopy {
             } else {
                 ask.wrappedValue = request
             }
-        case .palette(let palette):
+        case .palette(let id):
+            guard let palette = appData.palettes.first(where: { $0.id == id }) else { return }
             if let format = CopyPreference.paletteFormat() {
                 copyToClipboard(CopyPreference.text(for: palette, as: format), label: "Copied \(format.displayName)")
             } else {
@@ -162,6 +163,7 @@ enum QuickCopy {
 
 private struct QuickCopyDialog: ViewModifier {
     @Binding var request: QuickCopyRequest?
+    @EnvironmentObject private var appData: AppData
 
     func body(content: Content) -> some View {
         content.confirmationDialog(
@@ -181,10 +183,11 @@ private struct QuickCopyDialog: ViewModifier {
                         copyToClipboard(CopyPreference.text(hex: hex, color: color, as: format), label: "Copied \(format.displayName)")
                     }
                 }
-            case .palette(let palette):
+            case .palette(let id):
                 ForEach(PaletteCopyFormat.allCases) { format in
                     Button(format.displayName) {
                         CopyPreference.setPaletteFormat(format)
+                        guard let palette = appData.palettes.first(where: { $0.id == id }) else { return }
                         copyToClipboard(CopyPreference.text(for: palette, as: format), label: "Copied \(format.displayName)")
                     }
                 }

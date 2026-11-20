@@ -38,6 +38,8 @@ struct ColorComposer: View {
     var allowsPhoto: Bool = false
     /// How the name reacts to the color changing.
     var naming: NamingPolicy = .keeps
+    /// Names a following name must also avoid (e.g. a palette's other colors).
+    var extraTakenNames: Set<String> = []
     /// A short status under the name, e.g. "Already in this palette".
     var notice: String? = nil
     /// When set, a "Tag" card appears first in the scrolling part; tapping it
@@ -622,7 +624,7 @@ struct ColorComposer: View {
         color = newColor
 
         if followsName, !nameIsCustom {
-            if let autoOriginal, autoOriginal.hex.caseInsensitiveCompare("#\(raw)") == .orderedSame {
+            if let autoOriginal, autoOriginal.hex == Self.normalizedHex("#\(raw)") {
                 // Back at the original color (or never moved): its own name.
                 name = autoOriginal.name
             } else {
@@ -640,11 +642,12 @@ struct ColorComposer: View {
             followsName = true
             nameIsCustom = !name.isEmpty
         case .followsIfAuto(let originalHex):
-            let others = appData.colorNameSet.filter { $0.caseInsensitiveCompare(name) != .orderedSame }
+            let others = appData.colorNameSet.union(extraTakenNames)
+                .filter { $0.caseInsensitiveCompare(name) != .orderedSame }
             if ColorNamer.looksAutoNamed(name, hex: originalHex, taken: others) {
                 followsName = true
                 nameIsCustom = false
-                autoOriginal = (originalHex, name)
+                autoOriginal = (Self.normalizedHex(originalHex), name)
             } else {
                 followsName = false
                 nameIsCustom = true
@@ -688,11 +691,16 @@ struct ColorComposer: View {
         }
         // Following an auto name: the color's own current name isn't taken.
         let own = autoOriginal?.name
-        let taken = appData.colorNameSet.filter { own == nil || $0.caseInsensitiveCompare(own!) != .orderedSame }
+        let taken = appData.colorNameSet.union(extraTakenNames).filter { own == nil || $0.caseInsensitiveCompare(own!) != .orderedSame }
         return ColorNamer.name(forHex: raw, avoiding: taken)
     }
 
     // MARK: - Helpers
+
+    /// "#RRGGBB" uppercase for any hex string the app accepts.
+    static func normalizedHex(_ hex: String) -> String {
+        Color(hex: hex).map(hexKey) ?? hex.uppercased()
+    }
 
     /// "#RRGGBB" for a color, channels clamped to sRGB (wide-gamut picks can
     /// land outside it).

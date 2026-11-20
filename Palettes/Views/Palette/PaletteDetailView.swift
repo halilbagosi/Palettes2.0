@@ -180,6 +180,8 @@ struct PaletteDetailView: View {
                         colorValue: $appData.palettes[paletteIdx].paletteColors[wrapper.id].color,
                         tag: (current: appData.palettes[paletteIdx].paletteColors[wrapper.id].role,
                               save: { assignRole($0, at: wrapper.id) }),
+                        siblingNames: Set(appData.palettes[paletteIdx].paletteColors.enumerated()
+                            .filter { $0.offset != wrapper.id }.map(\.element.name)),
                         onSave: { syncEditedPaletteColor(at: wrapper.id) }
                     )
                     .environmentObject(appData)

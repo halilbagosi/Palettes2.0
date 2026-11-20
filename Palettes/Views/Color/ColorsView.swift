@@ -293,7 +293,7 @@ struct ColorsView: View {
             isGenerated: color.isGenerated,
             isFavorite: color.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onCopy: { QuickCopy.perform(.color(hex: color.HEX, color: color.color), ask: $quickCopyRequest) }
+            onCopy: { QuickCopy.perform(.color(hex: color.HEX, color: color.color), appData: appData, ask: $quickCopyRequest) }
         )
         .equatable()
         .hoverEffect(.lift)

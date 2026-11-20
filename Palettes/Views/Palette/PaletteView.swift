@@ -335,7 +335,7 @@ struct PaletteView: View {
             isGenerated: palette.isGenerated,
             isFavorite: palette.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onCopy: { QuickCopy.perform(.palette(palette), ask: $quickCopyRequest) }
+            onCopy: { QuickCopy.perform(.palette(id: palette.id), appData: appData, ask: $quickCopyRequest) }
         )
         .equatable()
         .hoverEffect(.lift)

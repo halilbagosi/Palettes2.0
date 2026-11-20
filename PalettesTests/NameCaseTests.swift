@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import Palettes
 
 @MainActor
@@ -39,5 +40,39 @@ final class NameCaseTests: XCTestCase {
         XCTAssertEqual(color.name, "Deep Sea")
         let palette = PaletteViewModel(name: "warm autumn", paletteColors: [])
         XCTAssertEqual(palette.name, "Warm Autumn")
+    }
+
+    func testDisplayIsIdempotentAtTheCap() {
+        let long = String(repeating: "ab ", count: 60)
+        let once = NameLimit.display(long)
+        XCTAssertLessThanOrEqual(once.count, NameLimit.maxLength)
+        XCTAssertEqual(NameLimit.display(once), once)
+    }
+
+    func testLookupsCompareTitledInput() {
+        let appData = AppData(inMemory: true)
+        appData.addColor(name: "Dusty Rose", hex: "#C08081")
+        XCTAssertNotNil(appData.existingColor(named: "dusty  rose"))
+        appData.addPalette(name: "Warm Autumn", paletteColors: [])
+        XCTAssertNotNil(appData.existingPalette(named: "warm  autumn"))
+    }
+
+    func testMigrationWritesTitledNamesOnceAndSetsFlag() throws {
+        let suite = "NameCaseMigrationTests"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let appData = AppData(inMemory: true)
+        let context = try XCTUnwrap(appData.testContext)
+        context.insert(StoredColor(id: UUID(), name: "dusty rose", hex: "#C08081", usedInPalette: false, sortIndex: 0))
+        try context.save()
+        appData.reloadFromStore()
+
+        appData.migrateTitleCaseNamesIfNeeded(defaults: defaults)
+
+        let stored = try context.fetch(FetchDescriptor<StoredColor>())
+        XCTAssertEqual(stored.map(\.name), ["Dusty Rose"])
+        XCTAssertTrue(defaults.bool(forKey: AppData.titleCaseMigrationKey))
     }
 }

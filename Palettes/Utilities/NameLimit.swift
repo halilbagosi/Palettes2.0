@@ -18,9 +18,9 @@ enum NameLimit {
         name.count > maxLength ? String(name.prefix(maxLength)) : name
     }
 
-    /// What a color or palette name is stored as: Title Case (`NameCase`),
-    /// then capped. Every view-model name write goes through this.
+    /// What a color or palette name is stored as: capped, then Title Case
+    /// (`NameCase`), so it is idempotent at the cap. Every view-model name write goes through this.
     static func display(_ name: String) -> String {
-        clamp(NameCase.titled(name))
+        NameCase.titled(clamp(name))
     }
 }

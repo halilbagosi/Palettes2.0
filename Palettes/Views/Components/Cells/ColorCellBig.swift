@@ -18,6 +18,7 @@ struct ColorCellBig: View {
     /// Shown as a "View" pill; opens the color detail view.
     var onViewPalettes: (() -> Void)? = nil
 
+    @EnvironmentObject private var appData: AppData
     @State private var quickCopyRequest: QuickCopyRequest?
 
     /// Corner radius of the card itself. Overlays that want to sit
@@ -99,7 +100,7 @@ struct ColorCellBig: View {
 
     private var copyButton: some View {
         Button {
-            QuickCopy.perform(.color(hex: hexCode, color: color), ask: $quickCopyRequest)
+            QuickCopy.perform(.color(hex: hexCode, color: color), appData: appData, ask: $quickCopyRequest)
         } label: {
             Image(systemName: "doc.on.doc")
                 .font(.subheadline.weight(.semibold))
@@ -148,4 +149,5 @@ private struct OptionalTapModifier: ViewModifier {
         }
         .padding()
     }
+    .environmentObject(AppData(inMemory: true))
 }

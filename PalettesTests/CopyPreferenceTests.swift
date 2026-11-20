@@ -71,7 +71,8 @@ final class CopyPreferenceTests: XCTestCase {
     func testWidgetCopyFallsBackToHexWhenUnset() {
         let p = palette()
         let unset = CopyPreference.widgetPaletteText(p, in: defaults)
-        XCTAssertEqual(unset.text, WidgetCopyText.palette(p.hexCodes))
+        XCTAssertEqual(unset.text, "#FF0000, #00FF00")
+        XCTAssertEqual(unset.label, "Copied HEX")
         let color = CopyPreference.widgetColorText(hex: "#FF0000", color: .red, in: defaults)
         XCTAssertEqual(color.text, "#FF0000")
         XCTAssertEqual(color.label, "Copied HEX")

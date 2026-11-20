@@ -325,9 +325,10 @@ class AppData: ObservableObject {
 
     static let titleCaseMigrationKey = "didTitleCaseNames.v1"
 
-    /// One-time pass: names stored entirely lowercase ("dusty rose") become
-    /// Title Case. The view models already title names as they load, so this
-    /// only has to write the result back. The flag is set only once there is
+    /// One-time pass that writes Title Case names back to the store. The view
+    /// models title every name as they load (any word not already
+    /// capitalized, not just all-lowercase names), so this only persists the
+    /// result. The flag is set only once there is
     /// a library to migrate (a fresh install, or a CloudKit import still
     /// pending, tries again next launch).
     func migrateTitleCaseNamesIfNeeded(defaults: UserDefaults = .standard) {
@@ -829,12 +830,14 @@ class AppData: ObservableObject {
 
     /// Returns the palette with this name (case-insensitive), if any.
     func existingPalette(named name: String) -> PaletteViewModel? {
-        palettes.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let titled = NameCase.titled(name)
+        return palettes.first { $0.name.caseInsensitiveCompare(titled) == .orderedSame }
     }
 
     /// Returns the library color with this name (case-insensitive), if any.
     func existingColor(named name: String) -> ColorViewModel? {
-        colors.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let titled = NameCase.titled(name)
+        return colors.first { $0.name.caseInsensitiveCompare(titled) == .orderedSame }
     }
 
     // MARK: - Favorites
