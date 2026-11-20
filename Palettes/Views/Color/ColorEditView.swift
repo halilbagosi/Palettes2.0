@@ -47,6 +47,7 @@ struct ColorEditView: View {
                 color: $internalColor,
                 name: $internalName,
                 tinted: true,
+                naming: .followsIfAuto(originalHex: hexCode),
                 tag: tag.map { _ in (role: internalRole, onTap: { showsTags = true }) }
             )
                 .navigationTitle("Edit Color")

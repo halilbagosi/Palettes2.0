@@ -555,7 +555,11 @@ private struct EditColorPage: View {
         let entry = draft.wrappedValue.colors.first { $0.id == id }
         _color = State(initialValue: entry?.color ?? .gray)
         _name = State(initialValue: entry?.name ?? "")
+        originalHex = entry?.hex ?? ""
     }
+
+    /// The color's hex when the editor opened, for the naming policy.
+    private let originalHex: String
 
     private var hex: String { ColorComposer.hexKey(color) }
 
@@ -568,6 +572,7 @@ private struct EditColorPage: View {
             color: $color,
             name: $name,
             tinted: true,
+            naming: .followsIfAuto(originalHex: originalHex),
             notice: isDuplicate ? "Already in this palette" : nil,
             tag: (role: draft.colors.first(where: { $0.id == id })?.role, onTap: onTag)
         )
