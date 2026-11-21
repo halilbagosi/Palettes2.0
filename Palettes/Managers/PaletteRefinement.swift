@@ -37,6 +37,7 @@ struct GenerationRecipe: Equatable {
 
         if let hue = change.mainHue {
             next.brief.hue = hue
+            next.brief.secondaryHue = nil
         } else if change.temperature != 0, let current = brief.hue ?? builtHue {
             next.brief.hue = Self.shift(hue: current, warmer: change.temperature > 0)
         }

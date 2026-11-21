@@ -59,4 +59,44 @@ final class PaletteBriefTests: XCTestCase {
         XCTAssertNil(PaletteBrief.hue(forColorWord: "Gray"), "a grey has no hue")
         XCTAssertNil(PaletteBrief.hue(forColorWord: "unicorn"))
     }
+
+
+    // MARK: - Two-color vibes (plan 021 B3)
+
+    func testOceanSunsetCarriesBothHues() {
+        let brief = PaletteBrief.heuristic(from: "ocean sunset")
+        XCTAssertEqual(brief.hue, 240)
+        XCTAssertEqual(brief.secondaryHue, 45)
+    }
+
+    func testColorWordLeadsAndPlaceWordSupplies() {
+        let brief = PaletteBrief.heuristic(from: "navy sunset")
+        XCTAssertEqual(brief.hue, 262)
+        XCTAssertEqual(brief.secondaryHue, 45)
+    }
+
+    func testMonochromeVibesHaveNoSecondaryHue() {
+        XCTAssertNil(PaletteBrief.heuristic(from: "monochrome ocean sunset").secondaryHue)
+        XCTAssertNil(PaletteBrief.heuristic(from: "tonal ocean sunset").secondaryHue)
+    }
+
+    func testOneColorVibesHaveNoSecondaryHue() {
+        XCTAssertNil(PaletteBrief.heuristic(from: "calm forest").secondaryHue)
+        // Two words for the same family are still one color.
+        XCTAssertNil(PaletteBrief.heuristic(from: "blue sky").secondaryHue)
+        XCTAssertNil(PaletteBrief.heuristic(from: "ocean sea").secondaryHue)
+        XCTAssertNil(PaletteBrief.heuristic(from: "cozy").secondaryHue)
+    }
+
+    func testSampleVibesMapToTheirHueFamilies() {
+        let cases: [(String, ColorVocabulary.Family)] = [
+            ("ocean", .blue), ("sunset", .orange), ("forest", .green), ("lavender", .purple),
+            ("coffee", .orange), ("neon pink", .pink), ("pastel mint", .green),
+        ]
+        for (vibe, family) in cases {
+            let hue = PaletteBrief.heuristic(from: vibe).hue
+            XCTAssertNotNil(hue, vibe)
+            XCTAssertEqual(ColorVocabulary.family(forHue: hue ?? 0), family, vibe)
+        }
+    }
 }
