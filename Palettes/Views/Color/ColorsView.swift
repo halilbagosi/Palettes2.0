@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ColorsView: View {
 
@@ -143,6 +144,15 @@ struct ColorsView: View {
                 .onChange(of: sortRaw) { refreshDisplayed() }
                 .onChange(of: originFilterRaw) { refreshDisplayed() }
                 .onChange(of: favoritesOnly) { refreshDisplayed() }
+                // Emits the current value on appear too, so a cold launch
+                // from the widget still lands filtered.
+                .onReceive(router.$showsFavoriteColors.filter { $0 }) { _ in
+                    router.showsFavoriteColors = false
+                    path = NavigationPath()
+                    originFilterRaw = LibraryOriginFilter.all.rawValue
+                    favoritesOnly = true
+                    refreshDisplayed()
+                }
                 .libraryTitle("Color", count: displayedColors.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .featureIntro(.colors)
                 .quickCopyDialog($quickCopyRequest)
@@ -179,7 +189,8 @@ struct ColorsView: View {
                         ColorEditView(
                             colorName: $appData.colors[idx].name,
                             hexCode: $appData.colors[idx].HEX,
-                            colorValue: $appData.colors[idx].color
+                            colorValue: $appData.colors[idx].color,
+                            nameIsGenerated: appData.colors[idx].isGenerated
                         )
                         .environmentObject(appData)
                         .presentationDetents([.large])

@@ -14,21 +14,21 @@ enum FavoritesWidgetMode: String, AppEnum {
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Show"
     static let caseDisplayRepresentations: [FavoritesWidgetMode: DisplayRepresentation] = [
-        .favorites: "Favorites",
+        .favorites: "All Favorites",
         .chosen: "Chosen",
     ]
 }
 
 struct FavoritePalettesIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Favorite Palettes"
-    static let description = IntentDescription("Show your favorite palettes, or pick which ones to show.")
+    static let description = IntentDescription("Show all your favorite palettes, or pick which favorites to show.")
 
     @Parameter(title: "Show", default: .favorites)
     var mode: FavoritesWidgetMode
 
     /// Chosen mode: in picked order, up to what the widget has room for.
     @Parameter(title: "Palettes", size: [.systemMedium: 3, .systemLarge: 5])
-    var palettes: [WidgetPaletteEntity]?
+    var palettes: [FavoritePaletteEntity]?
 
     static var parameterSummary: some ParameterSummary {
         When(\.$mode, .equalTo, FavoritesWidgetMode.chosen) {
@@ -46,14 +46,14 @@ struct FavoritePalettesIntent: WidgetConfigurationIntent {
 
 struct FavoriteColorsIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Favorite Colors"
-    static let description = IntentDescription("Show your favorite colors, or pick which ones to show.")
+    static let description = IntentDescription("Show all your favorite colors, or pick which favorites to show.")
 
     @Parameter(title: "Show", default: .favorites)
     var mode: FavoritesWidgetMode
 
     /// Chosen mode: in picked order, up to what the widget has room for.
     @Parameter(title: "Colors", size: [.systemSmall: 4, .systemMedium: 4, .systemLarge: 6])
-    var colors: [WidgetColorEntity]?
+    var colors: [FavoriteColorEntity]?
 
     static var parameterSummary: some ParameterSummary {
         When(\.$mode, .equalTo, FavoritesWidgetMode.chosen) {

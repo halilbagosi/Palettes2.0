@@ -26,7 +26,9 @@ struct ColorComposer: View {
         case keeps
         /// Existing colors: the name follows the color only if it still looks
         /// auto-generated for `originalHex`; a name the user typed stays.
-        case followsIfAuto(originalHex: String)
+        /// `nameIsGenerated`: the color came from Apple Intelligence, whose
+        /// names count as auto-generated too.
+        case followsIfAuto(originalHex: String, nameIsGenerated: Bool = false)
     }
 
     @Binding var color: Color
@@ -641,10 +643,10 @@ struct ColorComposer: View {
         case .follows:
             followsName = true
             nameIsCustom = !name.isEmpty
-        case .followsIfAuto(let originalHex):
+        case .followsIfAuto(let originalHex, let nameIsGenerated):
             let others = appData.colorNameSet.union(extraTakenNames)
                 .filter { $0.caseInsensitiveCompare(name) != .orderedSame }
-            if ColorNamer.looksAutoNamed(name, hex: originalHex, taken: others) {
+            if nameIsGenerated || ColorNamer.looksAutoNamed(name, hex: originalHex, taken: others) {
                 followsName = true
                 nameIsCustom = false
                 autoOriginal = (Self.normalizedHex(originalHex), name)

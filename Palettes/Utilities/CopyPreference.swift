@@ -166,13 +166,14 @@ private struct QuickCopyDialog: ViewModifier {
     @EnvironmentObject private var appData: AppData
 
     func body(content: Content) -> some View {
-        content.confirmationDialog(
+        // An alert, not a confirmation dialog: a dialog anchors to the
+        // tapped button (a popover on iPad and iOS 26), the alert is centered.
+        content.alert(
             "Choose what Copy copies",
             isPresented: Binding(
                 get: { request != nil },
                 set: { if !$0 { request = nil } }
             ),
-            titleVisibility: .visible,
             presenting: request
         ) { pending in
             switch pending {

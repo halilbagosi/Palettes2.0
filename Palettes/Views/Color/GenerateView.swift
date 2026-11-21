@@ -32,6 +32,10 @@ struct GenerateView: View {
 
     // Generation state
     @State private var arrivedColors: [Color] = []
+    /// How many colors this run makes, once known: the user's size, the
+    /// refined palette's, or (Auto) the size the brief settles on. The swatch
+    /// row shows no empty slots until then, so it never promises 6 and fills 4.
+    @State private var plannedSize: Int?
     @State private var generationTask: Task<Void, Never>?
     /// The model's names, arriving after the result is shown on fallback
     /// names. Owned here so a new generation or leaving the result stops it.
@@ -272,8 +276,9 @@ struct GenerateView: View {
     private var generationCopy: some View {
         VStack(spacing: 20) {
             OnboardingStepText(title: "Mixing your palette", subtitle: generationStatusText)
-            GenerationSwatchRow(colors: arrivedColors, expected: paletteSize ?? 6)
-                .frame(maxWidth: 360)
+            GenerationSwatchRow(colors: arrivedColors, expected: plannedSize ?? 0)
+                .frame(maxWidth: 360, minHeight: 44)
+                .animation(.smooth(duration: 0.3), value: plannedSize)
         }
         .padding(.horizontal, 24)
         .transition(.blurFade)
@@ -925,6 +930,8 @@ struct GenerateView: View {
         cancelLateNaming()
         vibeFocused = false
         arrivedColors = selectedColors
+        let refines = !pendingRefinement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        plannedSize = refines ? resultRecipe?.size : paletteSize
         withAnimation(.smooth(duration: 0.6)) { phase = .generating }
 
         generationTask = Task {
@@ -1053,6 +1060,7 @@ struct GenerateView: View {
             // The title follows the vibe itself, not the changes made since.
             nameVibe: vibeDescription.trimmingCharacters(in: .whitespacesAndNewlines),
             onRecipe: { recipe in
+                plannedSize = recipe.size
                 resultRecipe = recipe
                 appliedChanges = changes
             },

@@ -16,6 +16,9 @@ struct ColorEditView: View {
     /// Names of the palette's other colors, so a following name never
     /// duplicates a sibling.
     var siblingNames: Set<String> = []
+    /// The color came from Apple Intelligence: its name follows an edit
+    /// like any auto-generated name.
+    var nameIsGenerated = false
     /// A palette's color: a Tag row opens the tag list, and the chosen tag
     /// is handed to `save` on Save. Library colors have no tag (nil).
     var tag: (current: String?, save: (String?) -> Void)? = nil
@@ -33,9 +36,11 @@ struct ColorEditView: View {
         colorValue: Binding<Color>,
         tag: (current: String?, save: (String?) -> Void)? = nil,
         siblingNames: Set<String> = [],
+        nameIsGenerated: Bool = false,
         onSave: @escaping () -> Void = {}
     ) {
         self.siblingNames = siblingNames
+        self.nameIsGenerated = nameIsGenerated
         _colorName = colorName
         _hexCode = hexCode
         _colorValue = colorValue
@@ -52,7 +57,7 @@ struct ColorEditView: View {
                 color: $internalColor,
                 name: $internalName,
                 tinted: true,
-                naming: .followsIfAuto(originalHex: hexCode),
+                naming: .followsIfAuto(originalHex: hexCode, nameIsGenerated: nameIsGenerated),
                 extraTakenNames: siblingNames,
                 tag: tag.map { _ in (role: internalRole, onTap: { showsTags = true }) }
             )

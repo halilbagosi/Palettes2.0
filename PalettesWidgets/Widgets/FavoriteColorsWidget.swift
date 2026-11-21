@@ -73,7 +73,7 @@ struct FavoriteColorsView: View {
         } else if isSmall {
             grid
                 // Small widgets have one tap target, so tiles can't be Links.
-                .widgetURL(WidgetLink.colors.url)
+                .widgetURL(WidgetLink.favoriteColors.url)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Favorite colors: " + entry.colors.map(\.name).joined(separator: ", "))
         } else {

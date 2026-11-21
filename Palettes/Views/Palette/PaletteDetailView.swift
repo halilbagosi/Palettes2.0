@@ -32,6 +32,9 @@ struct PaletteDetailView: View {
     @State private var draggedColorID: UUID?
     /// Bumped on each reorder step, for a selection tick.
     @State private var reorderTick = 0
+    /// The Colors tab's layout choice, so compact there is compact here too.
+    @AppStorage("colorsLayout") private var colorsLayoutRaw = ListLayout.normal.rawValue
+    @State private var quickCopyRequest: QuickCopyRequest?
     @Environment(\.dismiss) var dismiss
 
     private struct ColorBindingWrapper: Identifiable {
@@ -182,6 +185,7 @@ struct PaletteDetailView: View {
                               save: { assignRole($0, at: wrapper.id) }),
                         siblingNames: Set(appData.palettes[paletteIdx].paletteColors.enumerated()
                             .filter { $0.offset != wrapper.id }.map(\.element.name)),
+                        nameIsGenerated: appData.palettes[paletteIdx].isGenerated,
                         onSave: { syncEditedPaletteColor(at: wrapper.id) }
                     )
                     .environmentObject(appData)
@@ -216,6 +220,7 @@ struct PaletteDetailView: View {
                 if sheet == "extras" { appData.extrasPaletteID = palette.id }
             }
             #endif
+            .quickCopyDialog($quickCopyRequest)
             .alert("Delete Palette", isPresented: $showDeleteAlert) {
                 Button("Delete", role: .destructive) {
                     withAnimation(.spring()) {
@@ -311,17 +316,39 @@ struct PaletteDetailView: View {
     }
 
     private var colorGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)], spacing: 20) {
+        let isCompact = ListLayout(rawValue: colorsLayoutRaw) == .compact
+        // Same column and row sizes as the Colors tab's two layouts.
+        let column = isCompact
+            ? GridItem(.adaptive(minimum: 160, maximum: 280), spacing: 12)
+            : GridItem(.adaptive(minimum: 340, maximum: 560), spacing: 20)
+        return LazyVGrid(columns: [column], spacing: isCompact ? 12 : 20) {
             ForEach(Array(livePalette.paletteColors.enumerated()), id: \.element.id) { index, paletteColor in
                 let colorVM = colorViewModel(at: index, from: livePalette)
                 let role = index < livePalette.paletteColors.count ? livePalette.paletteColors[index].role : nil
-                ColorCellBig(
-                    colorName: colorVM.name,
-                    hexCode: colorVM.HEX,
-                    color: colorVM.color,
-                    isUsedInPalette: true,
-                    onCardTap: { editColorIndex = index }
-                )
+                Group {
+                    if isCompact {
+                        ColorMorphCard(
+                            colorName: colorVM.name,
+                            hexCode: colorVM.HEX,
+                            color: colorVM.color,
+                            isCompact: true,
+                            onCopy: { QuickCopy.perform(.color(hex: colorVM.HEX, color: colorVM.color), appData: appData, ask: $quickCopyRequest) }
+                        )
+                        .frame(height: 118)
+                        .compositingGroup()
+                        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+                        .contentShape(RoundedRectangle(cornerRadius: ColorCellBig.cornerRadius, style: .continuous))
+                        .onTapGesture { editColorIndex = index }
+                    } else {
+                        ColorCellBig(
+                            colorName: colorVM.name,
+                            hexCode: colorVM.HEX,
+                            color: colorVM.color,
+                            isUsedInPalette: true,
+                            onCardTap: { editColorIndex = index }
+                        )
+                    }
+                }
                 .overlay(alignment: .topTrailing) {
                     if let role {
                         Button {
@@ -330,7 +357,7 @@ struct PaletteDetailView: View {
                             RoleBadge(role: role)
                         }
                         .buttonStyle(.plain)
-                        .padding(ColorCellBig.overlayInset)
+                        .padding(isCompact ? 8 : ColorCellBig.overlayInset)
                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                     }
                 }

@@ -32,7 +32,7 @@ enum QuickAction: String, CaseIterable {
         case .newColor: self = .newColor
         case .scanColor: self = .scanColor
         case .scanPalette: self = .scanPalette
-        case .palette, .color, .copyPalette, .copyColor, .library, .colors: return nil
+        case .palette, .color, .copyPalette, .copyColor, .library, .colors, .favoriteColors: return nil
         }
     }
 

@@ -23,6 +23,9 @@ final class SceneRouter: ObservableObject {
     @Published var isCreatingPalette = false
     @Published var isCreatingColor = false
     @Published var isShowingSettings = false
+    /// A widget asked for the Colors tab filtered to favorites; ColorsView
+    /// applies it (now, or when it first appears) and clears it.
+    @Published var showsFavoriteColors = false
     /// The Scan Color quick action opened New Color; its editor opens the
     /// camera once (see `consumeScanRequest`).
     var isScanRequested = false

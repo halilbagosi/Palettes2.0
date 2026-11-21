@@ -85,7 +85,8 @@ struct GenerationResultView: View {
                     colorValue: $paletteColors[target.id].color,
                     siblingNames: Set(paletteColors.indices
                         .filter { $0 != target.id }
-                        .map { paletteColors[$0].name })
+                        .map { paletteColors[$0].name }),
+                    nameIsGenerated: true
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])

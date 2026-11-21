@@ -180,7 +180,7 @@ extension PaletteBrief {
         case .monochromatic: scheme = .monochromatic
         }
         let read = PaletteBrief.heuristic(from: vibe)
-        let hue = PaletteBrief.hue(forColorWord: model.mainColor) ?? read.hue
+        let hue = PaletteBrief.reconciledHue(model: PaletteBrief.hue(forColorWord: model.mainColor), vibe: read.hue)
         let second = (model.secondColor ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         // The model's second color, else the second hue the vibe's own words
         // carry; either only counts when it sits clear of the main hue.
@@ -191,7 +191,7 @@ extension PaletteBrief {
         self.init(
             hue: hue,
             secondaryHue: secondary,
-            tone: PaletteTone(lightness: lightness, chroma: chroma),
+            tone: PaletteBrief.reconciledTone(model: PaletteTone(lightness: lightness, chroma: chroma), vibe: read.tone),
             scheme: scheme,
             suggestedSize: model.suggestedSize
         )

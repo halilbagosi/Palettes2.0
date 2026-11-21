@@ -117,7 +117,11 @@ enum ColorVocabulary {
         "sunset": 45, "sunrise": 55, "autumn": 55, "fall": 55, "desert": 75, "beach": 85,
         "ocean": 240, "sea": 230, "forest": 150, "jungle": 150, "spring": 140, "meadow": 140,
         "winter": 240, "ice": 220, "arctic": 220, "night": 265, "midnight": 265,
-        "fire": 35, "lava": 30, "candy": 0, "berry": 350, "earth": 60, "earthy": 60,
+        // Firelight is orange to amber; at red-pink 35 an analogous spread
+        // reached rose and "fireplace" read as pinks and skin tones.
+        "fire": 50, "fireplace": 52, "hearth": 52, "campfire": 50, "bonfire": 50,
+        "ember": 45, "embers": 45, "flame": 55, "flames": 55, "candle": 70,
+        "candlelight": 70, "candlelit": 70, "firelight": 55, "lava": 35, "candy": 0, "berry": 350, "earth": 60, "earthy": 60,
         "clay": 45, "sand": 80, "sandy": 80, "harbor": 240, "rain": 245, "storm": 255,
         "leaf": 140, "leaves": 140, "citrus": 100, "tropical": 160,
     ]
@@ -136,10 +140,11 @@ enum ColorVocabulary {
     static let vividWords: Set<String> = ["vivid", "neon", "electric", "bright", "hot", "radiant", "fluorescent"]
 
     // Tone words for reading a vibe.
-    static let darkToneWords: Set<String> = ["dark", "moody", "midnight", "night", "noir", "gothic", "deep", "shadow", "shadowy", "dusk", "nocturnal"]
+    static let darkToneWords: Set<String> = ["dark", "moody", "midnight", "night", "noir", "gothic", "deep", "shadow", "shadowy", "dusk", "nocturnal",
+                                             "fireplace", "hearth", "ember", "embers", "candlelit", "smoky", "campfire", "bonfire"]
     static let lightToneWords: Set<String> = ["light", "airy", "pastel", "soft", "morning", "fresh", "breezy", "cloud", "cloudy", "delicate"]
     static let mutedToneWords: Set<String> = ["muted", "dusty", "vintage", "faded", "calm", "earthy", "rustic", "pastel", "soft", "subtle", "natural", "cozy", "washed"]
-    static let vividToneWords: Set<String> = ["vivid", "neon", "bold", "electric", "vibrant", "bright", "saturated", "punchy", "tropical", "pop", "arcade"]
+    static let vividToneWords: Set<String> = ["vivid", "neon", "bold", "electric", "vibrant", "bright", "saturated", "punchy", "tropical", "pop", "arcade", "fiery", "blazing", "glowing"]
 
     /// Lowercased letter-only words.
     static func tokens(_ text: String) -> [String] {

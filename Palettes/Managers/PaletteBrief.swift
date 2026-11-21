@@ -62,6 +62,24 @@ struct PaletteBrief: Equatable {
         return PaletteBrief(hue: hue, secondaryHue: secondaryHue, tone: tone, scheme: scheme)
     }
 
+    /// The model's main hue, unless the vibe's own words name a hue more
+    /// than 45° away: then the words win ("fireplace" is orange even when
+    /// the model answers "peach" or "rose").
+    static func reconciledHue(model: Double?, vibe: Double?) -> Double? {
+        guard let model else { return vibe }
+        guard let vibe else { return model }
+        return OKLCH.hueDistance(model, vibe) > 45 ? vibe : model
+    }
+
+    /// The model's tone, except where the vibe's own words set one
+    /// ("fireplace" is dark, whatever the model reads).
+    static func reconciledTone(model: PaletteTone, vibe: PaletteTone) -> PaletteTone {
+        var tone = model
+        if vibe.lightness != .balanced { tone.lightness = vibe.lightness }
+        if vibe.chroma != .balanced { tone.chroma = vibe.chroma }
+        return tone
+    }
+
     /// Whether the vibe asks for one color family ("monochrome", "tonal").
     static func namesSingleColor(_ words: [String]) -> Bool {
         words.contains { ["monochrome", "monochromatic", "tonal", "mono", "single", "onecolor"].contains($0) }

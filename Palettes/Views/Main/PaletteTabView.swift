@@ -266,6 +266,12 @@ struct PaletteTabView: View {
         case .colors:
             guard !onboardingWanted else { return }
             afterClosingSheets { selectedTab = .colors }
+        case .favoriteColors:
+            guard !onboardingWanted else { return }
+            afterClosingSheets {
+                selectedTab = .colors
+                router.showsFavoriteColors = true
+            }
         case .newPalette, .newColor, .scanColor, .scanPalette:
             break // QuickAction above
         }

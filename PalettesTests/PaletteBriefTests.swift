@@ -18,6 +18,28 @@ final class PaletteBriefTests: XCTestCase {
         XCTAssertEqual(PaletteBrief.resolvedSize(requested: 10, locked: 0, suggested: 5), 10)
     }
 
+    func testFireplaceWarmthReadsAsDarkOrange() {
+        let brief = PaletteBrief.heuristic(from: "fireplace warmth")
+        XCTAssertEqual(brief.hue.map(ColorVocabulary.family(forHue:)), .orange)
+        XCTAssertEqual(brief.tone.lightness, .dark)
+    }
+
+    func testVibeWordsOverruleAFarModelHue() {
+        // Model said "rose" (5) for a fireplace (52): the vibe's words win.
+        XCTAssertEqual(PaletteBrief.reconciledHue(model: 5, vibe: 52), 52)
+        // Close enough: the model's finer pick stays.
+        XCTAssertEqual(PaletteBrief.reconciledHue(model: 75, vibe: 52), 75)
+        XCTAssertEqual(PaletteBrief.reconciledHue(model: nil, vibe: 52), 52)
+        XCTAssertEqual(PaletteBrief.reconciledHue(model: 200, vibe: nil), 200)
+    }
+
+    func testVibeToneWordsOverruleTheModel() {
+        let model = PaletteTone(lightness: .light, chroma: .muted)
+        let tone = PaletteBrief.reconciledTone(model: model, vibe: PaletteTone(lightness: .dark, chroma: .balanced))
+        XCTAssertEqual(tone, PaletteTone(lightness: .dark, chroma: .muted))
+        XCTAssertEqual(PaletteBrief.reconciledTone(model: model, vibe: .balanced), model)
+    }
+
     func testHeuristicSuggestsNoSize() {
         XCTAssertNil(PaletteBrief.heuristic(from: "calm forest").suggestedSize)
     }

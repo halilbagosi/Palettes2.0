@@ -19,6 +19,8 @@ nonisolated enum WidgetLink: Equatable, Sendable {
     case copyColor(UUID)
     case library
     case colors
+    /// The Colors tab with its Favorites filter on (small Favorite Colors widget).
+    case favoriteColors
 
     static let scheme = "palettes"
 
@@ -35,6 +37,7 @@ nonisolated enum WidgetLink: Equatable, Sendable {
         case .copyColor(let id): path = "copy/color/\(id.uuidString)"
         case .library: path = "library"
         case .colors: path = "colors"
+        case .favoriteColors: path = "colors/favorites"
         }
         return URL(string: "\(Self.scheme)://\(path)")!
     }
@@ -50,6 +53,9 @@ nonisolated enum WidgetLink: Equatable, Sendable {
             self = .library
         case ("colors", 0):
             self = .colors
+        case ("colors", 1):
+            guard parts[0].lowercased() == "favorites" else { return nil }
+            self = .favoriteColors
         case ("palette", 1):
             guard let id = UUID(uuidString: parts[0]) else { return nil }
             self = .palette(id)

@@ -29,8 +29,19 @@ final class LooksAutoNamedTests: XCTestCase {
         XCTAssertFalse(ColorNamer.looksAutoNamed("", hex: hex))
     }
 
-    func testAutoNameOfAnotherColorIsNotAuto() {
+    /// A namer name that isn't this hex's today (an alternate picked to
+    /// avoid a sibling, or an older namer's pick) still follows an edit.
+    func testNamerShapedNameIsAuto() {
         let blue = ColorNamer.name(forHex: "#1E3A8A")
-        XCTAssertFalse(ColorNamer.looksAutoNamed(blue, hex: hex))
+        XCTAssertTrue(ColorNamer.looksAutoNamed(blue, hex: hex))
+        XCTAssertTrue(ColorNamer.looksAutoNamed("Soft Coral", hex: hex))
+        XCTAssertTrue(ColorNamer.looksAutoNamed("Untitled", hex: hex))
+        XCTAssertTrue(ColorNamer.looksAutoNamed("Crimson (#AB1234)", hex: hex))
+    }
+
+    func testNamesThatOnlyContainAColorWordAreNotAuto() {
+        XCTAssertFalse(ColorNamer.looksAutoNamed("Brand Coral", hex: hex))
+        XCTAssertFalse(ColorNamer.looksAutoNamed("Soft Soft Coral", hex: hex))
+        XCTAssertFalse(ColorNamer.looksAutoNamed("Coral For Kitchen", hex: hex))
     }
 }
