@@ -129,9 +129,8 @@ enum PaletteNamer {
         }
     }
 
-    // Local on purpose; the controller swaps in the shared `NameCase.titled`.
     private static func titleCased(_ word: String) -> String {
-        word.prefix(1).uppercased() + word.dropFirst()
+        NameCase.titled(word)
     }
 
     /// Builds a title from what the palette actually looks like: a character
