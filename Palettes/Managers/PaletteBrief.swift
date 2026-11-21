@@ -34,7 +34,8 @@ struct PaletteBrief: Equatable {
         let words = ColorVocabulary.tokens(vibe)
         let hues = vibeHues(in: words)
         let hue = hues.first
-        let secondaryHue = secondHue(after: hue, in: hues)
+        // A monochrome or single-color vibe has no second hue.
+        let secondaryHue = namesSingleColor(words) ? nil : secondHue(after: hue, in: hues)
 
         var tone = PaletteTone.balanced
         if words.contains(where: ColorVocabulary.darkToneWords.contains) {
@@ -61,6 +62,11 @@ struct PaletteBrief: Equatable {
         return PaletteBrief(hue: hue, secondaryHue: secondaryHue, tone: tone, scheme: scheme)
     }
 
+    /// Whether the vibe asks for one color family ("monochrome", "tonal").
+    static func namesSingleColor(_ words: [String]) -> Bool {
+        words.contains { ["monochrome", "monochromatic", "tonal", "mono", "single", "onecolor"].contains($0) }
+    }
+
     /// The hues a vibe's words imply, in the order the main color is chosen:
     /// color words first, then place and mood words, each in reading order.
     static func vibeHues(in words: [String]) -> [Double] {
@@ -77,8 +83,11 @@ struct PaletteBrief: Equatable {
 
     /// The final palette size: an explicit request wins, else the model's
     /// suggestion, else 6. Never below the number of locked colors; 2...12.
-    static func resolvedSize(requested: Int?, locked: Int, suggested: Int?) -> Int {
-        min(12, max(2, max(locked, requested ?? suggested ?? 6)))
+    /// An interface mode (`interface`) never takes a suggestion under 6: with
+    /// four colors Light and Dark are the same swatches, white and black swapped.
+    static func resolvedSize(requested: Int?, locked: Int, suggested: Int?, interface: Bool = false) -> Int {
+        let suggestion = interface ? suggested.map { max(6, $0) } : suggested
+        return min(12, max(2, max(locked, requested ?? suggestion ?? 6)))
     }
 
     /// The OKLCH hue of a color word such as "terracotta" or "navy blue":

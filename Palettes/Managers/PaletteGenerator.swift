@@ -46,7 +46,7 @@ struct GeneratedBrief {
     var mainColor: String
 
     @Guide(description: "A second plain color word when the vibe names two things with different colors, such as 'ocean sunset' (main color blue, second color orange) or 'forest at dusk'. Empty when the vibe is about a single color.")
-    var secondColor: String
+    var secondColor: String?
 
     @Guide(description: "How light or dark the palette should feel overall")
     var lightness: BriefLightness
@@ -181,11 +181,13 @@ extension PaletteBrief {
         }
         let read = PaletteBrief.heuristic(from: vibe)
         let hue = PaletteBrief.hue(forColorWord: model.mainColor) ?? read.hue
-        let second = model.secondColor.trimmingCharacters(in: .whitespacesAndNewlines)
+        let second = (model.secondColor ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         // The model's second color, else the second hue the vibe's own words
         // carry; either only counts when it sits clear of the main hue.
-        let secondary = PaletteBrief.hue(forColorWord: second).flatMap { PaletteBrief.secondHue(after: hue, in: [$0]) }
-            ?? PaletteBrief.secondHue(after: hue, in: PaletteBrief.vibeHues(in: ColorVocabulary.tokens(vibe)))
+        // The model's second color never overrides a monochrome vibe.
+        let secondary = PaletteBrief.namesSingleColor(ColorVocabulary.tokens(vibe)) ? nil
+            : (second.isEmpty ? nil : PaletteBrief.hue(forColorWord: second).flatMap { PaletteBrief.secondHue(after: hue, in: [$0]) })
+            ?? read.secondaryHue
         self.init(
             hue: hue,
             secondaryHue: secondary,
@@ -227,6 +229,8 @@ enum PaletteGenerator {
     ///   refine it later.
     /// - Parameter namingTimeout: how long the colors wait for the model's
     ///   names before filling on fallback names (see `onLateNaming`).
+    /// - Parameter nameVibe: the vibe the palette's title follows, when it
+    ///   differs from `vibe` (which also carries described changes).
     /// - Parameter namer: replaces the model's naming step (tests).
     static func generate(
         baseColors: [BaseColor],
@@ -235,6 +239,7 @@ enum PaletteGenerator {
         scheme: HarmonyScheme = .auto,
         existingNames: [String] = [],
         refining: Refinement? = nil,
+        nameVibe: String? = nil,
         namingTimeout: Duration = GenerationPacing.namingTimeout,
         namer: Namer? = nil,
         onRecipe: (@MainActor (GenerationRecipe) -> Void)? = nil,
@@ -280,7 +285,7 @@ enum PaletteGenerator {
             }
             recipe = GenerationRecipe(
                 brief: brief,
-                size: PaletteBrief.resolvedSize(requested: size, locked: locked.count, suggested: brief.suggestedSize),
+                size: PaletteBrief.resolvedSize(requested: size, locked: locked.count, suggested: brief.suggestedSize, interface: resolvedScheme.isUIMode),
                 scheme: resolvedScheme,
                 seed: UInt64.random(in: .min ... .max)
             )
@@ -315,9 +320,14 @@ enum PaletteGenerator {
         }
         let unnamed = hexCodes.indices.filter { preferred[$0] == nil }
         let modelVibe = trimmedVibe.isEmpty ? nil : trimmedVibe
+        let titleVibe = nameVibe ?? modelVibe
+        let arrived = ArrivedNames()
         let namingTask = Task { @MainActor in
-            if let namer { return await namer(hexCodes, unnamed, modelVibe) }
-            return await modelNames(hexes: hexCodes, unnamed: unnamed, vibe: modelVibe)
+            let result: Naming
+            if let namer { result = await namer(hexCodes, unnamed, modelVibe) }
+            else { result = await modelNames(hexes: hexCodes, unnamed: unnamed, vibe: modelVibe) }
+            arrived.set(result)
+            return result
         }
         var finished = false
         defer { if !finished { namingTask.cancel() } }
@@ -331,7 +341,7 @@ enum PaletteGenerator {
                 // The model's title is kept only when it's specific, names only
                 // colors the palette has, and is unused; otherwise a descriptive
                 // title is derived from the palette's main color.
-                name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames, vibe: modelVibe),
+                name: PaletteNamer.resolvedName(aiName: names.title, hexes: hexCodes, existingNames: existingNames, vibe: titleVibe),
                 colors: colors,
                 hexCodes: hexCodes,
                 colorNames: ColorNamer.uniqueNames(forHexes: hexCodes, preferred: preferred),
@@ -344,7 +354,7 @@ enum PaletteGenerator {
         // renamed afterwards. With a late-naming callback the wait is
         // bounded; at the timeout the colors fill on fallback names and the
         // model's names follow if they arrive.
-        let names: Naming?
+        var names: Naming?
         if onLateNaming != nil {
             names = await withTaskCancellationHandler {
                 await NamingRace.firstResult(of: namingTask, within: namingTimeout)
@@ -370,9 +380,11 @@ enum PaletteGenerator {
         }
         try Task.checkCancellation()
 
-        if let names {
+        // Names that arrived after the timeout but before the fill ended
+        // ship with the result, so nothing is delivered late.
+        if let final = names ?? arrived.value {
             finished = true
-            return assemble(names)
+            return assemble(final)
         }
         // Timed out: the caller owns the late task. Cancelling it stops the
         // model call and guarantees `onLateNaming` never fires afterwards.
@@ -592,6 +604,16 @@ enum GenerationPacing {
     static func waitsBeforeRevealing(colorAt index: Int) -> Bool { index > 0 }
 }
 
+/// The naming result as soon as it exists, readable without waiting.
+@available(iOS 26.0, *)
+private final class ArrivedNames: @unchecked Sendable {
+    nonisolated deinit {}
+    private let lock = NSLock()
+    private var naming: PaletteGenerator.Naming?
+    func set(_ value: PaletteGenerator.Naming) { lock.lock(); naming = value; lock.unlock() }
+    var value: PaletteGenerator.Naming? { lock.lock(); defer { lock.unlock() }; return naming }
+}
+
 enum NamingRace {
     /// The task's value if it finishes within `timeout`, otherwise nil. The
     /// task itself keeps running either way.
@@ -600,10 +622,13 @@ enum NamingRace {
         // child, and awaiting another task's value ignores cancellation.
         await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
             let once = OnceBox<T?>(continuation)
-            Task { once.resume(await task.value) }
-            Task {
+            let sleeper = Task {
                 try? await Task.sleep(for: timeout)
                 once.resume(nil)
+            }
+            Task {
+                once.resume(await task.value)
+                sleeper.cancel()
             }
         }
     }

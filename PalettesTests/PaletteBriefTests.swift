@@ -75,6 +75,11 @@ final class PaletteBriefTests: XCTestCase {
         XCTAssertEqual(brief.secondaryHue, 45)
     }
 
+    func testMonochromeVibesHaveNoSecondaryHue() {
+        XCTAssertNil(PaletteBrief.heuristic(from: "monochrome ocean sunset").secondaryHue)
+        XCTAssertNil(PaletteBrief.heuristic(from: "tonal ocean sunset").secondaryHue)
+    }
+
     func testOneColorVibesHaveNoSecondaryHue() {
         XCTAssertNil(PaletteBrief.heuristic(from: "calm forest").secondaryHue)
         // Two words for the same family are still one color.

@@ -43,6 +43,7 @@ enum PaletteNamer {
             return candidate
         }
         if !keywords.isEmpty, let name = vibeName(keywords: keywords, hexes: hexes, taken: taken) {
+            // (Plausible for the colors: see `vibeName`.)
             return name
         }
         return descriptiveName(forHexes: hexes, existingNames: existingNames)
@@ -56,6 +57,9 @@ enum PaletteNamer {
         "feel", "feeling", "feels", "vibe", "vibes", "color", "colors", "colour", "colours", "palette",
         "theme", "style", "look", "something", "make", "give", "me", "my", "some", "very", "more", "less",
         "i", "want", "it", "is", "are", "be", "that", "this", "scheme", "inspired", "by", "mood",
+        // Words of a described change ("add teal", "no green") and of what the palette is for.
+        "add", "swap", "change", "replace", "turn", "use", "keep", "try", "fewer", "bit", "little", "too",
+        "not", "no", "without", "app", "website", "site", "brand", "logo", "dashboard", "ui", "page",
     ]
 
     /// The vibe's words that can name a palette, in reading order: no filler
@@ -118,7 +122,11 @@ enum PaletteNamer {
         for word in character.prefix(2) {
             for closer in closers.prefix(2) { candidates.append("\(word) \(base) \(closer)") }
         }
-        return candidates.first { !taken.contains($0.lowercased()) }
+        // A title that names a color the palette doesn't have ("Blue Sunset" on
+        // the user's oranges) would mislead.
+        return candidates.first {
+            !taken.contains($0.lowercased()) && ColorVocabulary.isPlausibleTitle($0, forHexes: hexes)
+        }
     }
 
     // Local on purpose; the controller swaps in the shared `NameCase.titled`.

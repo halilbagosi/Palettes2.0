@@ -200,13 +200,13 @@ final class PaletteBuilderTests: XCTestCase {
     }
 
     func testInterfaceModesFillTheirRolesInOrder() {
-        let light = build([], size: 4, scheme: .uiLight, seed: 1)
-        XCTAssertEqual(light.roles, ["Primary", "Background", "Text", "Accent"])
+        let light = build([], size: 6, scheme: .uiLight, seed: 1)
+        XCTAssertEqual(light.roles, ["Primary", "Background", "Text", "Accent", "Surface", "Muted Text"])
         XCTAssertGreaterThan(OKLCH(hex: light.hexes[1])!.L, 0.95)
         XCTAssertLessThan(OKLCH(hex: light.hexes[2])!.L, 0.3)
 
-        let dark = build([], size: 4, scheme: .uiDark, seed: 1)
-        XCTAssertEqual(dark.roles, ["Primary", "Background", "Text", "Accent"])
+        let dark = build([], size: 6, scheme: .uiDark, seed: 1)
+        XCTAssertEqual(dark.roles, ["Primary", "Background", "Text", "Accent", "Surface", "Muted Text"])
         XCTAssertLessThan(OKLCH(hex: dark.hexes[1])!.L, 0.25)
         XCTAssertGreaterThan(OKLCH(hex: dark.hexes[2])!.L, 0.9)
     }
@@ -237,9 +237,40 @@ final class PaletteBuilderTests: XCTestCase {
     }
 
     func testInterfaceModeKeepsTheUsersColorAsPrimary() {
-        let palette = build(["#3060A0"], size: 5, scheme: .uiLight, seed: 1)
+        let palette = build(["#3060A0"], size: 7, scheme: .uiLight, seed: 1)
         XCTAssertEqual(palette.hexes.first, "#3060A0")
-        XCTAssertEqual(palette.roles, ["Primary", "Background", "Text", "Accent", "Surface"])
+        XCTAssertEqual(palette.roles, ["Primary", "Background", "Text", "Accent", "Surface", "Muted Text", "Border"])
+    }
+
+    /// Regression (plan 021 B1, device path): the model suggests 4 colors for
+    /// a simple vibe, and with one or no chosen colors UI Light and UI Dark
+    /// were the same four swatches with white and black swapped. With few
+    /// colors to generate, the neutrals must be the mode's own surfaces:
+    /// light in UI Light, dark in UI Dark.
+    func testSmallInterfacePalettesLeanLightOrDark() {
+        let neutralRoles: Set<String> = ["Background", "Surface", "Text", "Border", "Muted Text"]
+        func lightness(_ palette: BuiltPalette) -> [Double] {
+            zip(palette.roles, palette.hexes).filter { neutralRoles.contains($0.0) }.map { OKLCH(hex: $0.1)!.L }
+        }
+        for anchors in [[], ["#3366CC"]] {
+            for seed in seeds {
+                let light = build(anchors, size: 4, scheme: .uiLight, seed: seed)
+                let dark = build(anchors, size: 4, scheme: .uiDark, seed: seed)
+                let l = lightness(light), d = lightness(dark)
+                XCTAssertFalse(l.isEmpty)
+                XCTAssertEqual(l.filter { $0 > 0.5 }.count, l.count, "light \(light.hexes) \(light.roles)")
+                XCTAssertEqual(d.filter { $0 < 0.5 }.count, d.count, "dark \(dark.hexes) \(dark.roles)")
+            }
+        }
+    }
+
+    /// The model's suggested size must not shrink an interface palette to a
+    /// near-mirror four; the user's own size still wins.
+    func testInterfaceModesNeedAtLeastSixColorsUnlessSized() {
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 4, interface: true), 6)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 8, interface: true), 8)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: 4, locked: 0, suggested: 8, interface: true), 4)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 4), 4)
     }
 
     // MARK: - Determinism

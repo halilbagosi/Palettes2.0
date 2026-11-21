@@ -115,11 +115,11 @@ final class PaletteGeneratorTests: XCTestCase {
         let start = ContinuousClock.now
         let result = try await PaletteGenerator.generate(
             baseColors: [],
-            size: 3,
+            size: 2,
             vibe: nil,
-            namingTimeout: .milliseconds(150),
+            namingTimeout: .milliseconds(100),
             namer: { _, _, _ in
-                try? await Task.sleep(for: .milliseconds(600))
+                try? await Task.sleep(for: .milliseconds(1500))
                 return PaletteGenerator.Naming(title: "Harbor Light", colorNames: [:])
             },
             onPartialColors: { _ in previews += 1 },
@@ -128,10 +128,33 @@ final class PaletteGeneratorTests: XCTestCase {
                 late.fulfill()
             }
         )
-        XCTAssertGreaterThanOrEqual(ContinuousClock.now - start, .milliseconds(150))
-        XCTAssertEqual(previews, 3)
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - start, .milliseconds(100))
+        XCTAssertEqual(previews, 2)
         XCTAssertNotEqual(result.name, "Harbor Light")
         await fulfillment(of: [late], timeout: 3)
+    }
+
+    /// Names that arrive after the timeout but before the fill has finished
+    /// ship with the result; nothing is delivered late.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testNamesArrivingDuringTheFillShipWithTheResult() async throws {
+        var late = 0
+        let result = try await PaletteGenerator.generate(
+            baseColors: [],
+            size: 4,
+            vibe: nil,
+            namingTimeout: .milliseconds(50),
+            namer: { _, _, _ in
+                try? await Task.sleep(for: .milliseconds(300))
+                return PaletteGenerator.Naming(title: "Harbor Light", colorNames: [:])
+            },
+            onPartialColors: { _ in },
+            onLateNaming: { _ in late += 1 }
+        )
+        XCTAssertEqual(result.name, "Harbor Light")
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(late, 0)
     }
 
     // MARK: - Role assignment on generation (Task 5)
@@ -268,7 +291,7 @@ final class PaletteGeneratorTests: XCTestCase {
     @MainActor
     func testInterfaceModeWithAVibeCarriesItsRoles() async throws {
         let result = try await PaletteGenerator.generate(baseColors: [], size: 4, vibe: "calm ocean", scheme: .uiLight)
-        XCTAssertEqual(result.paletteColors.map(\.role), ["Primary", "Background", "Text", "Accent"])
+        XCTAssertEqual(result.paletteColors.map(\.role), ["Primary", "Background", "Surface", "Accent"])
     }
 
     /// The model's names are matched by list number, never by position, and

@@ -1050,6 +1050,8 @@ struct GenerateView: View {
             scheme: canChooseMode ? scheme : .auto,
             existingNames: appData.palettes.map { $0.name },
             refining: refining,
+            // The title follows the vibe itself, not the changes made since.
+            nameVibe: vibeDescription.trimmingCharacters(in: .whitespacesAndNewlines),
             onRecipe: { recipe in
                 resultRecipe = recipe
                 appliedChanges = changes

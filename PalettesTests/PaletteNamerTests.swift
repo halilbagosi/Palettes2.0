@@ -205,6 +205,19 @@ final class PaletteNamerTests: XCTestCase {
         XCTAssertEqual(PaletteNamer.vibeKeywords(nil), [])
     }
 
+    func testChangeAndPurposeWordsAreNotKeywords() {
+        XCTAssertEqual(PaletteNamer.vibeKeywords("ocean sunset. add teal"), ["ocean", "sunset", "teal"])
+        XCTAssertEqual(PaletteNamer.vibeKeywords("ocean website dashboard no"), ["ocean"])
+        XCTAssertEqual(PaletteNamer.vibeKeywords("brand logo for a bakery"), ["bakery"])
+    }
+
+    func testAVibeTitleNeverNamesAColorThePaletteLacks() {
+        // The user's oranges: "Blue Sunset" would mislead.
+        let oranges = ["#D96532", "#F3A06B", "#8C3A18"]
+        let name = PaletteNamer.resolvedName(aiName: nil, hexes: oranges, existingNames: [], vibe: "blue sunset")
+        XCTAssertFalse(name.contains("Blue"), name)
+    }
+
     func testAModelTitleThatRelatesToTheVibeIsKept() {
         // Shares a word.
         XCTAssertEqual(
