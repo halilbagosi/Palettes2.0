@@ -287,6 +287,18 @@ final class PaletteBuilderTests: XCTestCase {
     }
 
 
+    /// Generating again with the same color and mode is a request for
+    /// something new: every mode must give many different palettes over
+    /// ten seeds, not the same one (or the same three) each time.
+    func testRegeneratingTheSameRequestGivesNewPalettes() {
+        for scheme in HarmonyScheme.allCases {
+            for size in [4, 6] {
+                let palettes = Set((UInt64(0)..<10).map { build(["#3366CC"], size: size, scheme: scheme, seed: $0).hexes })
+                XCTAssertGreaterThanOrEqual(palettes.count, 7, "\(scheme) size \(size): only \(palettes.count) distinct palettes in 10 tries")
+            }
+        }
+    }
+
     // MARK: - Two-color vibes (plan 021 B3)
 
     /// "Ocean sunset": blue main, orange second hue. The palette must carry
