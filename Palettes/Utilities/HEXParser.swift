@@ -470,6 +470,51 @@ enum ColorNamer {
         return String(format: "#%02X%02X%02X", Int(entry.r), Int(entry.g), Int(entry.b))
     }
 
+    /// The dictionary entry nearest to `hex`, ignoring modifiers.
+    static func nearestEntryName(forHex hex: String) -> String? {
+        guard let c = parseHexComponents(hex) else { return nil }
+        let lab = sRGBtoLab(r: c.r, g: c.g, b: c.b)
+        return namedColorsLab
+            .min { ciede2000(lab, $0.lab) < ciede2000(lab, $1.lab) }?
+            .name
+    }
+
+    /// Whether `name` is one the app itself would have given `hex`: the
+    /// descriptive auto-name, the same avoiding `taken` (names already in the
+    /// library when the color was named), or the nearest dictionary entry.
+    /// Also any name shaped like the namer's output: a dictionary entry,
+    /// optionally after one modifier ("Soft Coral"), or a placeholder. Those
+    /// come from the namer even when not for exactly this hex today: an
+    /// alternate picked to avoid a sibling's name, or an older namer.
+    /// Comparison is case-insensitive and ignores surrounding whitespace.
+    /// Names the user typed that match none of these are never auto.
+    static func looksAutoNamed(_ name: String, hex: String, taken: Set<String> = []) -> Bool {
+        let key = NameCase.titled(name).lowercased()
+        guard !key.isEmpty else { return false }
+        if isNamerShaped(key) { return true }
+        var candidates = [
+            ColorNamer.name(forHex: hex),
+            ColorNamer.name(forHex: hex, avoiding: taken)
+        ]
+        if let nearest = nearestEntryName(forHex: hex) { candidates.append(nearest) }
+        return candidates.contains { $0.lowercased() == key }
+    }
+
+    private static let entryNameKeys: Set<String> = Set(namedColors.map { $0.name.lowercased() })
+
+    /// A lowercased name the namer could produce for some color.
+    private static func isNamerShaped(_ key: String) -> Bool {
+        if ["untitled", "unknown"].contains(key) { return true }
+        // The namer's last resort: "Crimson (#AB1234)".
+        var base = key
+        if let range = base.range(of: #" \(#[0-9a-f]{6}\)$"#, options: .regularExpression) {
+            base.removeSubrange(range)
+        }
+        if entryNameKeys.contains(base) { return true }
+        let parts = base.split(separator: " ", maxSplits: 1).map(String.init)
+        return parts.count == 2 && modifierWords.contains(parts[0]) && entryNameKeys.contains(parts[1])
+    }
+
     /// The best name for one color: the same descriptive naming a whole
     /// palette gets ("Dusty Rose", "Deep Teal"), not just the nearest
     /// dictionary entry. Names in `taken` (case-insensitive) are skipped,
@@ -578,7 +623,7 @@ enum ColorNamer {
             // 1. AI-supplied / user-supplied preferred name, if present,
             // non-empty, and not already claimed by an earlier index.
             if i < preferred.count, let raw = preferred[i] {
-                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = NameCase.titled(raw)
                 if !trimmed.isEmpty, !used.contains(trimmed.lowercased()) {
                     result[i] = trimmed
                     used.insert(trimmed.lowercased())

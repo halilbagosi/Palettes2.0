@@ -473,7 +473,9 @@ final class PaletteExporterTests: XCTestCase {
         let parsed = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(output.utf8)) as? [[String: String]]
         )
-        XCTAssertEqual(parsed[0]["name"], hostile)
+        // Names are Title Cased on the way in, which collapses the whitespace
+        // controls; the remaining escapes (quote, backslash, U+0001) still round-trip.
+        XCTAssertEqual(parsed[0]["name"], "Line Break \"q\" \\ \u{01}")
         XCTAssertEqual(parsed[1]["name"], "Émoji 🎨")
         XCTAssertEqual(parsed[1]["hex"], "#0000FF")
     }

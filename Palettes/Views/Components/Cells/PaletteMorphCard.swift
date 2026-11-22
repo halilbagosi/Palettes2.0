@@ -18,12 +18,15 @@ struct PaletteMorphCard: View, Equatable {
     var isGenerated: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
-    /// Copies the palette's HEX codes; wired to the copy button in both layouts.
+    /// One-tap copy (the saved format); wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
 
     /// Closures are excluded: callers' closures only read state that is also
     /// reflected in these value fields (e.g. `isSelecting`), so equal values
     /// render and behave identically. Lets `.equatable()` skip body re-runs.
+    /// `onCopy` must therefore not capture palette data (names, roles) that
+    /// `==` ignores: it hands over the palette's id and the live model is
+    /// resolved when the copy runs.
     static func == (lhs: PaletteMorphCard, rhs: PaletteMorphCard) -> Bool {
         lhs.paletteName == rhs.paletteName && lhs.colors == rhs.colors
             && lhs.isCompact == rhs.isCompact && lhs.isGenerated == rhs.isGenerated
@@ -143,6 +146,6 @@ struct PaletteMorphCard: View, Equatable {
         }
         .buttonStyle(.plain)
         .liquidGlass(.interactive, in: .circle)
-        .accessibilityLabel("Copy HEX")
+        .accessibilityLabel("Copy")
     }
 }

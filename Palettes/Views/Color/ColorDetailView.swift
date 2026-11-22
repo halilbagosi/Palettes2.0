@@ -113,7 +113,8 @@ struct ColorDetailView: View {
                     ColorEditView(
                         colorName: $appData.colors[idx].name,
                         hexCode: $appData.colors[idx].HEX,
-                        colorValue: $appData.colors[idx].color
+                        colorValue: $appData.colors[idx].color,
+                        nameIsGenerated: appData.colors[idx].isGenerated
                     )
                     .environmentObject(appData)
                     .presentationDetents([.large])

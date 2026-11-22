@@ -20,7 +20,14 @@ final class GenerationPacingTests: XCTestCase {
     func testFullRevealFitsWellInsideOnboardingBudget() {
         // Four colors, one locked: three waits. Must stay under ~1.5s.
         XCTAssertLessThan(GenerationPacing.colorInterval * 3, .milliseconds(1500))
-        XCTAssertLessThan(GenerationPacing.namingGrace, GenerationPacing.colorInterval * 2)
+    }
+
+    /// The orb waits for the model's names, so the wait must be long enough
+    /// for a model that answers and short enough that a stuck one isn't felt
+    /// as a hang.
+    func testNamingTimeoutIsBounded() {
+        XCTAssertGreaterThanOrEqual(GenerationPacing.namingTimeout, .seconds(3))
+        XCTAssertLessThanOrEqual(GenerationPacing.namingTimeout, .seconds(8))
     }
 
     func testRevealStepsWithAnchorShown() {

@@ -15,9 +15,10 @@ extension Color {
     }
 }
 
-/// Nothing to show yet. The whole widget opens the library.
+/// Nothing to show yet. The whole widget opens `link` (the library by default).
 struct EmptyWidgetView: View {
     let message: String
+    var link: WidgetLink = .library
 
     var body: some View {
         VStack(spacing: 8) {
@@ -31,7 +32,7 @@ struct EmptyWidgetView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .widgetURL(WidgetLink.library.url)
+        .widgetURL(link.url)
     }
 }
 
