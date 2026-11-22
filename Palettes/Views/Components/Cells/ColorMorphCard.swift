@@ -19,7 +19,7 @@ struct ColorMorphCard: View, Equatable {
     var isGenerated: Bool = false
     var isFavorite: Bool = false
     var isSelecting: Bool = false
-    /// Copies the HEX; wired to the copy button in both layouts.
+    /// One-tap copy (the saved format); wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
 
     /// Closures are excluded: callers' closures only read state that is also
@@ -169,6 +169,6 @@ struct ColorMorphCard: View, Equatable {
         }
         .buttonStyle(.plain)
         .liquidGlass(.interactive, in: .circle)
-        .accessibilityLabel("Copy HEX")
+        .accessibilityLabel("Copy")
     }
 }

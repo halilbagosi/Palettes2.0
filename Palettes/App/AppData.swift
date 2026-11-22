@@ -154,6 +154,7 @@ class AppData: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "didSeedSampleData")
 
         load()
+        migrateTitleCaseNamesIfNeeded()
 
         // Persist whenever the arrays change, debounced so bursts of edits
         // (e.g. saving a generated palette) write once.
@@ -320,6 +321,22 @@ class AppData: ObservableObject {
         while reloadGeneration == startGeneration, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
+    }
+
+    static let titleCaseMigrationKey = "didTitleCaseNames.v1"
+
+    /// One-time pass that writes Title Case names back to the store. The view
+    /// models title every name as they load (any word not already
+    /// capitalized, not just all-lowercase names), so this only persists the
+    /// result. The flag is set only once there is
+    /// a library to migrate (a fresh install, or a CloudKit import still
+    /// pending, tries again next launch).
+    func migrateTitleCaseNamesIfNeeded(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: Self.titleCaseMigrationKey) else { return }
+        guard !colors.isEmpty || !palettes.isEmpty else { return }
+        defaults.set(true, forKey: Self.titleCaseMigrationKey)
+        persistColors(colors)
+        persistPalettes(palettes)
     }
 
     private func load() {
@@ -806,19 +823,21 @@ class AppData: ObservableObject {
 
     /// `preferred` if no library color uses it, else a fresh name for `hex`.
     func uniqueColorName(preferred: String, forHex hex: String) -> String {
-        let trimmed = preferred.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = NameCase.titled(preferred)
         guard !trimmed.isEmpty, existingColor(named: trimmed) == nil else { return uniqueColorName(forHex: hex) }
         return trimmed
     }
 
     /// Returns the palette with this name (case-insensitive), if any.
     func existingPalette(named name: String) -> PaletteViewModel? {
-        palettes.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let titled = NameCase.titled(name)
+        return palettes.first { $0.name.caseInsensitiveCompare(titled) == .orderedSame }
     }
 
     /// Returns the library color with this name (case-insensitive), if any.
     func existingColor(named name: String) -> ColorViewModel? {
-        colors.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let titled = NameCase.titled(name)
+        return colors.first { $0.name.caseInsensitiveCompare(titled) == .orderedSame }
     }
 
     // MARK: - Favorites

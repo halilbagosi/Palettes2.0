@@ -13,7 +13,7 @@ final class WidgetLinkTests: XCTestCase {
 
     private var allLinks: [WidgetLink] {
         [.palette(id), .color(id), .newPalette, .newColor, .scanColor, .scanPalette,
-         .copyPalette(id), .copyColor(id), .library]
+         .copyPalette(id), .copyColor(id), .library, .colors, .favoriteColors]
     }
 
     func testEveryLinkRoundTrips() {
@@ -27,6 +27,8 @@ final class WidgetLinkTests: XCTestCase {
         XCTAssertEqual(WidgetLink.scanPalette.url.absoluteString, "palettes://new/scan-palette")
         XCTAssertEqual(WidgetLink.copyColor(id).url.absoluteString, "palettes://copy/color/\(id.uuidString)")
         XCTAssertEqual(WidgetLink.library.url.absoluteString, "palettes://library")
+        XCTAssertEqual(WidgetLink.colors.url.absoluteString, "palettes://colors")
+        XCTAssertEqual(WidgetLink.favoriteColors.url.absoluteString, "palettes://colors/favorites")
     }
 
     func testAcceptsLowercaseUUIDs() {

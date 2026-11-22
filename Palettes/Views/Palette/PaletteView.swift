@@ -15,6 +15,7 @@ struct PaletteView: View {
     @State private var paletteToDelete: PaletteViewModel?
     @State private var paletteToEdit: PaletteViewModel?
     @State private var paletteToExport: PaletteViewModel?
+    @State private var quickCopyRequest: QuickCopyRequest?
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
@@ -153,6 +154,7 @@ struct PaletteView: View {
                 .navigationDestination(for: ColorViewModel.self) { color in
                     ColorDetailView(colorItem: color)
                 }
+                .quickCopyDialog($quickCopyRequest)
                 .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
                 .sensoryFeedback(.selection, trigger: selectedIDs) { _, _ in isSelecting }
                 .sensoryFeedback(.impact(weight: .light), trigger: isSelecting)
@@ -333,7 +335,7 @@ struct PaletteView: View {
             isGenerated: palette.isGenerated,
             isFavorite: palette.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onCopy: { copyToClipboard(palette.hexCodes.joined(separator: ", "), label: "Copied HEX") }
+            onCopy: { QuickCopy.perform(.palette(id: palette.id), appData: appData, ask: $quickCopyRequest) }
         )
         .equatable()
         .hoverEffect(.lift)

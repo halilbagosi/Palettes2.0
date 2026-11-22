@@ -82,7 +82,11 @@ struct GenerationResultView: View {
                 ColorEditView(
                     colorName: $paletteColors[target.id].name,
                     hexCode: $paletteColors[target.id].hex,
-                    colorValue: $paletteColors[target.id].color
+                    colorValue: $paletteColors[target.id].color,
+                    siblingNames: Set(paletteColors.indices
+                        .filter { $0 != target.id }
+                        .map { paletteColors[$0].name }),
+                    nameIsGenerated: true
                 )
                 .environmentObject(appData)
                 .presentationDetents([.large])
