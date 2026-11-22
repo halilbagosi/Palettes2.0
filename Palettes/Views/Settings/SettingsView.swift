@@ -95,6 +95,17 @@ struct SettingsView: View {
         appData.palettes.isEmpty && appData.colors.isEmpty
     }
 
+    @State private var colorCopyFormat = CopyPreference.colorFormat()
+    @State private var paletteCopyFormat = CopyPreference.paletteFormat()
+
+    private var colorCopyBinding: Binding<ColorCopyFormat?> {
+        Binding(get: { colorCopyFormat }, set: { colorCopyFormat = $0; CopyPreference.setColorFormat($0) })
+    }
+
+    private var paletteCopyBinding: Binding<PaletteCopyFormat?> {
+        Binding(get: { paletteCopyFormat }, set: { paletteCopyFormat = $0; CopyPreference.setPaletteFormat($0) })
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -133,6 +144,25 @@ struct SettingsView: View {
                     Button("Cancel", role: .cancel) {}
                 } message: {
                     Text(ICloudSyncCopy.turnOffMessage)
+                }
+
+                Section {
+                    Picker(selection: colorCopyBinding) {
+                        Text("Ask next time").tag(ColorCopyFormat?.none)
+                        ForEach(ColorCopyFormat.allCases) { Text($0.displayName).tag(ColorCopyFormat?.some($0)) }
+                    } label: {
+                        SettingsRowLabel(title: "Colors", systemImage: "paintpalette.fill", tint: .pink)
+                    }
+                    Picker(selection: paletteCopyBinding) {
+                        Text("Ask next time").tag(PaletteCopyFormat?.none)
+                        ForEach(PaletteCopyFormat.allCases) { Text($0.displayName).tag(PaletteCopyFormat?.some($0)) }
+                    } label: {
+                        SettingsRowLabel(title: "Palettes", systemImage: "square.grid.2x2.fill", tint: .orange)
+                    }
+                } header: {
+                    Text("Copy")
+                } footer: {
+                    Text("What the copy button on a color or palette copies.")
                 }
 
                 Section {

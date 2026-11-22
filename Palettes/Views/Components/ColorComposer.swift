@@ -17,6 +17,20 @@ import PhotosUI
 ///
 /// Hosts own `color` and `name` and supply the navigation title and toolbar.
 struct ColorComposer: View {
+    /// Whether the name tracks the color.
+    enum NamingPolicy: Equatable {
+        /// New colors: the name follows the color until the user types one of
+        /// their own.
+        case follows
+        /// The name never changes with the color.
+        case keeps
+        /// Existing colors: the name follows the color only if it still looks
+        /// auto-generated for `originalHex`; a name the user typed stays.
+        /// `nameIsGenerated`: the color came from Apple Intelligence, whose
+        /// names count as auto-generated too.
+        case followsIfAuto(originalHex: String, nameIsGenerated: Bool = false)
+    }
+
     @Binding var color: Color
     @Binding var name: String
     /// Edit Color: the sheet is tinted with the color.
@@ -24,9 +38,10 @@ struct ColorComposer: View {
     /// New Color: a photo button beside the color wheel; a picked photo shows
     /// above the sliders and its colors can be picked off it.
     var allowsPhoto: Bool = false
-    /// New colors: the name follows the color until the user types one of
-    /// their own. Existing colors keep their name.
-    var namesFollowColor: Bool = false
+    /// How the name reacts to the color changing.
+    var naming: NamingPolicy = .keeps
+    /// Names a following name must also avoid (e.g. a palette's other colors).
+    var extraTakenNames: Set<String> = []
     /// A short status under the name, e.g. "Already in this palette".
     var notice: String? = nil
     /// When set, a "Tag" card appears first in the scrolling part; tapping it
@@ -87,6 +102,11 @@ struct ColorComposer: View {
     /// writes coming back through `color` aren't applied twice.
     @State private var syncedHex = ""
     @State private var nameIsCustom = false
+    /// Resolved once on appear from `naming`: whether a color change may
+    /// rename the color, and (for an auto name) what to restore when the
+    /// color returns to its original.
+    @State private var followsName = false
+    @State private var autoOriginal: (hex: String, name: String)?
     @State private var didAppear = false
 
     /// The notice text last shown, so it can fade out without the row
@@ -153,7 +173,7 @@ struct ColorComposer: View {
         .onAppear {
             guard !didAppear else { return }
             didAppear = true
-            nameIsCustom = !namesFollowColor || !name.isEmpty
+            resolveNaming()
             shownNotice = notice ?? ""
             apply(color, from: .outside)
             if allowsPhoto, consumeScanRequest() { openScanAfterSheet() }
@@ -605,8 +625,35 @@ struct ColorComposer: View {
 
         color = newColor
 
-        if namesFollowColor, !nameIsCustom {
-            name = suggestedName(forRawHex: raw)
+        if followsName, !nameIsCustom {
+            if let autoOriginal, autoOriginal.hex == Self.normalizedHex("#\(raw)") {
+                // Back at the original color (or never moved): its own name.
+                name = autoOriginal.name
+            } else {
+                name = suggestedName(forRawHex: raw)
+            }
+        }
+    }
+
+    private func resolveNaming() {
+        switch naming {
+        case .keeps:
+            followsName = false
+            nameIsCustom = true
+        case .follows:
+            followsName = true
+            nameIsCustom = !name.isEmpty
+        case .followsIfAuto(let originalHex, let nameIsGenerated):
+            let others = appData.colorNameSet.union(extraTakenNames)
+                .filter { $0.caseInsensitiveCompare(name) != .orderedSame }
+            if nameIsGenerated || ColorNamer.looksAutoNamed(name, hex: originalHex, taken: others) {
+                followsName = true
+                nameIsCustom = false
+                autoOriginal = (Self.normalizedHex(originalHex), name)
+            } else {
+                followsName = false
+                nameIsCustom = true
+            }
         }
     }
 
@@ -644,10 +691,18 @@ struct ColorComposer: View {
         if let existing = appData.colors.first(where: { $0.HEX.caseInsensitiveCompare("#\(raw)") == .orderedSame }) {
             return existing.name
         }
-        return appData.uniqueColorName(forHex: raw)
+        // Following an auto name: the color's own current name isn't taken.
+        let own = autoOriginal?.name
+        let taken = appData.colorNameSet.union(extraTakenNames).filter { own == nil || $0.caseInsensitiveCompare(own!) != .orderedSame }
+        return ColorNamer.name(forHex: raw, avoiding: taken)
     }
 
     // MARK: - Helpers
+
+    /// "#RRGGBB" uppercase for any hex string the app accepts.
+    static func normalizedHex(_ hex: String) -> String {
+        Color(hex: hex).map(hexKey) ?? hex.uppercased()
+    }
 
     /// "#RRGGBB" for a color, channels clamped to sRGB (wide-gamut picks can
     /// land outside it).

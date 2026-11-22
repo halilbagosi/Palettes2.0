@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ColorsView: View {
 
@@ -13,6 +14,7 @@ struct ColorsView: View {
     @State private var colorForNewPalette: ColorViewModel?
     @State private var colorToDelete: ColorViewModel?
     @State private var colorToEdit: ColorBindingWrapper?
+    @State private var quickCopyRequest: QuickCopyRequest?
     @State private var showDeleteAlert = false
     @State private var isSelecting = false
     @State private var selectedIDs: Set<UUID> = []
@@ -142,8 +144,18 @@ struct ColorsView: View {
                 .onChange(of: sortRaw) { refreshDisplayed() }
                 .onChange(of: originFilterRaw) { refreshDisplayed() }
                 .onChange(of: favoritesOnly) { refreshDisplayed() }
+                // Emits the current value on appear too, so a cold launch
+                // from the widget still lands filtered.
+                .onReceive(router.$showsFavoriteColors.filter { $0 }) { _ in
+                    router.showsFavoriteColors = false
+                    path = NavigationPath()
+                    originFilterRaw = LibraryOriginFilter.all.rawValue
+                    favoritesOnly = true
+                    refreshDisplayed()
+                }
                 .libraryTitle("Color", count: displayedColors.count, selectedCount: isSelecting ? selectedIDs.count : nil)
                 .featureIntro(.colors)
+                .quickCopyDialog($quickCopyRequest)
                 .navigationDestination(for: ColorViewModel.self) { color in
                     ColorDetailView(colorItem: color)
                 }
@@ -177,7 +189,8 @@ struct ColorsView: View {
                         ColorEditView(
                             colorName: $appData.colors[idx].name,
                             hexCode: $appData.colors[idx].HEX,
-                            colorValue: $appData.colors[idx].color
+                            colorValue: $appData.colors[idx].color,
+                            nameIsGenerated: appData.colors[idx].isGenerated
                         )
                         .environmentObject(appData)
                         .presentationDetents([.large])
@@ -291,7 +304,7 @@ struct ColorsView: View {
             isGenerated: color.isGenerated,
             isFavorite: color.isFavorite && !isSelecting,
             isSelecting: isSelecting,
-            onCopy: { copyToClipboard(color.HEX, label: "Copied HEX") }
+            onCopy: { QuickCopy.perform(.color(hex: color.HEX, color: color.color), appData: appData, ask: $quickCopyRequest) }
         )
         .equatable()
         .hoverEffect(.lift)

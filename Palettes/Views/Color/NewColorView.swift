@@ -33,7 +33,7 @@ struct NewColorView: View {
 
     var body: some View {
         NavigationStack {
-            ColorComposer(color: $color, name: $name, allowsPhoto: true, namesFollowColor: true, notice: notice)
+            ColorComposer(color: $color, name: $name, allowsPhoto: true, naming: .follows, notice: notice)
                 .navigationTitle("New Color")
                 .navigationBarTitleDisplayMode(.inline)
                 .solidSheetBar()

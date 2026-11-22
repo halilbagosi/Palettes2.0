@@ -13,18 +13,18 @@ struct PaletteListFace: View {
     let palette: WidgetSnapshot.Palette
     var caption: String? = nil
 
-    static let maxRows = 5
+    static let maxRows = 6
 
-    /// All rows when they fit; otherwise four and a "+N more" line.
-    private var shownCount: Int {
-        palette.hexCodes.count <= Self.maxRows ? palette.hexCodes.count : Self.maxRows - 1
-    }
+    /// All rows when they fit; otherwise `maxRows` and a "+N more" line.
+    static func shownCount(total: Int) -> Int { min(total, maxRows) }
+
+    private var shownCount: Int { Self.shownCount(total: palette.hexCodes.count) }
 
     var body: some View {
         VStack(spacing: 0) {
             SwatchStrip(hexes: palette.hexCodes)
-                .frame(maxHeight: .infinity)
-            VStack(alignment: .leading, spacing: 6) {
+                .frame(minHeight: 48, maxHeight: .infinity)
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(palette.name)
                         .font(.headline)
@@ -46,8 +46,10 @@ struct PaletteListFace: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(14)
-            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            // The text block takes the height it needs; the bands get the rest.
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -200,21 +200,77 @@ final class PaletteBuilderTests: XCTestCase {
     }
 
     func testInterfaceModesFillTheirRolesInOrder() {
-        let light = build([], size: 4, scheme: .uiLight, seed: 1)
-        XCTAssertEqual(light.roles, ["Primary", "Background", "Text", "Accent"])
+        let light = build([], size: 6, scheme: .uiLight, seed: 1)
+        XCTAssertEqual(light.roles, ["Primary", "Background", "Text", "Accent", "Surface", "Muted Text"])
         XCTAssertGreaterThan(OKLCH(hex: light.hexes[1])!.L, 0.95)
         XCTAssertLessThan(OKLCH(hex: light.hexes[2])!.L, 0.3)
 
-        let dark = build([], size: 4, scheme: .uiDark, seed: 1)
-        XCTAssertEqual(dark.roles, ["Primary", "Background", "Text", "Accent"])
+        let dark = build([], size: 6, scheme: .uiDark, seed: 1)
+        XCTAssertEqual(dark.roles, ["Primary", "Background", "Text", "Accent", "Surface", "Muted Text"])
         XCTAssertLessThan(OKLCH(hex: dark.hexes[1])!.L, 0.25)
         XCTAssertGreaterThan(OKLCH(hex: dark.hexes[2])!.L, 0.9)
     }
 
+    /// Regression (plan 021 B1): with several of the user's colors chosen they
+    /// take Primary, Secondary and Accent, and the few colors left over were
+    /// Background and Text, which Light and Dark both make as a near-white
+    /// and a near-black. The three modes then built the same set of swatches.
+    /// The leftovers must be the mode's own surfaces instead.
+    func testInterfaceModesDifferWhenTheUsersColorsFillTheRoles() {
+        let anchors = ["#3366CC", "#CC6633", "#339966"]
+        for seed in seeds {
+            let light = build(anchors, size: 5, scheme: .uiLight, seed: seed)
+            let dark = build(anchors, size: 5, scheme: .uiDark, seed: seed)
+            XCTAssertEqual(Array(light.hexes.prefix(3)), anchors)
+            XCTAssertEqual(Array(dark.hexes.prefix(3)), anchors)
+            for hex in light.hexes.dropFirst(3) {
+                XCTAssertGreaterThan(OKLCH(hex: hex)!.L, 0.85, "light generated \(light.hexes)")
+            }
+            for hex in dark.hexes.dropFirst(3) {
+                XCTAssertLessThan(OKLCH(hex: hex)!.L, 0.35, "dark generated \(dark.hexes)")
+            }
+            XCTAssertEqual(Array(light.roles.dropFirst(3)), ["Background", "Surface"])
+        }
+        // Auto builds tones of the user's colors, not interface surfaces.
+        let auto = build(anchors, size: 5, scheme: .auto, seed: 1)
+        XCTAssertNotEqual(auto.hexes, build(anchors, size: 5, scheme: .uiLight, seed: 1).hexes)
+    }
+
     func testInterfaceModeKeepsTheUsersColorAsPrimary() {
-        let palette = build(["#3060A0"], size: 5, scheme: .uiLight, seed: 1)
+        let palette = build(["#3060A0"], size: 7, scheme: .uiLight, seed: 1)
         XCTAssertEqual(palette.hexes.first, "#3060A0")
-        XCTAssertEqual(palette.roles, ["Primary", "Background", "Text", "Accent", "Surface"])
+        XCTAssertEqual(palette.roles, ["Primary", "Background", "Text", "Accent", "Surface", "Muted Text", "Border"])
+    }
+
+    /// Regression (plan 021 B1, device path): the model suggests 4 colors for
+    /// a simple vibe, and with one or no chosen colors UI Light and UI Dark
+    /// were the same four swatches with white and black swapped. With few
+    /// colors to generate, the neutrals must be the mode's own surfaces:
+    /// light in UI Light, dark in UI Dark.
+    func testSmallInterfacePalettesLeanLightOrDark() {
+        let neutralRoles: Set<String> = ["Background", "Surface", "Text", "Border", "Muted Text"]
+        func lightness(_ palette: BuiltPalette) -> [Double] {
+            zip(palette.roles, palette.hexes).filter { neutralRoles.contains($0.0) }.map { OKLCH(hex: $0.1)!.L }
+        }
+        for anchors in [[], ["#3366CC"]] {
+            for seed in seeds {
+                let light = build(anchors, size: 4, scheme: .uiLight, seed: seed)
+                let dark = build(anchors, size: 4, scheme: .uiDark, seed: seed)
+                let l = lightness(light), d = lightness(dark)
+                XCTAssertFalse(l.isEmpty)
+                XCTAssertEqual(l.filter { $0 > 0.5 }.count, l.count, "light \(light.hexes) \(light.roles)")
+                XCTAssertEqual(d.filter { $0 < 0.5 }.count, d.count, "dark \(dark.hexes) \(dark.roles)")
+            }
+        }
+    }
+
+    /// The model's suggested size must not shrink an interface palette to a
+    /// near-mirror four; the user's own size still wins.
+    func testInterfaceModesNeedAtLeastSixColorsUnlessSized() {
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 4, interface: true), 6)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 8, interface: true), 8)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: 4, locked: 0, suggested: 8, interface: true), 4)
+        XCTAssertEqual(PaletteBrief.resolvedSize(requested: nil, locked: 0, suggested: 4), 4)
     }
 
     // MARK: - Determinism
@@ -228,5 +284,42 @@ final class PaletteBuilderTests: XCTestCase {
                 != build(["#3366CC"], size: $0, scheme: .complementary, seed: 2).hexes
         }
         XCTAssertFalse(differing.isEmpty, "the seed should vary the palette")
+    }
+
+
+    /// Generating again with the same color and mode is a request for
+    /// something new: every mode must give many different palettes over
+    /// ten seeds, not the same one (or the same three) each time.
+    func testRegeneratingTheSameRequestGivesNewPalettes() {
+        for scheme in HarmonyScheme.allCases {
+            for size in [4, 6] {
+                let palettes = Set((UInt64(0)..<10).map { build(["#3366CC"], size: size, scheme: scheme, seed: $0).hexes })
+                XCTAssertGreaterThanOrEqual(palettes.count, 7, "\(scheme) size \(size): only \(palettes.count) distinct palettes in 10 tries")
+            }
+        }
+    }
+
+    // MARK: - Two-color vibes (plan 021 B3)
+
+    /// "Ocean sunset": blue main, orange second hue. The palette must carry
+    /// both, whichever scheme Auto draws (monochromatic included).
+    func testSecondaryHueShowsUpInTheGeneratedColors() {
+        for seed in seeds {
+            for scheme in [HarmonyScheme.auto, .complementary, .analogous, .triadic] {
+                let palette = PaletteBuilder.build(PaletteBuildRequest(
+                    anchors: [], size: 6, scheme: scheme, tone: .balanced, hue: 240, secondaryHue: 45, seed: seed))
+                let hues = palette.hexes.compactMap { OKLCH(hex: $0) }.filter { $0.C >= 0.05 }.map(\.h)
+                XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 240) <= 30 }, "\(scheme) \(seed) no blue in \(palette.hexes)")
+                XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 45) <= 35 }, "\(scheme) \(seed) no orange in \(palette.hexes)")
+            }
+        }
+    }
+
+    func testSecondaryHueIsIgnoredWithTheUsersColors() {
+        let with = PaletteBuilder.build(PaletteBuildRequest(
+            anchors: ["#3366CC"], size: 6, scheme: .complementary, hue: 240, secondaryHue: 45, seed: 3))
+        let without = PaletteBuilder.build(PaletteBuildRequest(
+            anchors: ["#3366CC"], size: 6, scheme: .complementary, hue: 240, seed: 3))
+        XCTAssertEqual(with, without)
     }
 }
