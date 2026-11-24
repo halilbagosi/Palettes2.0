@@ -83,13 +83,13 @@ struct ColorDetailView: View {
                 Button {
                     copyToClipboard(liveColor.HEX, label: "Copied HEX")
                 } label: {
-                    Label("Copy as HEX", systemImage: "number")
+                    Label("Copy HEX", systemImage: "number")
                 }
 
                 Button {
                     copyToClipboard(liveColor.color.rgbString, label: "Copied RGB")
                 } label: {
-                    Label("Copy as RGB", systemImage: "paintpalette")
+                    Label("Copy RGB", systemImage: "paintpalette")
                 }
 
                 Button {
@@ -98,6 +98,12 @@ struct ColorDetailView: View {
                     copyToClipboard(cssStr, label: "Copied CSS")
                 } label: {
                     Label("Export for CSS", systemImage: "curlybraces.square")
+                }
+
+                Button {
+                    PaletteImageRenderer.shareImage(for: liveColor)
+                } label: {
+                    Label("Export as PNG", systemImage: "photo")
                 }
 
                 Divider()
@@ -376,8 +382,7 @@ struct ColorDetailView: View {
     // MARK: - Actions
 
     private func shareColor() {
-        let textToShare = "Check out this color: \(liveColor.name) (\(liveColor.HEX))"
-        ShareSheetPresenter.present(items: [textToShare])
+        LinkSharer.share(liveColor)
     }
 
     private func deleteColor() {

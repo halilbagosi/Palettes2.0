@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 import WidgetKit
 
 extension Color {
@@ -36,6 +37,82 @@ struct EmptyWidgetView: View {
     }
 }
 
+// MARK: - Legibility in clear and tinted modes
+
+/// In the clear and tinted Home Screen styles (`widgetRenderingMode ==
+/// .accented`) the system draws all text and shapes in one tint, white in
+/// clear mode, whatever colour we set: dark text on a light swatch turns
+/// white on light. Only images marked full-colour keep their colours, so the
+/// dark backing that keeps text readable there is an image.
+struct WidgetScrim: View {
+    /// Dark enough that white text on it passes 4.5:1 over a near-white swatch.
+    static let opacity: CGFloat = 0.55
+
+    var body: some View {
+        Image(uiImage: Self.image)
+            .resizable()
+            .fullColorInAccentedModes()
+            .accessibilityHidden(true)
+    }
+
+    private static var image: UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1), format: format).image { context in
+            UIColor.black.withAlphaComponent(opacity).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+    }
+}
+
+private struct AccentedScrim: ViewModifier {
+    let onLight: Bool
+    let cornerRadius: CGFloat
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    func body(content: Content) -> some View {
+        if renderingMode == .accented && onLight {
+            // Grows outward (padding, then the same padding back) so the
+            // text stays exactly where it sits in full colour.
+            content
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background {
+                    WidgetScrim()
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                }
+                .padding(.horizontal, -6)
+                .padding(.vertical, -4)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    /// Puts a dark backing behind text on a light swatch, only in the clear
+    /// and tinted styles, where the text can't be dark itself.
+    func accentedScrim(onLight: Bool, cornerRadius: CGFloat = 8) -> some View {
+        modifier(AccentedScrim(onLight: onLight, cornerRadius: cornerRadius))
+    }
+}
+
+/// The pill behind `NameCapsule` and `WidgetCaption`: light or dark glass in
+/// full colour, the image scrim in clear and tinted styles (see `WidgetScrim`).
+private struct PillBackground: View {
+    let onLight: Bool
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    var body: some View {
+        if renderingMode == .accented {
+            WidgetScrim().clipShape(Capsule())
+        } else {
+            Capsule().fill(onLight ? Color.white.opacity(0.45) : Color.black.opacity(0.22))
+        }
+    }
+}
+
 struct NameCapsule: View {
     let text: String
     let onLight: Bool
@@ -47,7 +124,7 @@ struct NameCapsule: View {
             .foregroundStyle(Color.widgetForeground(onLight: onLight))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(onLight ? Color.white.opacity(0.45) : Color.black.opacity(0.22), in: Capsule())
+            .background { PillBackground(onLight: onLight) }
     }
 }
 
@@ -82,6 +159,6 @@ struct WidgetCaption: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             // Same pill as NameCapsule, so it reads on any colour.
-            .background(onLight ? Color.white.opacity(0.45) : Color.black.opacity(0.22), in: Capsule())
+            .background { PillBackground(onLight: onLight) }
     }
 }

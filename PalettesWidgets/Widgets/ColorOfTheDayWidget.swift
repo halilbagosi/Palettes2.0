@@ -34,7 +34,7 @@ struct ColorOfTheDayWidget: Widget {
         }
         .configurationDisplayName("Color of the Day")
         .description("A different color from your library every day.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
 }
