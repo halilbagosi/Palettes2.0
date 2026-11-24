@@ -67,7 +67,7 @@ enum FeatureIntro: String, CaseIterable {
                 .init(symbol: "eyedropper", title: "Pick, scan or choose",
                       text: "Set a color by hand, scan it with the camera, or pull it from a photo."),
                 .init(symbol: "hand.tap", title: "Press and hold a color",
-                      text: "Copy it as HEX or RGB, export it for CSS, share or edit it."),
+                      text: "Copy its HEX or RGB, export it as CSS or PNG, share or edit it."),
                 .init(symbol: "line.3.horizontal.decrease.circle", title: "Make it yours",
                       text: "The \u{2022}\u{2022}\u{2022} menu switches to a compact grid and filters your colors."),
             ]

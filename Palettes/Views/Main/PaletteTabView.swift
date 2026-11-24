@@ -29,6 +29,10 @@ struct PaletteTabView: View {
     /// dropped, and with a constant binding SwiftUI never asks again.
     @State private var isOnboardingPresented = false
     @State private var presentTask: Task<Void, Never>?
+    /// A shared palette or color link on screen for Save or Discard.
+    @State private var sharedLink: SharedLink?
+    /// One that arrived during onboarding, shown once it's done.
+    @State private var pendingSharedLink: SharedLink?
 
     private var showsOnboarding: Bool { !didCompleteOnboarding }
 
@@ -63,6 +67,14 @@ struct PaletteTabView: View {
             }
         }
         .onOpenURL { url in
+            if let shared = SharedLink(url: url) {
+                // Same settle delay as below.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    receive(shared)
+                }
+                return
+            }
             guard let link = WidgetLink(url: url) else { return }
             // Same settle delay as quick actions: on a cold launch the URL
             // arrives during the first layout, when a tab switch is dropped.
@@ -100,6 +112,25 @@ struct PaletteTabView: View {
             if selectedTab == .generate, !AppleIntelligence.isDeviceSupported {
                 selectedTab = .palettes
             }
+        }
+        .sheet(item: $sharedLink) { link in
+            SharedLinkSheet(link: link) { destination in
+                // Once the sheet has gone, so the push isn't dropped.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    switch destination {
+                    case .palette(let id):
+                        selectedTab = .palettes
+                        appData.pendingOpenPaletteID = id
+                    case .color(let id):
+                        selectedTab = .colors
+                        appData.pendingOpenColorID = id
+                    }
+                }
+            }
+            .environmentObject(appData)
+            .presentationDetents([.large])
+            .formPresentationSizing()
         }
         .sheet(isPresented: $router.isShowingSettings, onDismiss: {
             if replay.consume() { OnboardingKeys.resetForReplay() }
@@ -151,6 +182,34 @@ struct PaletteTabView: View {
             } else {
                 presentTask?.cancel()
                 isOnboardingPresented = false
+                if let pending = pendingSharedLink {
+                    pendingSharedLink = nil
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(900))
+                        receive(pending)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A shared palette or color link (see SharedLink): shown for Save or
+    /// Discard over the library, or after onboarding if that's still up.
+    private func receive(_ shared: SharedLink) {
+        guard !onboardingWanted else {
+            pendingSharedLink = shared
+            return
+        }
+        afterClosingSheets {
+            if sharedLink != nil {
+                // Another link is up: swap it once that sheet has gone.
+                sharedLink = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(600))
+                    sharedLink = shared
+                }
+            } else {
+                sharedLink = shared
             }
         }
     }

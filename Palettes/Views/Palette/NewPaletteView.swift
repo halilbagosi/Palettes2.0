@@ -1,13 +1,15 @@
 import SwiftUI
 
 /// "New Palette" sheet: the shared `PaletteEditor` on an empty draft (or one
-/// seeded with `preselectedColor`). Create checks for an existing palette with
+/// seeded with `preselectedColor` or `preselectedColors`). Create checks for an existing palette with
 /// the same colors or name before saving.
 struct NewPaletteView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var appData: AppData
 
     var preselectedColor: ColorViewModel? = nil
+    /// Colors picked in the Colors tab's select mode, in the order picked.
+    var preselectedColors: [ColorViewModel] = []
 
     @State private var pending: (draft: PaletteDraft, name: String)?
     @State private var showDuplicateAlert = false
@@ -15,9 +17,10 @@ struct NewPaletteView: View {
     @State private var duplicateOfName = ""
 
     private var seed: PaletteDraft {
-        PaletteDraft(colors: preselectedColor.map {
-            [PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name)]
-        } ?? [])
+        let picked = preselectedColor.map { [$0] } ?? preselectedColors
+        return PaletteDraft(colors: picked.prefix(PaletteDraft.maximumColors).map {
+            PaletteColor(color: $0.color, hex: $0.HEX, name: $0.name)
+        })
     }
 
     var body: some View {
