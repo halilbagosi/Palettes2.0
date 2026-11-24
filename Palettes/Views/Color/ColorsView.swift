@@ -11,7 +11,8 @@ import Combine
 struct ColorsView: View {
 
     @State private var path = NavigationPath()
-    @State private var colorForNewPalette: ColorViewModel?
+    /// Colors picked in select mode for a new palette, in the order picked.
+    @State private var newPaletteSeed: NewPaletteSeed?
     @State private var colorToDelete: ColorViewModel?
     @State private var colorToEdit: ColorBindingWrapper?
     @State private var quickCopyRequest: QuickCopyRequest?
@@ -39,6 +40,11 @@ struct ColorsView: View {
     struct ColorBindingWrapper: Identifiable {
         let id = UUID()
         let color: ColorViewModel
+    }
+
+    struct NewPaletteSeed: Identifiable {
+        let id = UUID()
+        let colors: [ColorViewModel]
     }
 
     // MARK: - Display state
@@ -178,8 +184,8 @@ struct ColorsView: View {
                         .presentationDetents([.large])
                         .formPresentationSizing()
                 }
-                .sheet(item: $colorForNewPalette) { color in
-                    NewPaletteView(preselectedColor: color)
+                .sheet(item: $newPaletteSeed) { seed in
+                    NewPaletteView(preselectedColors: seed.colors)
                         .environmentObject(appData)
                         .presentationDetents([.large])
                         .formPresentationSizing()
@@ -358,13 +364,13 @@ struct ColorsView: View {
         Button {
             copyToClipboard(color.HEX, label: "Copied HEX")
         } label: {
-            Label("Copy as HEX", systemImage: "number")
+            Label("Copy HEX", systemImage: "number")
         }
 
         Button {
             copyToClipboard(color.color.rgbString, label: "Copied RGB")
         } label: {
-            Label("Copy as RGB", systemImage: "paintpalette")
+            Label("Copy RGB", systemImage: "paintpalette")
         }
 
         Button {
@@ -376,7 +382,13 @@ struct ColorsView: View {
         }
 
         Button {
-            ShareSheetPresenter.present(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+            PaletteImageRenderer.shareImage(for: color)
+        } label: {
+            Label("Export as PNG", systemImage: "photo")
+        }
+
+        Button {
+            LinkSharer.share(color)
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -419,7 +431,8 @@ struct ColorsView: View {
                     onFavorite: {
                         appData.setColorsFavorite(selectedIDs, favorite: !firstSelectedIsFavorite)
                         exitSelection()
-                    }
+                    },
+                    onCreatePalette: { createPaletteFromSelection() }
                 )
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -535,6 +548,15 @@ struct ColorsView: View {
             appData.palettes.removeAll { $0.paletteColors.isEmpty }
             appData.colors.removeAll { selectedIDs.contains($0.id) }
         }
+        exitSelection()
+    }
+
+    /// Opens New Palette seeded with the selection, in the order it was picked.
+    private func createPaletteFromSelection() {
+        let byID = Dictionary(appData.colors.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let picked = selectionOrder.filter(selectedIDs.contains).compactMap { byID[$0] }
+        guard picked.count >= PaletteDraft.minimumColors else { return }
+        newPaletteSeed = NewPaletteSeed(colors: picked)
         exitSelection()
     }
 

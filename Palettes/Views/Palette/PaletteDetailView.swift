@@ -100,10 +100,17 @@ struct PaletteDetailView: View {
                 }
 
                 Button {
-                    let textToShare = "Check out this palette: \(livePalette.name)\n" + livePalette.hexCodes.joined(separator: ", ")
-                    ShareSheetPresenter.present(items: [textToShare])
+                    let hexes = livePalette.hexCodes.joined(separator: ", ")
+                    copyToClipboard(hexes, label: "Copied HEX")
                 } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                    Label("Copy HEX", systemImage: "number")
+                }
+
+                Button {
+                    let rgbs = livePalette.colors.map { $0.rgbString }.joined(separator: " | ")
+                    copyToClipboard(rgbs, label: "Copied RGB")
+                } label: {
+                    Label("Copy RGB", systemImage: "paintpalette")
                 }
 
                 Button {
@@ -113,39 +120,9 @@ struct PaletteDetailView: View {
                 }
 
                 Button {
-                    savePaletteAsPNG()
+                    LinkSharer.share(livePalette)
                 } label: {
-                    Label("Export as PNG", systemImage: "photo")
-                }
-
-                Button {
-                    let hexes = livePalette.hexCodes.joined(separator: ", ")
-                    copyToClipboard(hexes, label: "Copied HEX")
-                } label: {
-                    Label("Copy as HEX", systemImage: "number")
-                }
-
-                Button {
-                    let rgbs = livePalette.colors.map { $0.rgbString }.joined(separator: " | ")
-                    copyToClipboard(rgbs, label: "Copied RGB")
-                } label: {
-                    Label("Copy as RGB", systemImage: "paintpalette")
-                }
-
-                Button {
-                    let safePaletteName = livePalette.name.lowercased().replacingOccurrences(of: " ", with: "-")
-                    var cssLines = ["/* \(livePalette.name) */", ":root {"]
-                    for (index, colorName) in livePalette.colorNames.enumerated() {
-                        if index < livePalette.hexCodes.count {
-                            let safeColorName = colorName.lowercased().replacingOccurrences(of: " ", with: "-")
-                            let finalName = safeColorName.isEmpty ? "color-\(index + 1)" : safeColorName
-                            cssLines.append("  --\(safePaletteName)-\(finalName): \(livePalette.hexCodes[index]);")
-                        }
-                    }
-                    cssLines.append("}")
-                    copyToClipboard(cssLines.joined(separator: "\n"), label: "Copied CSS")
-                } label: {
-                    Label("Export as CSS", systemImage: "curlybraces.square")
+                    Label("Share", systemImage: "square.and.arrow.up")
                 }
 
                 Divider()
@@ -437,13 +414,13 @@ struct PaletteDetailView: View {
         Button {
             copyToClipboard(color.HEX, label: "Copied HEX")
         } label: {
-            Label("Copy as HEX", systemImage: "number")
+            Label("Copy HEX", systemImage: "number")
         }
 
         Button {
             copyToClipboard(color.color.rgbString, label: "Copied RGB")
         } label: {
-            Label("Copy as RGB", systemImage: "paintpalette")
+            Label("Copy RGB", systemImage: "paintpalette")
         }
 
         Button {
@@ -454,7 +431,13 @@ struct PaletteDetailView: View {
         }
 
         Button {
-            ShareSheetPresenter.present(items: ["Check out this color: \(color.name) (\(color.HEX))"])
+            PaletteImageRenderer.shareImage(for: color)
+        } label: {
+            Label("Export as PNG", systemImage: "photo")
+        }
+
+        Button {
+            LinkSharer.share(color)
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }

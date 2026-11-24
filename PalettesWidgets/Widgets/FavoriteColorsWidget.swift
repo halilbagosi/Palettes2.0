@@ -126,6 +126,7 @@ struct FavoriteColorsView: View {
                         .opacity(0.8)
                 }
                 .foregroundStyle(Color.widgetForeground(onLight: HexRGB.isLight(swatch.hex)))
+                .accentedScrim(onLight: HexRGB.isLight(swatch.hex))
                 .padding(8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

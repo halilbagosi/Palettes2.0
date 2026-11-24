@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 
 enum PaletteExportFormat: String, CaseIterable, Identifiable {
-    case css, scss, swiftui, tailwind, json, plainHex, coolorsURL, svg, ase, pdf
+    case css, scss, swiftui, tailwind, json, plainHex, coolorsURL, svg, ase, pdf, png
 
     var id: String { rawValue }
 
@@ -25,12 +25,13 @@ enum PaletteExportFormat: String, CaseIterable, Identifiable {
         case .svg: return "SVG"
         case .ase: return "ASE (Adobe Swatch)"
         case .pdf: return "PDF"
+        case .png: return "PNG"
         }
     }
 
     /// True for binary formats that must be shared as a file rather than previewed as text.
     var isBinary: Bool {
-        self == .ase || self == .pdf
+        self == .ase || self == .pdf || self == .png
     }
 }
 
@@ -48,7 +49,7 @@ enum PaletteExporter {
         case .plainHex: return plainHexString(palette)
         case .coolorsURL: return coolorsURLString(palette)
         case .svg: return svgString(palette)
-        case .ase, .pdf: return ""
+        case .ase, .pdf, .png: return ""
         }
     }
 

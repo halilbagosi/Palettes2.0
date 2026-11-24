@@ -4,7 +4,7 @@
 //
 //  What a one-tap copy puts on the clipboard. The first tap asks (see
 //  `QuickCopy`), the answer is remembered here, and Settings can change it or
-//  clear it so the app asks again. Explicit "Copy as HEX / RGB" menu items
+//  clear it so the app asks again. Explicit "Copy HEX / RGB" menu items
 //  don't use this: they always copy what they say.
 //
 
@@ -42,7 +42,7 @@ enum PaletteCopyFormat: String, CaseIterable, Identifiable {
     }
 
     /// The exporter format behind the formats that are exports (HEX and RGB
-    /// are the same strings the "Copy as" menu items build).
+    /// are the same strings the "Copy HEX / RGB" menu items build).
     fileprivate var exportFormat: PaletteExportFormat? {
         switch self {
         case .hex, .rgb: return nil
@@ -89,7 +89,7 @@ enum CopyPreference {
 
     // MARK: - Text
 
-    /// Same strings as the "Copy as HEX / RGB" menu items.
+    /// Same strings as the "Copy HEX / RGB" menu items.
     static func text(hex: String, color: Color, as format: ColorCopyFormat) -> String {
         switch format {
         case .hex: return hex

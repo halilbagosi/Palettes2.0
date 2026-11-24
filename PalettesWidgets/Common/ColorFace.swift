@@ -2,10 +2,9 @@
 //  ColorFace.swift
 //  PalettesWidgets
 //
-//  One colour filling the widget. Small: name top-left. Medium: name with hex
-//  and RGB beneath. Large: the same stack at a bigger scale. Tapping opens the
-//  colour. The Color widget uses all three sizes; Color of the Day uses only
-//  small and medium.
+//  One colour filling the widget: its name with hex and RGB beneath, top-left,
+//  scaled up from small to large. Tapping opens the colour. The Color and
+//  Color of the Day widgets use all three sizes.
 //
 
 import SwiftUI
@@ -36,12 +35,25 @@ struct ColorFace: View {
     }
 
     private var small: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             if let caption { WidgetCaption(text: caption, onLight: onLight) }
-            Text(swatch.name)
-                .font(.headline)
-                .lineLimit(2)
-                .foregroundStyle(foreground)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(swatch.name)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .foregroundStyle(foreground)
+                Text(swatch.hex.uppercased())
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(foreground.opacity(0.85))
+                Text(rgbText)
+                    .font(.caption2.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(foreground.opacity(0.75))
+            }
+            .accentedScrim(onLight: onLight)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -51,20 +63,23 @@ struct ColorFace: View {
     private var medium: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let caption { WidgetCaption(text: caption, onLight: onLight) }
-            Text(swatch.name)
-                .font(.title3.weight(.semibold))
-                .lineLimit(1)
-                .foregroundStyle(foreground)
-            Text(swatch.hex.uppercased())
-                .font(.subheadline.monospaced())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(foreground.opacity(0.85))
-            Text(rgbText)
-                .font(.caption.monospaced())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(foreground.opacity(0.75))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(swatch.name)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(foreground)
+                Text(swatch.hex.uppercased())
+                    .font(.subheadline.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(foreground.opacity(0.85))
+                Text(rgbText)
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(foreground.opacity(0.75))
+            }
+            .accentedScrim(onLight: onLight)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -74,20 +89,23 @@ struct ColorFace: View {
     private var large: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let caption { WidgetCaption(text: caption, onLight: onLight) }
-            Text(swatch.name)
-                .font(.title.weight(.bold))
-                .lineLimit(2)
-                .foregroundStyle(foreground)
-            Text(swatch.hex.uppercased())
-                .font(.title3.monospaced())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(foreground.opacity(0.85))
-            Text(rgbText)
-                .font(.body.monospaced())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(foreground.opacity(0.75))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(swatch.name)
+                    .font(.title.weight(.bold))
+                    .lineLimit(2)
+                    .foregroundStyle(foreground)
+                Text(swatch.hex.uppercased())
+                    .font(.title3.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(foreground.opacity(0.85))
+                Text(rgbText)
+                    .font(.body.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(foreground.opacity(0.75))
+            }
+            .accentedScrim(onLight: onLight, cornerRadius: 10)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

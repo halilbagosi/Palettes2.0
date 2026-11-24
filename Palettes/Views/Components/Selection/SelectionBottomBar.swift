@@ -18,6 +18,12 @@ struct SelectionBottomBar: ToolbarContent {
     let onDelete: () -> Void
     let onShare: () -> Void
     let onFavorite: () -> Void
+    /// Colors only: a palette from the selection, enabled for 2 to 20 items.
+    var onCreatePalette: (() -> Void)? = nil
+
+    private var canCreatePalette: Bool {
+        (PaletteDraft.minimumColors...PaletteDraft.maximumColors).contains(count)
+    }
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .bottomBar) {
@@ -37,6 +43,17 @@ struct SelectionBottomBar: ToolbarContent {
             .accessibilityLabel(count == 1 ? "Share 1 item" : "Share \(count) items")
 
             Spacer()
+
+            if let onCreatePalette {
+                Button(action: onCreatePalette) {
+                    Label("Create Palette", systemImage: "swatchpalette")
+                }
+                .disabled(!canCreatePalette)
+                .accessibilityLabel("Create Palette from \(count) colors")
+                .accessibilityHint(count < PaletteDraft.minimumColors ? "Select at least \(PaletteDraft.minimumColors) colors" : "")
+
+                Spacer()
+            }
 
             Button(action: onFavorite) {
                 Label(favoriteFilled ? "Remove from Favorites" : "Add to Favorites",

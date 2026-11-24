@@ -175,7 +175,7 @@ struct ExportPaletteSheet: View {
                 Button {
                     shareCurrentFormat()
                 } label: {
-                    Label("Share File", systemImage: "square.and.arrow.up")
+                    Label(selectedFormat == .png ? "Share Image" : "Share File", systemImage: "square.and.arrow.up")
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                 }
@@ -211,6 +211,10 @@ struct ExportPaletteSheet: View {
             Label(showsCopied ? "Copied" : selectedFormat.copyTitle,
                   systemImage: showsCopied ? "checkmark" : "doc.on.doc")
                 .fontWeight(.semibold)
+                // Half-width buttons: "Copy Tailwind" / "Copy SwiftUI" would
+                // wrap to two lines and outgrow Share.
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(maxWidth: .infinity)
         }
@@ -235,6 +239,13 @@ struct ExportPaletteSheet: View {
         case .pdf:
             if let url = try? ExportFiles.write(PaletteExporter.pdfData(palette), baseName: slugifiedPaletteName, ext: "pdf") {
                 ShareSheetPresenter.present(items: [url], cleanup: url)
+            }
+        case .png:
+            // The image itself, not a file, so the sheet offers Save Image.
+            if let image = PaletteImageRenderer.renderImage(for: palette) {
+                ShareSheetPresenter.present(items: [image])
+            } else {
+                ToastManager.shared.show("Unable to create PNG", icon: "exclamationmark.triangle")
             }
         default:
             ShareSheetPresenter.present(items: [output])
@@ -261,7 +272,7 @@ private enum ExportFormatGroup: String, CaseIterable, Identifiable {
     var formats: [PaletteExportFormat] {
         switch self {
         case .code: [.css, .scss, .tailwind, .swiftui, .json]
-        case .files: [.svg, .ase, .pdf]
+        case .files: [.png, .svg, .ase, .pdf]
         case .quick: [.plainHex, .coolorsURL]
         }
     }
@@ -287,6 +298,7 @@ private extension PaletteExportFormat {
         case .svg: "square.on.circle"
         case .ase: "swatchpalette"
         case .pdf: "doc.richtext"
+        case .png: "photo"
         case .plainHex: "number"
         case .coolorsURL: "link"
         }
@@ -302,6 +314,7 @@ private extension PaletteExportFormat {
         case .svg: "Vector swatches for Figma, Sketch and Illustrator"
         case .ase: "Adobe Swatch Exchange for Photoshop, Illustrator and Procreate"
         case .pdf: "A printable palette sheet"
+        case .png: "An image of the palette with names and hex values"
         case .plainHex: "One hex value per line"
         case .coolorsURL: "A shareable link to this palette on Coolors"
         }
@@ -317,6 +330,7 @@ private extension PaletteExportFormat {
         case .svg: "svg"
         case .ase: "ase"
         case .pdf: "pdf"
+        case .png: "png"
         case .plainHex: "txt"
         case .coolorsURL: "url"
         }
@@ -419,13 +433,16 @@ private struct FilePreview: View {
         switch format {
         case .ase: "Swatch file"
         case .pdf: "PDF document"
+        case .png: "Image"
         default: "Vector file"
         }
     }
 
-    private var byteCount: String {
+    /// Nil for PNG: sizing it would render the image on every redraw.
+    private var byteCount: String? {
         let data: Data
         switch format {
+        case .png: return nil
         case .ase: data = PaletteExporter.aseData(palette)
         case .pdf: data = PaletteExporter.pdfData(palette)
         default: data = Data(PaletteExporter.export(palette, as: format).utf8)
@@ -455,7 +472,7 @@ private struct FilePreview: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.headline)
-                Text("\(palette.paletteColors.count) swatches · \(byteCount)")
+                Text(byteCount.map { "\(palette.paletteColors.count) swatches · \($0)" } ?? "\(palette.paletteColors.count) swatches")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text("Share it to Files, AirDrop or straight into another app.")
