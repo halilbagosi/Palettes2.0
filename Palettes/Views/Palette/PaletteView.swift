@@ -389,56 +389,26 @@ struct PaletteView: View {
             let hexes = palette.hexCodes.joined(separator: ", ")
             copyToClipboard(hexes, label: "Copied HEX")
         } label: {
-            Label("Copy as HEX", systemImage: "number")
+            Label("Copy HEX", systemImage: "number")
         }
 
         Button {
             let rgbs = palette.colors.map { $0.rgbString }.joined(separator: " | ")
             copyToClipboard(rgbs, label: "Copied RGB")
         } label: {
-            Label("Copy as RGB", systemImage: "paintpalette")
-        }
-
-        Button {
-            let safePaletteName = palette.name.lowercased().replacingOccurrences(of: " ", with: "-")
-            var cssLines = ["/* \(palette.name) */", ":root {"]
-            for (index, colorName) in palette.colorNames.enumerated() {
-                if index < palette.hexCodes.count {
-                    let safeColorName = colorName.lowercased().replacingOccurrences(of: " ", with: "-")
-                    let finalName = safeColorName.isEmpty ? "color-\(index + 1)" : safeColorName
-                    cssLines.append("  --\(safePaletteName)-\(finalName): \(palette.hexCodes[index]);")
-                }
-            }
-            cssLines.append("}")
-            copyToClipboard(cssLines.joined(separator: "\n"), label: "Copied CSS")
-        } label: {
-            Label("Export as CSS", systemImage: "curlybraces.square")
-        }
-
-        Button {
-            let colorVMs = palette.colors.indices.map { index -> ColorViewModel in
-                let hex = index < palette.hexCodes.count ? palette.hexCodes[index] : ""
-                let name = index < palette.colorNames.count ? palette.colorNames[index] : "Color \(index + 1)"
-                return ColorViewModel(name: name, color: palette.colors[index], HEX: hex, usedInPalette: true)
-            }
-            if let image = PaletteImageRenderer.renderImage(for: palette, colors: colorVMs) {
-                ShareSheetPresenter.present(items: [image])
-            }
-        } label: {
-            Label("Export as PNG", systemImage: "photo")
-        }
-
-        Button {
-            let textToShare = "Check out this palette: \(palette.name)\n" + palette.hexCodes.joined(separator: ", ")
-            ShareSheetPresenter.present(items: [textToShare])
-        } label: {
-            Label("Share", systemImage: "square.and.arrow.up")
+            Label("Copy RGB", systemImage: "paintpalette")
         }
 
         Button {
             paletteToExport = palette
         } label: {
             Label("Export…", systemImage: "square.and.arrow.up.on.square")
+        }
+
+        Button {
+            LinkSharer.share(palette)
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
         }
 
         Button(role: .destructive) {
