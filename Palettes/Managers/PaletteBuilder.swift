@@ -27,6 +27,13 @@ struct PaletteTone: Equatable {
     var chroma: Chroma = .balanced
 
     static let balanced = PaletteTone()
+
+    /// This tone where it says something, `fallback` where it is balanced:
+    /// a vibe's own tone wins over a style's, channel by channel.
+    func filling(from fallback: PaletteTone) -> PaletteTone {
+        PaletteTone(lightness: lightness == .balanced ? fallback.lightness : lightness,
+                    chroma: chroma == .balanced ? fallback.chroma : chroma)
+    }
 }
 
 struct PaletteBuildRequest {
@@ -43,6 +50,9 @@ struct PaletteBuildRequest {
     /// interface palettes.
     var secondaryHue: Double? = nil
     var seed: UInt64
+    /// The design style to follow (see `PaletteStyle`). nil builds exactly
+    /// as the builder did before styles existed.
+    var style: PaletteStyle? = nil
 }
 
 struct BuiltPalette: Equatable {
@@ -120,6 +130,10 @@ enum PaletteBuilder {
         var neutralsFollowAccent = false
         /// Lightness nudge for the colored roles (Primary, Accent, Secondary).
         var colorLightness = 0.0
+        // Styled builds (see `narrow`)
+        /// Degrees added to a style's relative Accent and Secondary hues.
+        var accentJitter = 0.0
+        var secondaryJitter = 0.0
 
         static let fixed = Variation()
 
@@ -138,6 +152,17 @@ enum PaletteBuilder {
             neutralTint = tints[Int(rng.next() % UInt64(tints.count))]
             neutralsFollowAccent = rng.nextUnit() < 0.25
             colorLightness = -0.05 + 0.1 * rng.nextUnit()
+        }
+
+        /// A style sets the character, so the seed only moves it a little.
+        /// Draws after `init(rng:)`'s draws, so unstyled builds are unchanged.
+        mutating func narrow(rng: inout SplitMix64) {
+            accentJitter = -15 + 30 * rng.nextUnit()
+            secondaryJitter = -10 + 20 * rng.nextUnit()
+            chroma = 0.95 + 0.1 * rng.nextUnit()
+            neutralTint = 0.8 + 0.4 * rng.nextUnit()
+            colorLightness = -0.03 + 0.06 * rng.nextUnit()
+            neutralsFollowAccent = false
         }
     }
 
@@ -194,13 +219,15 @@ enum PaletteBuilder {
             return BuiltPalette(scheme: scheme, entries: anchorEntries)
         }
 
-        let hue = request.hue ?? Double(rng.next() % 360)
-        let variation = Variation(rng: &rng)
-        let main = mainColor(hue: hue, tone: request.tone)
+        let tone = request.tone
+        let freeHue = request.hue ?? Double(rng.next() % 360)
+        var variation = Variation(rng: &rng)
+        if request.style != nil { variation.narrow(rng: &rng) }
+        let main = mainColor(hue: freeHue, tone: tone)
 
         let generated = scheme.isUIMode
-            ? interfaceEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, tone: request.tone, isDark: scheme == .uiDark, variation: variation)
-            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: request.tone, variation: variation)
+            ? interfaceEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, tone: tone, isDark: scheme == .uiDark, variation: variation, style: request.style, freeHue: freeHue)
+            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: tone, variation: variation)
 
         var entries = anchorEntries + generated
         // With none of the user's colors, nothing anchors "Primary" and the
@@ -458,7 +485,9 @@ enum PaletteBuilder {
         size: Int,
         tone: PaletteTone,
         isDark: Bool,
-        variation: Variation = .fixed
+        variation: Variation = .fixed,
+        style: PaletteStyle? = nil,
+        freeHue: Double = 0
     ) -> [BuiltPalette.Entry] {
         var placed = initial
         var entries: [BuiltPalette.Entry] = []
@@ -480,6 +509,14 @@ enum PaletteBuilder {
         }
 
         for recipe in recipes where placed.count < size && !taken.contains(recipe.role) {
+            if let spec = style?.interfaceRoles?[recipe.role] {
+                let candidates = styledCandidates(spec, role: recipe.role, colored: recipe.chromaFollowsTone,
+                                                  primary: primary, freeHue: freeHue, factor: factor, variation: variation)
+                let hex = pick(candidates, placed: placed, floors: [5, 3])
+                placed.append(hex)
+                entries.append(BuiltPalette.Entry(hex: hex, role: recipe.role, group: .interface))
+                continue
+            }
             let spec = isDark ? recipe.dark : recipe.light
             let isNeutral = recipe.hue == .primary && !recipe.chromaFollowsTone
             let accentHue = primary.h + variation.accentOffset
@@ -512,6 +549,39 @@ enum PaletteBuilder {
             entries.append(BuiltPalette.Entry(hex: hex, role: nil, group: .dominant))
         }
         return entries
+    }
+
+    /// Candidates for one role of an interface style. Colored roles follow
+    /// the tone and move a little with the seed; neutrals keep their place,
+    /// so a background stays a background and text stays readable. A grey
+    /// primary greys the relative neutrals, and its colored roles count
+    /// from the brief's or seed's hue instead of the grey's meaningless angle.
+    private static func styledCandidates(
+        _ spec: PaletteStyle.RoleSpec,
+        role: String,
+        colored: Bool,
+        primary: OKLCH,
+        freeHue: Double,
+        factor: Double,
+        variation: Variation
+    ) -> [OKLCH] {
+        let isGrey = primary.C < 0.03
+        var chroma = spec.C
+        let hue: Double
+        switch spec.hue {
+        case .fixed(let degrees):
+            hue = degrees
+        case .relative(let degrees):
+            let jitter = role == "Accent" ? variation.accentJitter : (role == "Secondary" ? variation.secondaryJitter : 0)
+            hue = (isGrey && colored ? freeHue : primary.h) + degrees + jitter
+            if !colored { chroma *= isGrey ? 0 : variation.neutralTint }
+        }
+        if colored { chroma *= factor * variation.chroma }
+        let L = spec.L + (colored ? variation.colorLightness : 0)
+        // A style may ask for exact black or white, so only 0...1 bounds it.
+        return [0, 0.03, -0.03, 0.06, -0.06].map {
+            OKLCH(L: min(1, max(0, L + $0)), C: chroma, h: OKLCH.wrap(hue))
+        }
     }
 
     // MARK: - Distinctness
