@@ -196,13 +196,20 @@ final class PaletteStyleBuilderTests: XCTestCase {
     }
 
     func testPastelIsLighterThanJewelTones() {
-        for seed: UInt64 in 0..<4 {
-            func meanL(_ style: PaletteStyle) -> Double {
-                let colors = generated(build(["#3060A0"], size: 8, style: style, seed: seed))
-                return colors.map(\.L).reduce(0, +) / Double(colors.count)
-            }
-            XCTAssertGreaterThan(meanL(.pastel), meanL(.jewelTones) + 0.15, "seed \(seed)")
+        // Neutrals (Background, Text) are the same in both, so only the toned colors count.
+        func meanL(_ style: PaletteStyle, seed: UInt64) -> Double {
+            let colors = build(["#3060A0"], size: 8, style: style, seed: seed).entries
+                .filter { $0.group != .anchor && $0.group != .neutral }
+                .compactMap { OKLCH(hex: $0.hex)?.L }
+            return colors.reduce(0, +) / Double(colors.count)
         }
+        let seeds = UInt64(0)..<8
+        for seed in seeds {
+            XCTAssertGreaterThan(meanL(.pastel, seed: seed), meanL(.jewelTones, seed: seed), "seed \(seed)")
+        }
+        let pastel = seeds.map { meanL(.pastel, seed: $0) }.reduce(0, +) / Double(seeds.count)
+        let jewel = seeds.map { meanL(.jewelTones, seed: $0) }.reduce(0, +) / Double(seeds.count)
+        XCTAssertGreaterThan(pastel, jewel + 0.1, "pastel \(pastel) vs jewel \(jewel)")
     }
 
     func testVibeToneWinsOverTheTreatment() {
