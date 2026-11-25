@@ -122,4 +122,107 @@ final class PaletteStyleBuilderTests: XCTestCase {
         let accent = try XCTUnwrap(hex(build(["#808080"], size: 8, style: .tonal), "Accent"))
         XCTAssertGreaterThan(OKLCH(hex: accent)!.C, 0.05, "colored roles stay colored")
     }
+
+    // MARK: - Auto treatments
+
+    private func generated(_ palette: BuiltPalette) -> [OKLCH] {
+        palette.entries.filter { $0.group != .anchor }.compactMap { OKLCH(hex: $0.hex) }
+    }
+
+    func testTreatmentsBuildTheirHarmony() {
+        let expected: [PaletteStyle: HarmonyScheme] = [
+            .analogous603010: .analogous, .complementaryPop: .complementary, .monochromePop: .monochromatic,
+            .splitComplementary: .splitComplementary, .triadicPlayful: .triadic,
+        ]
+        for (style, harmony) in expected {
+            for seed: UInt64 in 0..<5 {
+                XCTAssertEqual(build([], size: 6, style: style, seed: seed).scheme, harmony, "\(style) seed \(seed)")
+            }
+        }
+    }
+
+    func testSeededTreatmentsStayInTheirHarmonies() {
+        for style in [PaletteStyle.pastel, .jewelTones, .earthy] {
+            let allowed = Set(style.treatment!.harmonies)
+            let built = Set((UInt64(0)..<20).map { build(["#3060A0"], size: 6, style: style, seed: $0).scheme })
+            XCTAssertTrue(built.isSubset(of: allowed), "\(style): \(built)")
+            XCTAssertEqual(built.count, allowed.count, "\(style) should reach each of its harmonies over 20 seeds")
+        }
+    }
+
+    func testUsersColorsOutrankTheTreatmentsHarmony() {
+        // Blue and orange sit 143° apart: triadic, whatever the treatment says.
+        XCTAssertEqual(build(["#3366CC", "#CC6633"], size: 6, style: .pastel).scheme, .triadic)
+        XCTAssertEqual(PaletteBuilder.impliedHarmony(of: [OKLCH(hex: "#3366CC")!, OKLCH(hex: "#CC6633")!]), .triadic)
+        XCTAssertEqual(PaletteBuilder.impliedHarmony(of: [OKLCH(hex: "#808080")!]), .monochromatic)
+        XCTAssertNil(PaletteBuilder.impliedHarmony(of: [OKLCH(hex: "#3060A0")!]))
+    }
+
+    func testEveryTreatmentReachesItsSizeWithoutRepeats() {
+        for style in PaletteStyle.deck(for: .auto) {
+            for anchors in anchorSets + [["#3366CC", "#CC6633"]] {
+                for size in [4, 8, 12] {
+                    let hexes = build(anchors, size: size, style: style).hexes
+                    XCTAssertEqual(hexes.count, size, "\(style) \(anchors) size \(size)")
+                    XCTAssertEqual(Set(hexes).count, size, "repeated color in \(style): \(hexes)")
+                }
+            }
+        }
+    }
+
+    func testComplementaryPopHasNoSecondaryTonesAndOneAccent() {
+        for size in [6, 8] {
+            let palette = build(["#3060A0"], size: size, style: .complementaryPop)
+            XCTAssertTrue(palette.entries.filter { $0.group == .secondary }.isEmpty, "size \(size)")
+            XCTAssertEqual(palette.entries.filter { $0.group == .accent }.count, 1, "size \(size)")
+        }
+    }
+
+    func testMonochromePopAddsOneAccentOffTheMainHue() throws {
+        let palette = build(["#3060A0"], size: 6, style: .monochromePop)
+        XCTAssertEqual(palette.scheme, .monochromatic)
+        let accents = palette.entries.filter { $0.group == .accent }
+        XCTAssertEqual(accents.count, 1)
+        let accent = try XCTUnwrap(OKLCH(hex: accents[0].hex))
+        let anchor = try XCTUnwrap(OKLCH(hex: "#3060A0"))
+        XCTAssertEqual(OKLCH.hueDistance(accent.h, anchor.h + 150), 0, accuracy: 20)
+    }
+
+    func testMonochromePopOnAGreyTakesTheFreeHue() throws {
+        // hue: 200 in `build`, so the accent sits near 200 + 150 = 350.
+        let palette = build(["#808080"], size: 6, style: .monochromePop)
+        let accent = try XCTUnwrap(palette.entries.first { $0.group == .accent }.flatMap { OKLCH(hex: $0.hex) })
+        XCTAssertLessThanOrEqual(OKLCH.hueDistance(accent.h, 350), 25)
+    }
+
+    func testPastelIsLighterThanJewelTones() {
+        for seed: UInt64 in 0..<4 {
+            func meanL(_ style: PaletteStyle) -> Double {
+                let colors = generated(build(["#3060A0"], size: 8, style: style, seed: seed))
+                return colors.map(\.L).reduce(0, +) / Double(colors.count)
+            }
+            XCTAssertGreaterThan(meanL(.pastel), meanL(.jewelTones) + 0.15, "seed \(seed)")
+        }
+    }
+
+    func testVibeToneWinsOverTheTreatment() {
+        func meanL(_ tone: PaletteTone) -> Double {
+            let colors = generated(build(["#3060A0"], size: 8, style: .pastel, tone: tone))
+            return colors.map(\.L).reduce(0, +) / Double(colors.count)
+        }
+        XCTAssertLessThan(meanL(PaletteTone(lightness: .dark)), meanL(.balanced) - 0.1)
+    }
+
+    func testEarthyPullsHuesTowardEarth() throws {
+        let anchor = try XCTUnwrap(OKLCH(hex: "#3060A0"))
+        let dominant = build(["#3060A0"], size: 8, style: .earthy).entries
+            .filter { $0.group == .dominant }
+            .compactMap { OKLCH(hex: $0.hex) }
+            .filter { $0.C >= 0.02 }
+        XCTAssertFalse(dominant.isEmpty)
+        for color in dominant {
+            // A 25% pull moves blue (~262°) about 40° toward 60°; allow for hue rounding at low chroma.
+            XCTAssertLessThan(OKLCH.hueDistance(color.h, 60), OKLCH.hueDistance(anchor.h, 60) - 20)
+        }
+    }
 }

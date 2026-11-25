@@ -210,8 +210,17 @@ enum PaletteBuilder {
 
         // A vibe that names two colors ("ocean sunset") is not a one-hue palette.
         let secondaryHue = anchors.isEmpty ? request.secondaryHue : nil
-        var scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
-        if request.scheme == .auto, secondaryHue != nil, scheme == .monochromatic { scheme = .complementary }
+        let treatment = request.scheme == .auto ? request.style?.treatment : nil
+        var scheme: HarmonyScheme
+        if let treatment {
+            // The user's colors outrank the treatment's harmony; otherwise
+            // the seed picks among the treatment's.
+            scheme = impliedHarmony(of: anchors)
+                ?? treatment.harmonies[Int(rng.next() % UInt64(treatment.harmonies.count))]
+        } else {
+            scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
+            if request.scheme == .auto, secondaryHue != nil, scheme == .monochromatic { scheme = .complementary }
+        }
         let anchorEntries = anchorHexes.indices.map { index in
             BuiltPalette.Entry(hex: anchorHexes[index], role: anchorRole(index, scheme: scheme), group: .anchor)
         }
@@ -219,7 +228,7 @@ enum PaletteBuilder {
             return BuiltPalette(scheme: scheme, entries: anchorEntries)
         }
 
-        let tone = request.tone
+        let tone = treatment?.tone.map { request.tone.filling(from: $0) } ?? request.tone
         let freeHue = request.hue ?? Double(rng.next() % 360)
         var variation = Variation(rng: &rng)
         if request.style != nil { variation.narrow(rng: &rng) }
@@ -227,7 +236,7 @@ enum PaletteBuilder {
 
         let generated = scheme.isUIMode
             ? interfaceEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, tone: tone, isDark: scheme == .uiDark, variation: variation, style: request.style, freeHue: freeHue)
-            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: tone, variation: variation)
+            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: tone, variation: variation, treatment: treatment, freeHue: freeHue)
 
         var entries = anchorEntries + generated
         // With none of the user's colors, nothing anchors "Primary" and the
@@ -253,9 +262,10 @@ enum PaletteBuilder {
 
     // MARK: - Auto
 
-    /// Two or more of the user's colors already imply a harmony; otherwise
-    /// Auto draws one, weighted toward the calmer schemes.
-    private static func resolveAuto(anchors: [OKLCH], rng: inout SplitMix64) -> HarmonyScheme {
+    /// The harmony the user's colors already imply: two or more chromatic
+    /// colors by their hue distance, all-grey colors as monochromatic. nil
+    /// when the colors leave it open.
+    static func impliedHarmony(of anchors: [OKLCH]) -> HarmonyScheme? {
         let chromatic = anchors.filter { $0.C >= 0.03 }
         if chromatic.count >= 2 {
             let d = OKLCH.hueDistance(chromatic[0].h, chromatic[1].h)
@@ -265,6 +275,13 @@ enum PaletteBuilder {
             return .splitComplementary
         }
         if !anchors.isEmpty && chromatic.isEmpty { return .monochromatic }
+        return nil
+    }
+
+    /// Two or more of the user's colors already imply a harmony; otherwise
+    /// Auto draws one, weighted toward the calmer schemes.
+    private static func resolveAuto(anchors: [OKLCH], rng: inout SplitMix64) -> HarmonyScheme {
+        if let implied = impliedHarmony(of: anchors) { return implied }
         let roll = rng.nextUnit()
         if roll < 0.30 { return .analogous }
         if roll < 0.55 { return .complementary }
@@ -288,7 +305,9 @@ enum PaletteBuilder {
         size: Int,
         scheme: HarmonyScheme,
         tone: PaletteTone,
-        variation: Variation
+        variation: Variation,
+        treatment: PaletteStyle.Treatment? = nil,
+        freeHue: Double = 0
     ) -> [BuiltPalette.Entry] {
         var placed = initial
         var entries: [BuiltPalette.Entry] = []
@@ -300,12 +319,23 @@ enum PaletteBuilder {
 
         // Each root heads a family of tones: the user's colors, or the
         // brief's main color when there are none.
-        let roots = anchors.isEmpty ? [main] : anchors
+        let pull = treatment?.earthPull ?? 0
+        let lead = pulled(main, by: pull)
+        let roots = (anchors.isEmpty ? [lead] : anchors).map { pulled($0, by: pull) }
         if anchors.isEmpty {
-            entries.append(place([main], floors: [0], role: nil, group: .dominant))
+            entries.append(place([lead], floors: [0], role: nil, group: .dominant))
         }
 
-        let counts = groupCounts(size: size, scheme: scheme)
+        var counts = groupCounts(size: size, scheme: scheme)
+        if treatment?.dropsSecondary == true {
+            counts.dominant += counts.secondary
+            counts.secondary = 0
+        }
+        if treatment?.addsAccent == true, counts.accent == 0, size >= 4, counts.dominant > 1 {
+            counts.accent = 1
+            counts.dominant -= 1
+        }
+        let chroma = variation.chroma * (treatment?.chromaScale ?? 1)
         var slots: [BuiltPalette.Group] = Array(repeating: .dominant, count: max(0, counts.dominant - roots.count))
         if counts.secondary > 0 { slots.append(.secondary) }
         slots += Array(repeating: .accent, count: counts.accent)
@@ -323,7 +353,7 @@ enum PaletteBuilder {
             schemeOffsets = [delta, delta + 20]
         }
         if variation.swapsOffsets, secondaryHue == nil, schemeOffsets.count > 1 { schemeOffsets.swapAt(0, 1) }
-        let accentOffset = schemeOffsets.count > 1 ? schemeOffsets[1] : schemeOffsets[0]
+        let accentOffset = treatment?.accentOffset ?? (schemeOffsets.count > 1 ? schemeOffsets[1] : schemeOffsets[0])
         let neutralOrder: [Bool] = counts.neutral == 1 ? [tone.lightness != .dark] : [true, false]
         var dominantIndex = 0
         var secondaryIndex = 0
@@ -340,14 +370,19 @@ enum PaletteBuilder {
                 // Round-robin over the roots, so two chosen colors get equal shares.
                 let root = roots[dominantIndex % roots.count]
                 dominantIndex += 1
-                slotted[position] = place(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: variation.chroma), floors: [12, 9, 6], role: nil, group: .dominant)
+                slotted[position] = place(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma), floors: [12, 9, 6], role: nil, group: .dominant)
             case .secondary:
                 let root = roots[secondaryIndex % roots.count]
                 let offset = schemeOffsets[(secondaryIndex / roots.count) % schemeOffsets.count]
                 secondaryIndex += 1
-                slotted[position] = place(secondaryCandidates(root: root, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: variation.chroma), floors: [12, 9, 6], role: nil, group: .secondary)
+                slotted[position] = place(secondaryCandidates(root: root, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: chroma), floors: [12, 9, 6], role: nil, group: .secondary)
             case .accent:
-                slotted[position] = place(accentCandidates(root: roots[0], offset: accentOffset, tone: tone, start: variation.accentStart), floors: [12, 9, 6], role: "Accent", group: .accent)
+                // A grey root's hue angle means nothing: a treatment's accent
+                // counts from the brief's or seed's hue instead.
+                let accentRoot = treatment != nil && roots[0].C < 0.03
+                    ? OKLCH(L: roots[0].L, C: roots[0].C, h: freeHue) : roots[0]
+                let accentTone = treatment?.vividAccent == true ? PaletteTone(lightness: tone.lightness, chroma: .vivid) : tone
+                slotted[position] = place(accentCandidates(root: accentRoot, offset: accentOffset, tone: accentTone, start: variation.accentStart), floors: [12, 9, 6], role: "Accent", group: .accent)
             case .neutral:
                 let light = neutralOrder[neutralIndex % neutralOrder.count]
                 neutralIndex += 1
@@ -358,6 +393,16 @@ enum PaletteBuilder {
         }
         entries += slotted.compactMap { $0 }
         return entries
+    }
+
+    /// `color` with its hue moved `fraction` of the shorter way toward 60°
+    /// (earth tones). Greys have no hue to move.
+    private static func pulled(_ color: OKLCH, by fraction: Double) -> OKLCH {
+        guard fraction > 0, color.C >= 0.03 else { return color }
+        var delta = (60 - color.h).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        return OKLCH(L: color.L, C: color.C, h: OKLCH.wrap(color.h + delta * fraction))
     }
 
     /// Lightness rungs for tones of a root, in dark/light pairs, most useful
