@@ -78,10 +78,11 @@ struct PaletteDetailView: View {
             .onboardingExtras(for: livePalette, isBusy: isBusyWithOtherUI)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    // The share link; the PNG is in Export….
                     Button {
-                        savePaletteAsPNG()
+                        LinkSharer.share(livePalette)
                     } label: {
-                        Label("Export as PNG", systemImage: "square.and.arrow.up")
+                        Label("Share", systemImage: "square.and.arrow.up")
                     }
                 }
             }
@@ -489,20 +490,6 @@ struct PaletteDetailView: View {
         }
     }
 
-
-    // MARK: - Save as PNG
-
-    @MainActor
-    private func savePaletteAsPNG() {
-        let colorVMs = livePalette.colors.indices.map { colorViewModel(at: $0, from: livePalette) }
-        if let image = PaletteImageRenderer.renderImage(for: livePalette, colors: colorVMs) {
-            // Passing the UIImage keeps the existing share flow and exposes iOS's
-            // built-in "Save Image" action in the activity sheet.
-            ShareSheetPresenter.present(items: [image])
-        } else {
-            ToastManager.shared.show("Unable to create PNG", icon: "exclamationmark.triangle")
-        }
-    }
 }
 
 #Preview {
