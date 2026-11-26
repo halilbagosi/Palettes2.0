@@ -275,9 +275,12 @@ enum PaletteGenerator {
                 recipe.brief.hue = brief.hue ?? recipe.brief.hue
                 recipe.brief.secondaryHue = brief.secondaryHue
                 recipe.brief.tone = brief.tone
-                if let suggested = brief.scheme, !recipe.scheme.isUIMode {
+                // A styled palette keeps its style: the style already sets
+                // the harmony, as on a fresh run. Only unstyled Auto follows
+                // the vibe's harmony. An explicit harmony change ("make it
+                // triadic") is a step, handled in `applying`.
+                if let suggested = brief.scheme, !recipe.scheme.isUIMode, recipe.style == nil {
                     recipe.scheme = suggested
-                    recipe.style = nil
                 }
             }
             // A change must change something.
@@ -302,6 +305,7 @@ enum PaletteGenerator {
             // The user's mode always wins. Unstyled Auto follows the brief's
             // harmony, unless two or more chosen colors already imply one;
             // styled Auto leaves the harmony to its style.
+            // A vibe that names two colors is not one-hue, whatever the model's harmony.
             var resolvedScheme = scheme
             if style == nil, scheme == .auto, locked.count < 2, let suggested = brief.scheme,
                !(suggested == .monochromatic && brief.secondaryHue != nil) {

@@ -463,4 +463,28 @@ final class PaletteGeneratorTests: XCTestCase {
         )
         XCTAssertEqual(changed?.style, recipe.style)
     }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testDescribedChangeKeepsAPinnedAutoStyle() async throws {
+        let store = StyleDeckStore()
+        var first: GenerationRecipe?
+        _ = try await PaletteGenerator.generate(
+            baseColors: [PaletteGenerator.BaseColor(hex: "#3060A0", name: "Base")], size: 8, vibe: nil,
+            scheme: .auto, pinnedStyle: .earthy,
+            namer: fixedNamer, deck: store, onRecipe: { first = $0 }
+        )
+        let recipe = try XCTUnwrap(first)
+        XCTAssertEqual(recipe.style, .earthy)
+        for change in ["darker", "more like a quiet forest"] {
+            var changed: GenerationRecipe?
+            _ = try await PaletteGenerator.generate(
+                baseColors: [PaletteGenerator.BaseColor(hex: "#3060A0", name: "Base")], size: nil, vibe: nil,
+                refining: .init(recipe: recipe, change: change),
+                namer: fixedNamer, deck: store, onRecipe: { changed = $0 }
+            )
+            XCTAssertEqual(changed?.style, .earthy, "change: \(change)")
+            XCTAssertEqual(changed?.scheme, .auto, "change: \(change)")
+        }
+    }
 }
