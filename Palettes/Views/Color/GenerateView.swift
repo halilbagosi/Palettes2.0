@@ -17,7 +17,7 @@ struct GenerateView: View {
     @State private var colorsFadeLeading = false
     @State private var colorsFadeTrailing = true
     @State private var selectedColorIDs: Set<UUID> = []
-    @State private var scheme: HarmonyScheme = .auto
+    @State private var mode: GenerationMode = .auto
     @State private var vibeDescription = ""
     @FocusState private var vibeFocused: Bool
     /// The stage's size, for its orientation and the generating orb's size.
@@ -219,7 +219,8 @@ struct GenerateView: View {
                         startGeneration()
                     },
                     onSave: saveResult,
-                    screenMargin: screenMargin
+                    screenMargin: screenMargin,
+                    styleName: resultRecipe?.style?.displayName
                 )
                 .environmentObject(appData)
                 .transition(.blurReplace)
@@ -590,21 +591,17 @@ struct GenerateView: View {
 
                 if canChooseMode {
                     Menu {
-                        ForEach(modeOptions) { option in
-                            Button {
-                                scheme = option
-                            } label: {
-                                if option == scheme {
-                                    Label(option.displayName, systemImage: "checkmark")
-                                } else {
-                                    Text(option.displayName)
-                                }
-                            }
+                        modeButton(.auto)
+                        Section("Color Styles") {
+                            ForEach(GenerationMode.colorStyles) { modeButton($0) }
+                        }
+                        Section("Interface") {
+                            ForEach(GenerationMode.interfaceModes) { modeButton($0) }
                         }
                     } label: {
                         generationOptionLabel(
                             title: "Mode",
-                            value: scheme.displayName,
+                            value: mode.displayName,
                             systemImage: "paintpalette"
                         )
                     }
@@ -615,6 +612,19 @@ struct GenerateView: View {
             .animation(.spring(response: 0.28, dampingFraction: 0.9), value: canChooseMode)
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// One Mode menu entry, checked when it's the current mode.
+    private func modeButton(_ option: GenerationMode) -> some View {
+        Button {
+            mode = option
+        } label: {
+            if option == mode {
+                Label(option.displayName, systemImage: "checkmark")
+            } else {
+                Text(option.displayName)
+            }
+        }
     }
 
     private func generationOptionLabel(title: String, value: String, systemImage: String) -> some View {
@@ -864,9 +874,6 @@ struct GenerateView: View {
         }
     }
 
-    /// Modes offered in the menu.
-    private let modeOptions: [HarmonyScheme] = [.auto, .uiLight, .uiDark]
-
     private var hasInput: Bool {
         !selectedColorIDs.isEmpty
             || !vibeDescription.trimmingCharacters(in: .whitespaces).isEmpty
@@ -1000,18 +1007,33 @@ struct GenerateView: View {
         // The saved title must match the one on screen.
         cancelLateNaming()
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
-        appData.palettes.append(PaletteViewModel(
+        let vibe = vibeDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let palette = PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
             paletteColors: resultPaletteColors,
-            isGenerated: true
-        ))
+            isGenerated: true,
+            generationMode: savedModeName,
+            generationVibe: vibe.isEmpty ? nil : vibe
+        )
+        appData.palettes.append(palette)
 
         // Add any newly generated colors to the Colors library.
-        appData.addPaletteColorsToLibrary(resultPaletteColors, isGenerated: true)
+        appData.addPaletteColorsToLibrary(resultPaletteColors, isGenerated: true, source: palette)
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
         withAnimation(.smooth(duration: 0.5)) { phase = .form }
         resetForm()
+    }
+
+    /// The mode the saved palette is credited to: an interface mode by its
+    /// own name; otherwise the color style the result followed (Auto names
+    /// the style it picked), as shown under the result's name.
+    private var savedModeName: String {
+        let chosen = canChooseMode ? mode : .auto
+        switch chosen {
+        case .uiLight, .uiDark: return chosen.displayName
+        case .auto, .style: return resultRecipe?.style?.displayName ?? chosen.displayName
+        }
     }
 
     /// Fresh form for the next generation after a palette was saved.
@@ -1020,7 +1042,7 @@ struct GenerateView: View {
     private func resetForm() {
         paletteSize = nil
         selectedColorIDs = []
-        scheme = .auto
+        mode = .auto
         vibeDescription = ""
         pendingRefinement = ""
         resultRecipe = nil
@@ -1054,7 +1076,8 @@ struct GenerateView: View {
             baseColors: baseColors,
             size: paletteSize,
             vibe: combinedVibe,
-            scheme: canChooseMode ? scheme : .auto,
+            scheme: canChooseMode ? mode.scheme : .auto,
+            pinnedStyle: canChooseMode ? mode.pinnedStyle : nil,
             existingNames: appData.palettes.map { $0.name },
             refining: refining,
             // The title follows the vibe itself, not the changes made since.

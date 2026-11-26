@@ -102,4 +102,48 @@ final class PaletteRefinementTests: XCTestCase {
         // Same seed, same main hue.
         XCTAssertEqual(before.mainHue ?? -1, after.mainHue ?? -2, accuracy: 3)
     }
+
+    func testRecipeChangesKeepTheStyleUnlessTheHarmonyChanges() {
+        let recipe = GenerationRecipe(brief: .neutral, size: 6, scheme: .auto, seed: 1, style: .pastel)
+        var darker = PaletteChange()
+        darker.lightness = -1
+        XCTAssertEqual(recipe.applying(darker, lockedCount: 0).style, .pastel)
+        var triadic = PaletteChange()
+        triadic.scheme = .triadic
+        XCTAssertNil(recipe.applying(triadic, lockedCount: 0).style, "an explicit harmony replaces the style")
+    }
+
+    // MARK: - Merging a described change's vibe
+
+    func testMergingTakesTheVibesHueSecondaryHueAndTone() {
+        var old = recipe
+        old.brief = PaletteBrief(hue: 30, secondaryHue: 200, tone: PaletteTone(lightness: .dark), scheme: nil)
+        let vibe = PaletteBrief(hue: 145, secondaryHue: nil, tone: PaletteTone(chroma: .muted), scheme: nil)
+        let merged = old.merging(vibe)
+        XCTAssertEqual(merged.brief.hue, 145)
+        XCTAssertNil(merged.brief.secondaryHue, "the vibe's second hue replaces the old one, even with none")
+        XCTAssertEqual(merged.brief.tone, vibe.tone)
+        // A vibe with no hue leaves the old one.
+        XCTAssertEqual(old.merging(PaletteBrief(hue: nil, tone: .balanced, scheme: nil)).brief.hue, 30)
+    }
+
+    func testMergingAppliesTheVibesSchemeToAnUnstyledRecipeOnly() {
+        let vibe = PaletteBrief(hue: nil, tone: .balanced, scheme: .triadic)
+        XCTAssertNil(recipe.style)
+        XCTAssertEqual(recipe.merging(vibe).scheme, .triadic)
+
+        var styled = recipe
+        styled.style = .earthy
+        XCTAssertEqual(styled.merging(vibe).scheme, styled.scheme, "a styled palette keeps its harmony")
+        XCTAssertEqual(styled.merging(vibe).style, .earthy)
+    }
+
+    func testMergingNeverReplacesAnInterfaceMode() {
+        let vibe = PaletteBrief(hue: nil, tone: .balanced, scheme: .triadic)
+        for mode in [HarmonyScheme.uiLight, .uiDark] {
+            var ui = recipe
+            ui.scheme = mode
+            XCTAssertEqual(ui.merging(vibe).scheme, mode)
+        }
+    }
 }

@@ -30,6 +30,19 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
     var paletteColors: [PaletteColor]
     var isFavorite: Bool = false
     var isGenerated: Bool = false
+    /// The mode a generated palette used, as its menu named it ("Pastel").
+    var generationMode: String? = nil
+    /// The vibe a generated palette was described with.
+    var generationVibe: String? = nil
+
+    /// How the palette was generated, for its detail page: the vibe when
+    /// it had one, else the mode. Nil when that isn't known.
+    var generationNote: String? {
+        guard isGenerated else { return nil }
+        if let vibe = generationVibe, !vibe.isEmpty { return "Generated from “\(vibe)” vibe" }
+        if let mode = generationMode, !mode.isEmpty { return "Generated using “\(mode)” mode" }
+        return nil
+    }
 
     var colors: [Color] { paletteColors.map { $0.color } }
     var hexCodes: [String] { paletteColors.map { $0.hex } }
@@ -48,12 +61,16 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         colorNames: [String] = [],
         colorRoles: [String] = [],
         isFavorite: Bool = false,
-        isGenerated: Bool = false
+        isGenerated: Bool = false,
+        generationMode: String? = nil,
+        generationVibe: String? = nil
     ) {
         self.id = id
         self.name = NameLimit.display(name)
         self.isFavorite = isFavorite
         self.isGenerated = isGenerated
+        self.generationMode = generationMode
+        self.generationVibe = generationVibe
         self.paletteColors = colors.enumerated().map { index, color in
             let hex = index < hexCodes.count ? hexCodes[index] : ColorAdjustment.hexString(from: color)
             let name = index < colorNames.count ? colorNames[index] : ColorNamer.name(forHex: hex)
@@ -67,13 +84,17 @@ struct PaletteViewModel: Identifiable, Sendable, Hashable {
         name: String,
         paletteColors: [PaletteColor],
         isFavorite: Bool = false,
-        isGenerated: Bool = false
+        isGenerated: Bool = false,
+        generationMode: String? = nil,
+        generationVibe: String? = nil
     ) {
         self.id = id
         self.name = NameLimit.display(name)
         self.paletteColors = paletteColors
         self.isFavorite = isFavorite
         self.isGenerated = isGenerated
+        self.generationMode = generationMode
+        self.generationVibe = generationVibe
     }
 
     static func == (lhs: PaletteViewModel, rhs: PaletteViewModel) -> Bool {
