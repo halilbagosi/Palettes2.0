@@ -45,7 +45,9 @@ If several agents run in parallel, give each its own `-derivedDataPath`.
 | File | Change | Responsibility |
 |---|---|---|
 | `Palettes/Managers/PaletteStyle.swift` | Create | The 20 styles: names, decks, interface role tables, Auto treatments |
-| `Palettes/Managers/StyleDeck.swift` | Create | `StyleDeckKey`, `StyleDeck` (shuffled, non-repeating draws, LRU), Auto filtering, `StyleDeckStore` |
+| `Palettes/Managers/StyleDeck.swift` | Create | `StyleDeckKey`, `StyleDeck` (shuffled or ordered non-repeating draws, LRU), Auto filtering and fit ranking, `StyleDeckStore` |
+| `Palettes/Models/GenerationMode.swift` | Create | Mode menu model: Auto, a pinned color style, UI Light / UI Dark |
+| `PalettesTests/GenerationModeTests.swift` | Create | Mode mapping |
 | `Palettes/Managers/PaletteBuilder.swift` | Modify | `PaletteBuildRequest.style`, `PaletteTone.filling(from:)`, `impliedHarmony(of:)`, `Variation.narrow`, styled interface roles, Auto treatments |
 | `Palettes/Managers/PaletteRefinement.swift` | Modify | `GenerationRecipe.style`; a harmony change clears it |
 | `Palettes/Managers/PaletteGenerator.swift` | Modify | Draw a style on fresh runs (`deck:` parameter), reuse it on refinements, pass it to the builder |
@@ -1010,18 +1012,28 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Managers/Pa
 
 ---
 
-### Task 4: `StyleDeck`, Auto filtering and `StyleDeckStore`
+### Task 4: Auto fit ranking, `StyleDeck` and `StyleDeckStore`
+
+> Amended 2026-11-26 (user request). Auto ranks the color styles by how well they suit the user's color: the best fit comes first, and each Regenerate steps to the next-best. With no colors there's nothing to rank against, so Auto shuffles. UI Light and UI Dark keep shuffling.
 
 **Files:**
+- Modify: `Palettes/Managers/PaletteStyle.swift` (add an "Auto fit" extension)
 - Create: `Palettes/Managers/StyleDeck.swift`
 - Test: `PalettesTests/StyleDeckTests.swift`
 
 **Interfaces:**
-- Consumes: `PaletteStyle.deck(for:)`, `PaletteStyle.treatment(for:)` (Task 1); `PaletteBuilder.impliedHarmony(of:)` (Task 3); `PaletteBuilder.normalize(_:)`; `PaletteBrief` (`tone`, `scheme`, `secondaryHue`, `.neutral`).
+- Consumes: `PaletteStyle.deck(for:)` and `PaletteStyle.treatment(for:)` (Task 1); `PaletteBuilder.impliedHarmony(of:)` (Task 3); `PaletteBuilder.normalize(_:)`; `OKLCH(hex:)` and `OKLCH.hueDistance`; `PaletteBrief` (`tone`, `scheme`, `secondaryHue`, `.neutral`).
 - Produces:
+  - `func PaletteStyle.fit(for: OKLCH) -> Double`
+  - `static func PaletteStyle.ranked(_: [PaletteStyle], for: OKLCH) -> [PaletteStyle]`
   - `struct StyleDeckKey: Hashable { init(anchors: [String], scheme: HarmonyScheme, vibe: String?) }`
-  - `struct StyleDeck` with `static let capacity = 32`, `var keyCount: Int`, `func contains(_ key: StyleDeckKey) -> Bool`, `mutating func next<G: RandomNumberGenerator>(for: StyleDeckKey, candidates: [PaletteStyle], first: PaletteStyle? = nil, using: inout G) -> PaletteStyle?`, and `static func autoCandidates(anchors: [String], brief: PaletteBrief) -> (styles: [PaletteStyle], first: PaletteStyle?)`
-  - `final class StyleDeckStore` with `static let shared`, `init()`, `func next(for: StyleDeckKey, candidates: [PaletteStyle], first: PaletteStyle? = nil) -> PaletteStyle?`
+  - `struct StyleDeck` with:
+    - `static let capacity = 32`
+    - `var keyCount: Int`
+    - `func contains(_: StyleDeckKey) -> Bool`
+    - `mutating func next<G: RandomNumberGenerator>(for: StyleDeckKey, candidates: [PaletteStyle], first: PaletteStyle? = nil, ordered: Bool = false, using: inout G) -> PaletteStyle?`
+    - `static func autoCandidates(anchors: [String], brief: PaletteBrief) -> (styles: [PaletteStyle], first: PaletteStyle?, ordered: Bool)`
+  - `final class StyleDeckStore` with `static let shared`, `init()`, and `func next(for: StyleDeckKey, candidates: [PaletteStyle], first: PaletteStyle? = nil, ordered: Bool = false) -> PaletteStyle?`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1040,9 +1052,40 @@ import XCTest
 final class StyleDeckTests: XCTestCase {
 
     private let light = PaletteStyle.deck(for: .uiLight)
+    private let auto = PaletteStyle.deck(for: .auto)
 
     private func key(_ anchors: [String] = ["#3060A0"], _ scheme: HarmonyScheme = .uiLight, _ vibe: String? = nil) -> StyleDeckKey {
         StyleDeckKey(anchors: anchors, scheme: scheme, vibe: vibe)
+    }
+
+    // MARK: - Fit
+
+    func testEachColorKindSuitsItsStyle() {
+        let cases: [(String, PaletteStyle)] = [
+            ("#808080", .monochromePop),     // grey
+            ("#FFF2A0", .pastel),            // pale yellow
+            ("#8B5A2B", .earthy),            // warm muted brown
+            ("#1E3A8A", .jewelTones),        // deep saturated navy
+            ("#FF5E7A", .complementaryPop),  // vivid coral
+        ]
+        for (hex, expected) in cases {
+            let color = OKLCH(hex: hex)!
+            XCTAssertEqual(PaletteStyle.ranked(auto, for: color).first, expected, "\(hex) L \(color.L) C \(color.C) h \(color.h)")
+        }
+    }
+
+    func testRankingKeepsEveryStyleAndBreaksTiesByDeckOrder() {
+        let ranked = PaletteStyle.ranked(auto, for: OKLCH(hex: "#3060A0")!)
+        XCTAssertEqual(Set(ranked), Set(auto))
+        XCTAssertEqual(ranked.count, auto.count)
+        // Equal fits keep their deck order: Monochrome + Pop and Pastel never outrank the calm default for a mid blue.
+        XCTAssertLessThan(ranked.firstIndex(of: .analogous603010)!, ranked.firstIndex(of: .monochromePop)!)
+    }
+
+    func testInterfaceStylesHaveNoFit() {
+        for style in light + PaletteStyle.deck(for: .uiDark) {
+            XCTAssertEqual(style.fit(for: OKLCH(hex: "#3060A0")!), 0, "\(style)")
+        }
     }
 
     // MARK: - Drawing
@@ -1071,6 +1114,14 @@ final class StyleDeckTests: XCTestCase {
         }
     }
 
+    func testOrderedDeckWalksTheGivenOrderEveryRound() {
+        var deck = StyleDeck()
+        var rng = SplitMix64(seed: 4)
+        let order: [PaletteStyle] = [.pastel, .analogous603010, .earthy]
+        let drawn = (0..<6).compactMap { _ in deck.next(for: key(["#FFF2A0"], .auto), candidates: order, ordered: true, using: &rng) }
+        XCTAssertEqual(drawn, order + order)
+    }
+
     func testKeysAreIndependent() {
         var deck = StyleDeck()
         var rng = SplitMix64(seed: 5)
@@ -1095,7 +1146,7 @@ final class StyleDeckTests: XCTestCase {
         XCTAssertTrue(deck.contains(keys[StyleDeck.capacity]))
     }
 
-    func testFirstStyleLeadsAFreshDeck() {
+    func testFirstStyleLeadsAFreshShuffledDeck() {
         var deck = StyleDeck()
         var rng = SplitMix64(seed: 2)
         XCTAssertEqual(deck.next(for: key(), candidates: light, first: .highContrast, using: &rng), .highContrast)
@@ -1115,22 +1166,33 @@ final class StyleDeckTests: XCTestCase {
         XCTAssertEqual(Set(drawn), Set(light))
     }
 
-    // MARK: - Auto filtering
+    // MARK: - Auto candidates
 
-    func testAutoWithoutHintsIsTheFullDeck() {
-        let auto = StyleDeck.autoCandidates(anchors: ["#3060A0"], brief: .neutral)
-        XCTAssertEqual(auto.styles, PaletteStyle.deck(for: .auto))
-        XCTAssertNil(auto.first)
+    func testAutoWithoutColorsShufflesTheFullDeck() {
+        let result = StyleDeck.autoCandidates(anchors: [], brief: .neutral)
+        XCTAssertEqual(Set(result.styles), Set(auto))
+        XCTAssertFalse(result.ordered)
+        XCTAssertNil(result.first)
     }
 
-    func testImpliedHarmonyKeepsItsTreatmentAndTheToneTreatments() {
-        let auto = StyleDeck.autoCandidates(anchors: ["#3366CC", "#CC6633"], brief: .neutral)
-        XCTAssertEqual(auto.styles, [.triadicPlayful, .pastel, .jewelTones, .earthy])
+    func testAutoWithAColorRanksBestFitFirst() {
+        let result = StyleDeck.autoCandidates(anchors: ["#FFF2A0"], brief: .neutral)
+        XCTAssertTrue(result.ordered)
+        XCTAssertEqual(result.styles, PaletteStyle.ranked(auto, for: OKLCH(hex: "#FFF2A0")!))
+        XCTAssertEqual(result.styles.first, .pastel)
+    }
+
+    func testImpliedHarmonyLeadsThenTheToneTreatmentsByFit() {
+        let result = StyleDeck.autoCandidates(anchors: ["#3366CC", "#CC6633"], brief: .neutral)
+        XCTAssertTrue(result.ordered)
+        XCTAssertEqual(result.styles.first, .triadicPlayful)
+        XCTAssertEqual(Set(result.styles), [.triadicPlayful, .pastel, .jewelTones, .earthy])
     }
 
     func testGreyColorsKeepMonochromePopPastelAndJewel() {
-        let auto = StyleDeck.autoCandidates(anchors: ["#808080"], brief: .neutral)
-        XCTAssertEqual(auto.styles, [.monochromePop, .pastel, .jewelTones])
+        let result = StyleDeck.autoCandidates(anchors: ["#808080"], brief: .neutral)
+        XCTAssertEqual(result.styles.first, .monochromePop)
+        XCTAssertEqual(Set(result.styles), [.monochromePop, .pastel, .jewelTones])
     }
 
     func testVibeToneRemovesContradictingTreatments() {
@@ -1150,9 +1212,12 @@ final class StyleDeckTests: XCTestCase {
     func testVibeHarmonyLeads() {
         var brief = PaletteBrief.neutral
         brief.scheme = .triadic
+        // No colors: it leads the shuffle.
         XCTAssertEqual(StyleDeck.autoCandidates(anchors: [], brief: brief).first, .triadicPlayful)
+        // One color: it leads the ranking.
+        XCTAssertEqual(StyleDeck.autoCandidates(anchors: ["#FFF2A0"], brief: brief).styles.first, .triadicPlayful)
         // Colors that imply a harmony outrank the vibe's.
-        XCTAssertNil(StyleDeck.autoCandidates(anchors: ["#3366CC", "#4D7FE0"], brief: brief).first)
+        XCTAssertEqual(StyleDeck.autoCandidates(anchors: ["#3366CC", "#4D7FE0"], brief: brief).styles.first, .analogous603010)
     }
 
     func testTwoHueVibeDropsMonochrome() {
@@ -1166,9 +1231,50 @@ final class StyleDeckTests: XCTestCase {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `xcodebuild test ... -only-testing:PalettesTests/StyleDeckTests`
-Expected: build FAILS with `cannot find 'StyleDeck' in scope`.
+Expected: build FAILS with `cannot find 'StyleDeck' in scope` (and `has no member 'ranked'`).
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 3: Add the fit ranking**
+
+Append to `Palettes/Managers/PaletteStyle.swift`:
+
+```swift
+// MARK: - Auto fit
+
+extension PaletteStyle {
+    /// How well this Auto style suits a color (higher is better; 0 for
+    /// interface styles). Pale colors suit Pastel, deep saturated ones Jewel
+    /// Tones, warm muted ones (browns, olives) Earthy, greys Monochrome + Pop,
+    /// and vivid ones the pop schemes. Calm analogous is the general default.
+    func fit(for color: OKLCH) -> Double {
+        let L = color.L
+        let C = color.C
+        let warm = C >= 0.03 && OKLCH.hueDistance(color.h, 60) <= 50
+        switch self {
+        case .monochromePop: return C < 0.03 ? 10 : 1
+        case .pastel: return L >= 0.80 ? 9 : (L >= 0.70 ? 5 : 0)
+        case .jewelTones: return L <= 0.45 && C >= 0.08 ? 9 : (L <= 0.55 && C >= 0.12 ? 5 : 0)
+        case .earthy: return warm && C < 0.11 && (0.30...0.75).contains(L) ? 9 : (warm && C < 0.15 ? 4 : 0)
+        case .complementaryPop: return C >= 0.17 ? 8 : (C >= 0.12 ? 5 : 2)
+        case .triadicPlayful: return C >= 0.17 ? 7 : (C >= 0.12 ? 4 : 1)
+        case .analogous603010: return 6
+        case .splitComplementary: return 4
+        default: return 0
+        }
+    }
+
+    /// `styles`, best-suited to `color` first. Ties keep their given order.
+    static func ranked(_ styles: [PaletteStyle], for color: OKLCH) -> [PaletteStyle] {
+        styles.enumerated()
+            .sorted { a, b in
+                let (fitA, fitB) = (a.element.fit(for: color), b.element.fit(for: color))
+                return fitA != fitB ? fitA > fitB : a.offset < b.offset
+            }
+            .map(\.element)
+    }
+}
+```
+
+- [ ] **Step 4: Write `StyleDeck.swift`**
 
 Create `Palettes/Managers/StyleDeck.swift`:
 
@@ -1178,10 +1284,10 @@ Create `Palettes/Managers/StyleDeck.swift`:
 //  Palettes
 //
 //  Generating again from the same colors, mode and vibe should look
-//  different. The deck shuffles a mode's styles once per input key and
-//  hands them out in turn, so every style shows before any repeats; a
-//  reshuffle never starts with the style that just showed. Session memory
-//  only: nothing here is persisted.
+//  different. The deck hands out a mode's styles in turn, so every style
+//  shows before any repeats. Interface modes shuffle, and a reshuffle never
+//  starts with the style that just showed. Auto with the user's colors walks
+//  the styles best-suited first. Session memory only: nothing here is persisted.
 //
 //  `StyleDeck` is pure and takes its random source, so it is fully
 //  unit-testable. `StyleDeckStore` is the app's one instance.
@@ -1219,12 +1325,16 @@ struct StyleDeck {
 
     func contains(_ key: StyleDeckKey) -> Bool { rounds[key] != nil }
 
-    /// The next style for `key`. `first` leads a fresh deck (a vibe's
-    /// harmony); later rounds are plain shuffles. nil only without candidates.
+    /// The next style for `key`.
+    /// - `ordered`: every round walks `candidates` in the given order (Auto's
+    ///   best-fit ranking). Otherwise each round is a shuffle.
+    /// - `first`: leads a fresh shuffled deck (a vibe's harmony).
+    /// - Returns nil only when there are no candidates.
     mutating func next<G: RandomNumberGenerator>(
         for key: StyleDeckKey,
         candidates: [PaletteStyle],
         first: PaletteStyle? = nil,
+        ordered: Bool = false,
         using rng: inout G
     ) -> PaletteStyle? {
         guard !candidates.isEmpty else { return nil }
@@ -1232,14 +1342,14 @@ struct StyleDeck {
         if let existing = rounds[key], Set(existing.order) == Set(candidates) {
             round = existing
         } else {
-            var order = candidates.shuffled(using: &rng)
-            if let first, let index = order.firstIndex(of: first) { order.swapAt(0, index) }
+            var order = ordered ? candidates : candidates.shuffled(using: &rng)
+            if !ordered, let first, let index = order.firstIndex(of: first) { order.swapAt(0, index) }
             round = Round(order: order, position: 0)
         }
         if round.position >= round.order.count {
             let last = round.order.last
-            var order = candidates.shuffled(using: &rng)
-            if order.count > 1, order[0] == last { order.swapAt(0, 1) }
+            var order = ordered ? candidates : candidates.shuffled(using: &rng)
+            if !ordered, order.count > 1, order[0] == last { order.swapAt(0, 1) }
             round = Round(order: order, position: 0)
         }
         let style = round.order[round.position]
@@ -1262,13 +1372,14 @@ struct StyleDeck {
 // MARK: - Auto
 
 extension StyleDeck {
-    /// The Auto treatments that fit the user's colors and vibe, and the one
-    /// to show first.
-    /// - Colors that imply a harmony keep that harmony's treatment plus the
-    ///   tone treatments, which then build on the implied harmony.
-    /// - A vibe's tone drops the treatments that contradict it.
-    /// - A vibe's harmony leads, unless the colors imply one.
-    static func autoCandidates(anchors: [String], brief: PaletteBrief) -> (styles: [PaletteStyle], first: PaletteStyle?) {
+    /// The Auto styles that fit the user's colors and vibe, and how to walk them.
+    /// - Colors that imply a harmony keep that harmony's style plus the tone
+    ///   styles, which then build on the implied harmony.
+    /// - A vibe's tone drops the styles that contradict it.
+    /// - The colors' implied harmony leads; otherwise a vibe's harmony leads.
+    /// - With the user's colors, the rest go best-suited first, every round
+    ///   (`ordered`). With none there's nothing to suit, so the deck shuffles.
+    static func autoCandidates(anchors: [String], brief: PaletteBrief) -> (styles: [PaletteStyle], first: PaletteStyle?, ordered: Bool) {
         let colors = PaletteBuilder.normalize(anchors).compactMap { OKLCH(hex: $0) }
         let implied = PaletteBuilder.impliedHarmony(of: colors)
         var styles: [PaletteStyle]
@@ -1299,10 +1410,13 @@ extension StyleDeck {
         let kept = styles.filter { !removed.contains($0) }
         if !kept.isEmpty { styles = kept }
 
-        let first = implied == nil
-            ? brief.scheme.flatMap { PaletteStyle.treatment(for: $0) }.flatMap { styles.contains($0) ? $0 : nil }
-            : nil
-        return (styles, first)
+        let leadHarmony = implied ?? brief.scheme
+        let lead = leadHarmony.flatMap { PaletteStyle.treatment(for: $0) }.flatMap { styles.contains($0) ? $0 : nil }
+        guard let basis = colors.first(where: { $0.C >= 0.03 }) ?? colors.first else {
+            return (styles, lead, false)
+        }
+        let ranked = PaletteStyle.ranked(styles.filter { $0 != lead }, for: basis)
+        return ((lead.map { [$0] } ?? []) + ranked, nil, true)
     }
 }
 
@@ -1317,29 +1431,29 @@ final class StyleDeckStore {
 
     nonisolated deinit {}
 
-    func next(for key: StyleDeckKey, candidates: [PaletteStyle], first: PaletteStyle? = nil) -> PaletteStyle? {
-        deck.next(for: key, candidates: candidates, first: first, using: &rng)
+    func next(for key: StyleDeckKey, candidates: [PaletteStyle], first: PaletteStyle? = nil, ordered: Bool = false) -> PaletteStyle? {
+        deck.next(for: key, candidates: candidates, first: first, ordered: ordered, using: &rng)
     }
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `xcodebuild test ... -only-testing:PalettesTests/StyleDeckTests`
-Expected: `** TEST SUCCEEDED **`, 15 tests.
+Run: `xcodebuild test ... -only-testing:PalettesTests/StyleDeckTests -only-testing:PalettesTests/PaletteStyleTests`
+Expected: `** TEST SUCCEEDED **`. If a `testEachColorKindSuitsItsStyle` case fails, the failure message prints that color's L, C and h. Adjust the matching threshold in `fit(for:)` minimally so the color lands in its intended band, and say so in the report. Never change the expected style.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add Palettes/Managers/StyleDeck.swift PalettesTests/StyleDeckTests.swift
-git commit -m "Add StyleDeck: shuffled, non-repeating styles per request, with Auto filtering
+git commit -m "Add StyleDeck: Auto ranks styles by fit, interface modes shuffle without repeats
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Managers/StyleDeck.swift PalettesTests/StyleDeckTests.swift
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Managers/PaletteStyle.swift Palettes/Managers/StyleDeck.swift PalettesTests/StyleDeckTests.swift
 ```
 
 ---
 
-### Task 5: Recipe and generator wiring
+### Task 5: Recipe and generator wiring, including pinned modes
 
 **Files:**
 - Modify: `Palettes/Managers/PaletteRefinement.swift` (`GenerationRecipe`, `applying`)
@@ -1347,10 +1461,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Managers/St
 - Test: `PalettesTests/PaletteRefinementTests.swift`, `PalettesTests/PaletteGeneratorTests.swift` (append)
 
 **Interfaces:**
-- Consumes: `StyleDeckKey`, `StyleDeck.autoCandidates`, `StyleDeckStore` (Task 4); `PaletteStyle.deck(for:)` (Task 1); `PaletteBuildRequest.style` (Task 2).
+- Consumes: `StyleDeckKey`, `StyleDeck.autoCandidates`, `StyleDeckStore` (Task 4); `PaletteStyle.deck(for:)` and `.treatment` (Task 1); `PaletteBuildRequest.style` (Task 2).
 - Produces:
   - `GenerationRecipe.style: PaletteStyle?` (declared last, default `nil`)
-  - `PaletteGenerator.generate(..., namer: Namer? = nil, deck: StyleDeckStore = .shared, onRecipe: ...)`
+  - `PaletteGenerator.generate(baseColors:size:vibe:scheme:pinnedStyle:existingNames:refining:nameVibe:namingTimeout:namer:deck:onRecipe:...)`, where `pinnedStyle: PaletteStyle? = nil` comes right after `scheme` and `deck: StyleDeckStore = .shared` right after `namer`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1364,7 +1478,7 @@ Append inside the test class in `PalettesTests/PaletteRefinementTests.swift`:
         XCTAssertEqual(recipe.applying(darker, lockedCount: 0).style, .pastel)
         var triadic = PaletteChange()
         triadic.scheme = .triadic
-        XCTAssertNil(recipe.applying(triadic, lockedCount: 0).style, "an explicit harmony replaces the treatment")
+        XCTAssertNil(recipe.applying(triadic, lockedCount: 0).style, "an explicit harmony replaces the style")
     }
 ```
 
@@ -1373,37 +1487,63 @@ Append inside `PaletteGeneratorTests`:
 ```swift
     // MARK: - Style decks
 
+    private var fixedNamer: PaletteGenerator.Namer {
+        { _, _, _ in PaletteGenerator.Naming(title: "Harbor", colorNames: [:]) }
+    }
+
     @available(iOS 26.0, *)
     @MainActor
-    func testGeneratingAgainStepsThroughTheModesStyles() async throws {
-        let store = StyleDeckStore()
-        let base = [PaletteGenerator.BaseColor(hex: "#3060A0", name: "Harbor")]
-        for scheme in [HarmonyScheme.uiLight, .uiDark, .auto] {
-            let deck = PaletteStyle.deck(for: scheme)
-            var styles: [PaletteStyle] = []
-            for _ in 0..<deck.count {
-                var recipe: GenerationRecipe?
-                _ = try await PaletteGenerator.generate(
-                    baseColors: base, size: 8, vibe: nil, scheme: scheme,
-                    namer: { _, _, _ in PaletteGenerator.Naming(title: "Harbor", colorNames: [:]) },
-                    deck: store,
-                    onRecipe: { recipe = $0 }
-                )
-                styles.append(try XCTUnwrap(recipe?.style, "\(scheme)"))
-            }
-            XCTAssertEqual(Set(styles), Set(deck), "\(scheme) must show every style before repeating")
+    private func styles(_ count: Int, base: [String], scheme: HarmonyScheme = .auto, pinned: PaletteStyle? = nil, store: StyleDeckStore) async throws -> [PaletteStyle] {
+        var styles: [PaletteStyle] = []
+        for _ in 0..<count {
+            var recipe: GenerationRecipe?
+            _ = try await PaletteGenerator.generate(
+                baseColors: base.map { PaletteGenerator.BaseColor(hex: $0, name: "Base") },
+                size: 8, vibe: nil, scheme: scheme, pinnedStyle: pinned,
+                namer: fixedNamer, deck: store, onRecipe: { recipe = $0 }
+            )
+            styles.append(try XCTUnwrap(recipe?.style))
         }
+        return styles
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testInterfaceModesStepThroughTheirStyles() async throws {
+        let store = StyleDeckStore()
+        for scheme in [HarmonyScheme.uiLight, .uiDark] {
+            let deck = PaletteStyle.deck(for: scheme)
+            let drawn = try await styles(deck.count, base: ["#3060A0"], scheme: scheme, store: store)
+            XCTAssertEqual(Set(drawn), Set(deck), "\(scheme) must show every style before repeating")
+        }
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testAutoStartsWithTheBestFitAndStepsDown() async throws {
+        let expected = StyleDeck.autoCandidates(anchors: ["#FFF2A0"], brief: .neutral).styles
+        let drawn = try await styles(expected.count, base: ["#FFF2A0"], store: StyleDeckStore())
+        XCTAssertEqual(drawn, expected)
+        XCTAssertEqual(drawn.first, .pastel)
+        XCTAssertFalse(drawn.contains { PaletteStyle.deck(for: .uiLight).contains($0) || PaletteStyle.deck(for: .uiDark).contains($0) },
+                       "Auto never picks an interface style")
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testPinnedModeKeepsItsStyle() async throws {
+        let drawn = try await styles(3, base: ["#3060A0"], pinned: .earthy, store: StyleDeckStore())
+        XCTAssertEqual(drawn, [.earthy, .earthy, .earthy])
     }
 
     @available(iOS 26.0, *)
     @MainActor
     func testDescribedChangeKeepsTheStyle() async throws {
         let store = StyleDeckStore()
-        let namer: PaletteGenerator.Namer = { _, _, _ in PaletteGenerator.Naming(title: "Harbor", colorNames: [:]) }
         var first: GenerationRecipe?
         _ = try await PaletteGenerator.generate(
             baseColors: [], size: 6, vibe: nil, scheme: .uiDark,
-            namer: namer, deck: store, onRecipe: { first = $0 }
+            namer: fixedNamer, deck: store, onRecipe: { first = $0 }
         )
         let recipe = try XCTUnwrap(first)
         XCTAssertNotNil(recipe.style)
@@ -1411,7 +1551,7 @@ Append inside `PaletteGeneratorTests`:
         _ = try await PaletteGenerator.generate(
             baseColors: [], size: nil, vibe: nil,
             refining: .init(recipe: recipe, change: "darker"),
-            namer: namer, deck: store, onRecipe: { changed = $0 }
+            namer: fixedNamer, deck: store, onRecipe: { changed = $0 }
         )
         XCTAssertEqual(changed?.style, recipe.style)
     }
@@ -1420,7 +1560,7 @@ Append inside `PaletteGeneratorTests`:
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `xcodebuild test ... -only-testing:PalettesTests/PaletteRefinementTests -only-testing:PalettesTests/PaletteGeneratorTests`
-Expected: build FAILS with `extra argument 'style' in call` and `extra argument 'deck' in call`.
+Expected: build FAILS with `extra argument 'style' in call` and `extra argument 'pinnedStyle' in call`.
 
 - [ ] **Step 3: Add `GenerationRecipe.style`**
 
@@ -1445,22 +1585,30 @@ with:
 ```swift
         if let scheme = change.scheme, !self.scheme.isUIMode {
             next.scheme = scheme
-            // An explicit harmony replaces the Auto treatment.
+            // An explicit harmony replaces the style.
             next.style = nil
         }
 ```
 
-- [ ] **Step 4: Wire the deck into `PaletteGenerator.generate`**
+- [ ] **Step 4: Wire styles into `PaletteGenerator.generate`**
 
-Add a parameter to the signature after `namer: Namer? = nil,`:
+Add to the signature, right after `scheme: HarmonyScheme = .auto,`:
+
+```swift
+        pinnedStyle: PaletteStyle? = nil,
+```
+
+and right after `namer: Namer? = nil,`:
 
 ```swift
         deck: StyleDeckStore = .shared,
 ```
 
-Document it in the doc comment, after the `namer` line:
+Add these to the doc comment after the `namer` line:
 
 ```swift
+    /// - Parameter pinnedStyle: an Auto style the user picked as the mode
+    ///   (with `scheme` `.auto`). Every fresh run uses it; no deck draw.
     /// - Parameter deck: hands out the next design style for a fresh run, so
     ///   generating again from the same inputs looks different (tests inject one).
 ```
@@ -1484,19 +1632,24 @@ In the fresh branch (`} else {`), replace everything from `let brief = trimmedVi
 
 ```swift
             let brief = trimmedVibe.isEmpty ? PaletteBrief.neutral : await makeBrief(vibe: trimmedVibe)
-            // Each fresh run from the same colors, mode and vibe takes the
-            // next style in that mode's deck, so generating again looks different.
+            // A picked style is used as is. Otherwise each fresh run from the
+            // same colors, mode and vibe takes the next style in the mode's
+            // deck: Auto walks the styles best-suited to the colors first,
+            // interface modes shuffle.
+            assert(pinnedStyle == nil || (pinnedStyle?.treatment != nil && scheme == .auto), "a pinned style is an Auto style")
             let deckKey = StyleDeckKey(anchors: locked.map(\.hex), scheme: scheme, vibe: trimmedVibe)
             let style: PaletteStyle?
-            if scheme == .auto {
+            if let pinnedStyle {
+                style = pinnedStyle
+            } else if scheme == .auto {
                 let auto = StyleDeck.autoCandidates(anchors: locked.map(\.hex), brief: brief)
-                style = deck.next(for: deckKey, candidates: auto.styles, first: auto.first)
+                style = deck.next(for: deckKey, candidates: auto.styles, first: auto.first, ordered: auto.ordered)
             } else {
                 style = deck.next(for: deckKey, candidates: PaletteStyle.deck(for: scheme))
             }
             // The user's mode always wins. Unstyled Auto follows the brief's
             // harmony, unless two or more chosen colors already imply one;
-            // styled Auto leaves the harmony to its treatment.
+            // styled Auto leaves the harmony to its style.
             var resolvedScheme = scheme
             if style == nil, scheme == .auto, locked.count < 2, let suggested = brief.scheme,
                !(suggested == .monochromatic && brief.secondaryHue != nil) {
@@ -1528,27 +1681,208 @@ Expected: `** TEST SUCCEEDED **`, including every pre-existing generator test.
 
 ```bash
 git add Palettes/Managers/PaletteRefinement.swift Palettes/Managers/PaletteGenerator.swift PalettesTests/PaletteRefinementTests.swift PalettesTests/PaletteGeneratorTests.swift
-git commit -m "Generate draws the next style per request; changes keep it
+git commit -m "Generate draws the next style per request (Auto by fit), honors a pinned style, and keeps it on changes
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Managers/PaletteRefinement.swift Palettes/Managers/PaletteGenerator.swift PalettesTests/PaletteRefinementTests.swift PalettesTests/PaletteGeneratorTests.swift
 ```
 
 ---
 
-### Task 6: Result caption, full verification and bookkeeping
+### Task 6: Mode menu with every style, result caption, full verification
+
+> Amended 2026-11-26 (user request). The Mode menu offers Auto, the eight color styles (each one pinnable) and UI Light / UI Dark. Auto never picks an interface mode.
 
 **Files:**
+- Create: `Palettes/Models/GenerationMode.swift`
+- Test: `PalettesTests/GenerationModeTests.swift`
+- Modify: `Palettes/Views/Color/GenerateView.swift` (`scheme` state → `mode`, the Mode menu, `resetForm`, `performGeneration`, the `GenerationResultView(` call)
 - Modify: `Palettes/Views/Components/Generation/GenerationExperienceView.swift` (`GenerationResultView`)
-- Modify: `Palettes/Views/Color/GenerateView.swift` (the `GenerationResultView(` call, around line 202)
 - Modify: `plans/README.md`
 
 **Interfaces:**
-- Consumes: `GenerationRecipe.style` (Task 5), `PaletteStyle.displayName` (Task 1).
-- Produces: `GenerationResultView.styleName: String? = nil`.
+- Consumes: `PaletteStyle` (Task 1); `GenerationRecipe.style` and `generate(... scheme:pinnedStyle: ...)` (Task 5).
+- Produces:
+  - `enum GenerationMode: Hashable, Identifiable` with cases `auto`, `style(PaletteStyle)`, `uiLight`, `uiDark`; `displayName`, `scheme`, `pinnedStyle`, `static let colorStyles`, and `static let interfaceModes`
+  - `GenerationResultView.styleName: String? = nil`
 
-- [ ] **Step 1: Add the caption**
+- [ ] **Step 1: Write the failing test**
 
-In `GenerationResultView`, add after `var screenMargin: CGFloat?`:
+Create `PalettesTests/GenerationModeTests.swift`:
+
+```swift
+//
+//  GenerationModeTests.swift
+//  PalettesTests
+//
+
+import XCTest
+@testable import Palettes
+
+@MainActor
+final class GenerationModeTests: XCTestCase {
+
+    func testColorStylesAreTheEightAutoStyles() {
+        XCTAssertEqual(GenerationMode.colorStyles.map(\.pinnedStyle), PaletteStyle.deck(for: .auto).map { Optional($0) })
+        for mode in GenerationMode.colorStyles {
+            XCTAssertEqual(mode.scheme, .auto, "a pinned style builds through Auto")
+            XCTAssertNotNil(mode.pinnedStyle?.treatment)
+        }
+    }
+
+    func testAutoAndInterfaceModesPinNothing() {
+        XCTAssertEqual(GenerationMode.auto.scheme, .auto)
+        XCTAssertNil(GenerationMode.auto.pinnedStyle)
+        XCTAssertEqual(GenerationMode.interfaceModes, [.uiLight, .uiDark])
+        XCTAssertEqual(GenerationMode.uiLight.scheme, .uiLight)
+        XCTAssertEqual(GenerationMode.uiDark.scheme, .uiDark)
+        XCTAssertNil(GenerationMode.uiDark.pinnedStyle)
+    }
+
+    func testNamesAndIDsAreUnique() {
+        let all = [GenerationMode.auto] + GenerationMode.colorStyles + GenerationMode.interfaceModes
+        XCTAssertEqual(Set(all.map(\.id)).count, all.count)
+        XCTAssertEqual(Set(all.map(\.displayName)).count, all.count)
+        XCTAssertEqual(GenerationMode.style(.pastel).displayName, "Pastel")
+        XCTAssertEqual(GenerationMode.uiLight.displayName, "UI Light")
+    }
+}
+```
+
+Run: `xcodebuild test ... -only-testing:PalettesTests/GenerationModeTests`
+Expected: build FAILS with `cannot find 'GenerationMode' in scope`.
+
+- [ ] **Step 2: Write `GenerationMode`**
+
+Create `Palettes/Models/GenerationMode.swift`:
+
+```swift
+//
+//  GenerationMode.swift
+//  Palettes
+//
+//  What the Generate tab's Mode menu offers: Auto, which picks the color
+//  style that best suits the chosen colors (never an interface mode); one
+//  color style, pinned; or an interface mode, which steps through its own
+//  styles on each generation.
+//
+
+import Foundation
+
+enum GenerationMode: Hashable, Identifiable {
+    case auto
+    case style(PaletteStyle)
+    case uiLight
+    case uiDark
+
+    /// The eight color styles, in menu order.
+    static let colorStyles: [GenerationMode] = PaletteStyle.deck(for: .auto).map { .style($0) }
+    static let interfaceModes: [GenerationMode] = [.uiLight, .uiDark]
+
+    var id: String {
+        switch self {
+        case .auto: return "auto"
+        case .style(let style): return "style.\(style.rawValue)"
+        case .uiLight: return "uiLight"
+        case .uiDark: return "uiDark"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .auto: return HarmonyScheme.auto.displayName
+        case .style(let style): return style.displayName
+        case .uiLight: return HarmonyScheme.uiLight.displayName
+        case .uiDark: return HarmonyScheme.uiDark.displayName
+        }
+    }
+
+    /// The scheme the generator builds with. A pinned color style builds through Auto.
+    var scheme: HarmonyScheme {
+        switch self {
+        case .auto, .style: return .auto
+        case .uiLight: return .uiLight
+        case .uiDark: return .uiDark
+        }
+    }
+
+    /// The color style the user picked, if any.
+    var pinnedStyle: PaletteStyle? {
+        if case .style(let style) = self { return style }
+        return nil
+    }
+}
+```
+
+Run the same test. Expected: `** TEST SUCCEEDED **`.
+
+- [ ] **Step 3: Use it in the Generate tab**
+
+In `Palettes/Views/Color/GenerateView.swift`:
+
+a) Replace `@State private var scheme: HarmonyScheme = .auto` with `@State private var mode: GenerationMode = .auto`.
+
+b) Delete the `modeOptions` property (and its `/// Modes offered in the menu.` comment).
+
+c) Replace the whole `Menu { ... } label: { ... }` of the Mode option (inside `if canChooseMode {`) with:
+
+```swift
+                    Menu {
+                        modeButton(.auto)
+                        Section("Color Styles") {
+                            ForEach(GenerationMode.colorStyles) { modeButton($0) }
+                        }
+                        Section("Interface") {
+                            ForEach(GenerationMode.interfaceModes) { modeButton($0) }
+                        }
+                    } label: {
+                        generationOptionLabel(
+                            title: "Mode",
+                            value: mode.displayName,
+                            systemImage: "paintpalette"
+                        )
+                    }
+```
+
+(Keep the `.accessibilityLabel("Palette mode")` and `.transition(...)` modifiers that follow it.)
+
+d) Add this helper next to `generationOptionLabel` (same type, same access level):
+
+```swift
+    /// One Mode menu entry, checked when it's the current mode.
+    private func modeButton(_ option: GenerationMode) -> some View {
+        Button {
+            mode = option
+        } label: {
+            if option == mode {
+                Label(option.displayName, systemImage: "checkmark")
+            } else {
+                Text(option.displayName)
+            }
+        }
+    }
+```
+
+e) In `resetForm()`, replace `scheme = .auto` with `mode = .auto`.
+
+f) In `performGeneration`, replace `scheme: canChooseMode ? scheme : .auto,` with:
+
+```swift
+            scheme: canChooseMode ? mode.scheme : .auto,
+            pinnedStyle: canChooseMode ? mode.pinnedStyle : nil,
+```
+
+g) In the `GenerationResultView(` call, replace `screenMargin: screenMargin` with:
+
+```swift
+                    screenMargin: screenMargin,
+                    styleName: resultRecipe?.style?.displayName
+```
+
+Search the file for any other `scheme` reference to the removed state (`grep -n "scheme" Palettes/Views/Color/GenerateView.swift`). The only remaining hits should be the `scheme:` argument label from (f).
+
+- [ ] **Step 4: Add the caption**
+
+In `GenerationResultView` (`Palettes/Views/Components/Generation/GenerationExperienceView.swift`), add after `var screenMargin: CGFloat?`:
 
 ```swift
     /// The design style the palette follows, shown under its name.
@@ -1573,26 +1907,15 @@ Rename the existing `private var nameField: some View` to `private var editableN
     }
 ```
 
-In `Palettes/Views/Color/GenerateView.swift`, in the `GenerationResultView(` call, replace `screenMargin: screenMargin` with:
-
-```swift
-                    screenMargin: screenMargin,
-                    styleName: resultRecipe?.style?.displayName
-```
-
-- [ ] **Step 2: Build**
+- [ ] **Step 5: Build and run the whole suite**
 
 Run: `xcodebuild build -project Palettes.xcodeproj -scheme Palettes -destination "$DEST" -derivedDataPath /tmp/palettes-dd 2>&1 | tail -5`
 Expected: `** BUILD SUCCEEDED **`.
 
-- [ ] **Step 3: Run the whole test suite**
-
 Run: `xcodebuild test -project Palettes.xcodeproj -scheme Palettes -destination "$DEST" -derivedDataPath /tmp/palettes-dd 2>&1 | grep -E "Executed|error:|failed" | tail -20`
 Expected: `** TEST SUCCEEDED **`, 0 failures.
 
-- [ ] **Step 4: Check the deinit rule (CLAUDE.md)**
-
-Run:
+- [ ] **Step 6: Check the deinit rule (CLAUDE.md)**
 
 ```bash
 nm -a "$(find /tmp/palettes-dd -name Palettes.debug.dylib -path '*iphonesimulator*' | head -1)" | xcrun swift-demangle | grep __isolated_deallocating_deinit
@@ -1600,34 +1923,35 @@ nm -a "$(find /tmp/palettes-dd -name Palettes.debug.dylib -path '*iphonesimulato
 
 Expected: the only hit is `ResourceBundleClass`. Nothing for `StyleDeckStore`.
 
-- [ ] **Step 5: Check on the simulator**
+- [ ] **Step 7: Check on the simulator**
 
-Launch the app on the booted simulator (iOS Simulator tool `attach`, then `launch` with the app built in Step 2, at `/tmp/palettes-dd/Build/Products/Debug-iphonesimulator/Palettes.app`). In the Generate tab:
-1. Select one saved color, pick **UI Light**, tap Generate, then tap Regenerate 5 times. Take a screenshot each time. Expect six visibly different looks, with captions covering all six UI Light names and none repeated.
-2. Repeat with **UI Dark**. OLED Black's background swatch must be pure black.
-3. Pick **Auto**, type the vibe "pastel spring", generate twice. Neither result may be captioned Jewel Tones.
-4. On a result, describe the change "darker". The caption must stay the same.
+Launch the app on the booted simulator (iOS Simulator tool: `attach`, then `launch` with `/tmp/palettes-dd/Build/Products/Debug-iphonesimulator/Palettes.app`). In the Generate tab, select one saved color, then:
+1. Open the Mode menu and screenshot it. Expect Auto, a "Color Styles" section with eight styles, and an "Interface" section with UI Light / UI Dark.
+2. **UI Light:** Generate, then Regenerate 5 times, taking a screenshot each time. Expect six different looks, with captions covering all six UI Light style names.
+3. **UI Dark:** repeat. OLED Black's background swatch must be pure black.
+4. **Auto:** choose a pale color, Generate, then Regenerate once. The first caption should be Pastel, the second a different color style, and never a UI style.
+5. **Earthy (pinned):** Generate, then Regenerate twice. All three captions say Earthy.
+6. On a result, describe the change "darker". The caption stays the same.
 
-Record what you saw (with the screenshots) in the task report. Anything off is a defect to fix before finishing.
+Record what you saw (with screenshots) in the task report. Anything off is a defect to fix before finishing.
 
-- [ ] **Step 6: Update the plans index and the knowledge graph**
+- [ ] **Step 8: Update the plans index and the knowledge graph**
 
 In `plans/README.md`, add this row to the table after the 020 row:
 
 ```markdown
-| 022 | Palette style decks: Auto, UI Light and UI Dark step through named design styles on regenerate (shuffled deck, no repeats), style caption on the result | P1 | M | 013 | DONE (feature/palette-style-decks) |
+| 022 | Palette style decks: 12 interface styles cycle on regenerate; 8 color styles in the Mode menu (pinnable); Auto picks the best-suited color style and steps down on regenerate; style caption on the result | P1 | L | 013 | DONE (feature/palette-style-decks) |
 ```
 
-Run: `graphify update .`
-Expected: completes without errors. It's AST-only, with no API cost. Don't commit `graphify-out/` unless it's already tracked: check with `git ls-files graphify-out | head -1`.
+Run: `graphify update .`. Don't commit `graphify-out/` unless it's already tracked: check with `git ls-files graphify-out | head -1`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add Palettes/Views/Components/Generation/GenerationExperienceView.swift Palettes/Views/Color/GenerateView.swift plans/README.md plans/022-palette-style-decks.md
-git commit -m "Show the palette's style under its name; plan 022 done
+git add Palettes/Models/GenerationMode.swift PalettesTests/GenerationModeTests.swift
+git commit -m "Mode menu offers every color style; Auto picks by fit; style caption on results
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Views/Components/Generation/GenerationExperienceView.swift Palettes/Views/Color/GenerateView.swift plans/README.md plans/022-palette-style-decks.md
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- Palettes/Models/GenerationMode.swift PalettesTests/GenerationModeTests.swift Palettes/Views/Color/GenerateView.swift Palettes/Views/Components/Generation/GenerationExperienceView.swift plans/README.md
 ```
 
 ---
