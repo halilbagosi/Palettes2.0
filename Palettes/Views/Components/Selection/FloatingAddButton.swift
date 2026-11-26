@@ -12,11 +12,16 @@ struct FloatingAddButton: View {
     /// Spoken by VoiceOver, and the pointer tooltip on iPad.
     var title: String = "Add"
     var action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: action) {
+            // On the accent fill: a white "+" in light mode, a deeper shade
+            // of the accent in dark mode.
             Image(systemName: "plus")
                 .font(.title3.weight(.semibold))
+                .foregroundStyle(colorScheme == .dark ? AnyShapeStyle(.tint) : AnyShapeStyle(.white))
+                .brightness(colorScheme == .dark ? -0.4 : 0)
                 .frame(width: 44, height: 44)
         }
         .modifier(FloatingAddStyle())
@@ -27,14 +32,14 @@ struct FloatingAddButton: View {
     }
 }
 
-/// iOS 26: glass. Earlier: an opaque accent-filled circle with a white glyph —
+/// iOS 26: accent-tinted glass. Earlier: an opaque accent-filled circle —
 /// `.bordered` is translucent, so content scrolling underneath showed through
 /// the "+" and made it unreadable.
 private struct FloatingAddStyle: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content.buttonStyle(.glass)
+            content.buttonStyle(.glassProminent)
         } else {
             content.buttonStyle(.borderedProminent)
         }
