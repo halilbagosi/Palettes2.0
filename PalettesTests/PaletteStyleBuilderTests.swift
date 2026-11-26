@@ -158,6 +158,32 @@ final class PaletteStyleBuilderTests: XCTestCase {
         XCTAssertNil(PaletteBuilder.impliedHarmony(of: [OKLCH(hex: "#3060A0")!]))
     }
 
+    func testASingleHarmonyStyleKeepsItsHarmonyOverTheUsersColors() throws {
+        // Two chromatic colors 30° apart imply analogous.
+        let blue = try XCTUnwrap(OKLCH(hex: "#3060A0"))
+        let violet = OKLCH(L: 0.55, C: 0.12, h: blue.h + 30).gamutMapped().hex
+        let anchors = ["#3060A0", violet]
+        XCTAssertEqual(PaletteBuilder.impliedHarmony(of: anchors.compactMap { OKLCH(hex: $0) }), .analogous)
+        let expected: [PaletteStyle: HarmonyScheme] = [.triadicPlayful: .triadic, .complementaryPop: .complementary, .monochromePop: .monochromatic]
+        for (style, harmony) in expected {
+            for seed: UInt64 in 0..<5 {
+                let palette = build(anchors, size: 8, style: style, seed: seed)
+                XCTAssertEqual(palette.scheme, harmony, "\(style) seed \(seed)")
+                XCTAssertEqual(Array(palette.hexes.prefix(2)), anchors, "\(style) seed \(seed)")
+                XCTAssertEqual(Set(palette.hexes).count, 8, "\(style) seed \(seed)")
+            }
+        }
+        // The triadic build's generated colors reach the triad's hues (120° and 240° from the first color).
+        let generated = generated(build(anchors, size: 8, style: .triadicPlayful)).filter { $0.C >= 0.03 }
+        for offset in [120.0, 240] {
+            XCTAssertTrue(generated.contains { OKLCH.hueDistance($0.h, blue.h + offset) <= 25 }, "no color near \(offset)° from the first")
+        }
+        // Treatments with several harmonies still follow the user's colors.
+        for style in [PaletteStyle.pastel, .jewelTones, .earthy] {
+            XCTAssertEqual(build(anchors, size: 8, style: style).scheme, .analogous, "\(style)")
+        }
+    }
+
     func testEveryTreatmentKeepsEveryPairDistinct() {
         // No colors, one chromatic, one pale, two chromatic, one grey. A grey
         // is lightness alone: twelve of them cannot all sit 6 apart.

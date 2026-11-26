@@ -213,10 +213,12 @@ enum PaletteBuilder {
         let treatment = request.scheme == .auto ? request.style?.treatment : nil
         var scheme: HarmonyScheme
         if let treatment {
-            // The user's colors outrank the treatment's harmony; otherwise
-            // the seed picks among the treatment's.
-            scheme = impliedHarmony(of: anchors)
-                ?? treatment.harmonies[Int(rng.next() % UInt64(treatment.harmonies.count))]
+            // A style of one harmony is that harmony, whatever the user's
+            // colors imply. One with several follows the user's colors, and
+            // otherwise the seed picks among them.
+            scheme = treatment.harmonies.count == 1
+                ? treatment.harmonies[0]
+                : impliedHarmony(of: anchors) ?? treatment.harmonies[Int(rng.next() % UInt64(treatment.harmonies.count))]
         } else {
             scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
             if request.scheme == .auto, secondaryHue != nil, scheme == .monochromatic { scheme = .complementary }
