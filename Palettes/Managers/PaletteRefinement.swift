@@ -25,6 +25,9 @@ struct GenerationRecipe: Equatable {
     /// The main hue the builder actually used, for relative hue changes when
     /// the brief left the hue to the seed.
     var builtHue: Double?
+    /// The design style it was built in (see `PaletteStyle`). A described
+    /// change keeps it; nil for palettes built before styles existed.
+    var style: PaletteStyle? = nil
 
     /// The recipe with `change` applied. The seed is kept, so a rebuild only
     /// moves what the change asks for.
@@ -44,6 +47,8 @@ struct GenerationRecipe: Equatable {
 
         if let scheme = change.scheme, !self.scheme.isUIMode {
             next.scheme = scheme
+            // An explicit harmony replaces the style.
+            next.style = nil
         }
 
         if let size = change.size {
@@ -52,6 +57,22 @@ struct GenerationRecipe: Equatable {
             next.size = size + change.sizeDelta
         }
         next.size = min(12, max(2, max(lockedCount, next.size)))
+        return next
+    }
+
+    /// The recipe with a described change's vibe read as a brief: the vibe's
+    /// hue (when it names one), second hue and tone replace the old brief's.
+    /// Only unstyled Auto follows the vibe's harmony: a styled palette keeps
+    /// its style, which already sets the harmony, and interface modes keep
+    /// their mode.
+    func merging(_ vibe: PaletteBrief) -> GenerationRecipe {
+        var next = self
+        next.brief.hue = vibe.hue ?? brief.hue
+        next.brief.secondaryHue = vibe.secondaryHue
+        next.brief.tone = vibe.tone
+        if let suggested = vibe.scheme, !scheme.isUIMode, style == nil {
+            next.scheme = suggested
+        }
         return next
     }
 

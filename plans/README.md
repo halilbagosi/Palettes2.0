@@ -30,6 +30,7 @@ without `xcodebuild` do the file work and report verification as pending.
 | 018 | Sheets redesign r3: inline Spectrum/Grid/RGB picker in a pinned color editor; one strip-based palette editor for New + Edit Palette (start tiles, harmonies, photo pins); ✓ create/save, + add; Add Colors sheet removed | P1 | L | 017 | DONE — palette editor design superseded by 019 (feature/sheets-redesign) |
 | 019 | Sheets r4: dev's New Palette layout as base (pinned add panel: Pick · Scan · Library · Harmony), glass cards, no color wash, Scan as a picker mode, plan-018 motion fixes | P1 | L | 018 | DONE (feature/sheets-redesign; final review + device checks pending) |
 | 020 | Bug batch: onboarding (camera, haptics, speed, light-mode orb), Generate (Auto size, modes, photo), naming, Siri/Shortcuts find+search, sheets for iPhone Duo/iPad, Settings everywhere, Colors-tab perf | P1 | L | 019 | DONE (code complete; device checks owed, see ledger) |
+| 022 | Palette style decks: 12 interface styles cycle on regenerate; 8 color styles in the Mode menu (pinnable); Auto picks the best-suited color style and steps down on regenerate; style caption on the result | P1 | L | 013 | DONE (feature/palette-style-decks) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 

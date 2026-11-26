@@ -27,6 +27,13 @@ struct PaletteTone: Equatable {
     var chroma: Chroma = .balanced
 
     static let balanced = PaletteTone()
+
+    /// This tone where it says something, `fallback` where it is balanced:
+    /// a vibe's own tone wins over a style's, channel by channel.
+    func filling(from fallback: PaletteTone) -> PaletteTone {
+        PaletteTone(lightness: lightness == .balanced ? fallback.lightness : lightness,
+                    chroma: chroma == .balanced ? fallback.chroma : chroma)
+    }
 }
 
 struct PaletteBuildRequest {
@@ -43,6 +50,9 @@ struct PaletteBuildRequest {
     /// interface palettes.
     var secondaryHue: Double? = nil
     var seed: UInt64
+    /// The design style to follow (see `PaletteStyle`). nil builds exactly
+    /// as the builder did before styles existed.
+    var style: PaletteStyle? = nil
 }
 
 struct BuiltPalette: Equatable {
@@ -120,6 +130,10 @@ enum PaletteBuilder {
         var neutralsFollowAccent = false
         /// Lightness nudge for the colored roles (Primary, Accent, Secondary).
         var colorLightness = 0.0
+        // Styled builds (see `narrow`)
+        /// Degrees added to a style's relative Accent and Secondary hues.
+        var accentJitter = 0.0
+        var secondaryJitter = 0.0
 
         static let fixed = Variation()
 
@@ -138,6 +152,17 @@ enum PaletteBuilder {
             neutralTint = tints[Int(rng.next() % UInt64(tints.count))]
             neutralsFollowAccent = rng.nextUnit() < 0.25
             colorLightness = -0.05 + 0.1 * rng.nextUnit()
+        }
+
+        /// A style sets the character, so the seed only moves it a little.
+        /// Draws after `init(rng:)`'s draws, so unstyled builds are unchanged.
+        mutating func narrow(rng: inout SplitMix64) {
+            accentJitter = -15 + 30 * rng.nextUnit()
+            secondaryJitter = -10 + 20 * rng.nextUnit()
+            chroma = 0.95 + 0.1 * rng.nextUnit()
+            neutralTint = 0.8 + 0.4 * rng.nextUnit()
+            colorLightness = -0.03 + 0.06 * rng.nextUnit()
+            neutralsFollowAccent = false
         }
     }
 
@@ -185,8 +210,19 @@ enum PaletteBuilder {
 
         // A vibe that names two colors ("ocean sunset") is not a one-hue palette.
         let secondaryHue = anchors.isEmpty ? request.secondaryHue : nil
-        var scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
-        if request.scheme == .auto, secondaryHue != nil, scheme == .monochromatic { scheme = .complementary }
+        let treatment = request.scheme == .auto ? request.style?.treatment : nil
+        var scheme: HarmonyScheme
+        if let treatment {
+            // A style of one harmony is that harmony, whatever the user's
+            // colors imply. One with several follows the user's colors, and
+            // otherwise the seed picks among them.
+            scheme = treatment.harmonies.count == 1
+                ? treatment.harmonies[0]
+                : impliedHarmony(of: anchors) ?? treatment.harmonies[Int(rng.next() % UInt64(treatment.harmonies.count))]
+        } else {
+            scheme = request.scheme == .auto ? resolveAuto(anchors: anchors, rng: &rng) : request.scheme
+            if request.scheme == .auto, secondaryHue != nil, scheme == .monochromatic { scheme = .complementary }
+        }
         let anchorEntries = anchorHexes.indices.map { index in
             BuiltPalette.Entry(hex: anchorHexes[index], role: anchorRole(index, scheme: scheme), group: .anchor)
         }
@@ -194,13 +230,15 @@ enum PaletteBuilder {
             return BuiltPalette(scheme: scheme, entries: anchorEntries)
         }
 
-        let hue = request.hue ?? Double(rng.next() % 360)
-        let variation = Variation(rng: &rng)
-        let main = mainColor(hue: hue, tone: request.tone)
+        let tone = treatment?.tone.map { request.tone.filling(from: $0) } ?? request.tone
+        let freeHue = request.hue ?? Double(rng.next() % 360)
+        var variation = Variation(rng: &rng)
+        if request.style != nil { variation.narrow(rng: &rng) }
+        let main = mainColor(hue: freeHue, tone: tone)
 
         let generated = scheme.isUIMode
-            ? interfaceEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, tone: request.tone, isDark: scheme == .uiDark, variation: variation)
-            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: request.tone, variation: variation)
+            ? interfaceEntries(anchors: anchors, placed: anchorHexes, main: main, size: size, tone: tone, isDark: scheme == .uiDark, variation: variation, style: request.style, freeHue: freeHue)
+            : harmonicEntries(anchors: anchors, placed: anchorHexes, main: main, secondaryHue: scheme == .monochromatic ? nil : secondaryHue, size: size, scheme: scheme, tone: tone, variation: variation, treatment: treatment, freeHue: freeHue)
 
         var entries = anchorEntries + generated
         // With none of the user's colors, nothing anchors "Primary" and the
@@ -226,9 +264,10 @@ enum PaletteBuilder {
 
     // MARK: - Auto
 
-    /// Two or more of the user's colors already imply a harmony; otherwise
-    /// Auto draws one, weighted toward the calmer schemes.
-    private static func resolveAuto(anchors: [OKLCH], rng: inout SplitMix64) -> HarmonyScheme {
+    /// The harmony the user's colors already imply: two or more chromatic
+    /// colors by their hue distance, all-grey colors as monochromatic. nil
+    /// when the colors leave it open.
+    static func impliedHarmony(of anchors: [OKLCH]) -> HarmonyScheme? {
         let chromatic = anchors.filter { $0.C >= 0.03 }
         if chromatic.count >= 2 {
             let d = OKLCH.hueDistance(chromatic[0].h, chromatic[1].h)
@@ -238,6 +277,13 @@ enum PaletteBuilder {
             return .splitComplementary
         }
         if !anchors.isEmpty && chromatic.isEmpty { return .monochromatic }
+        return nil
+    }
+
+    /// Two or more of the user's colors already imply a harmony; otherwise
+    /// Auto draws one, weighted toward the calmer schemes.
+    private static func resolveAuto(anchors: [OKLCH], rng: inout SplitMix64) -> HarmonyScheme {
+        if let implied = impliedHarmony(of: anchors) { return implied }
         let roll = rng.nextUnit()
         if roll < 0.30 { return .analogous }
         if roll < 0.55 { return .complementary }
@@ -261,24 +307,44 @@ enum PaletteBuilder {
         size: Int,
         scheme: HarmonyScheme,
         tone: PaletteTone,
-        variation: Variation
+        variation: Variation,
+        treatment: PaletteStyle.Treatment? = nil,
+        freeHue: Double = 0
     ) -> [BuiltPalette.Entry] {
         var placed = initial
         var entries: [BuiltPalette.Entry] = []
-        func place(_ candidates: [OKLCH], floors: [Double], role: String?, group: BuiltPalette.Group) -> BuiltPalette.Entry {
-            let hex = pick(candidates, placed: placed, floors: floors)
+        func place(_ candidates: [OKLCH], fallback: [OKLCH] = [], floors: [Double], role: String?, group: BuiltPalette.Group) -> BuiltPalette.Entry {
+            let hex = pick(candidates, fallback: fallback, placed: placed, floors: floors)
             placed.append(hex)
             return BuiltPalette.Entry(hex: hex, role: role, group: group)
         }
 
         // Each root heads a family of tones: the user's colors, or the
         // brief's main color when there are none.
-        let roots = anchors.isEmpty ? [main] : anchors
+        let pull = treatment?.earthPull ?? 0
+        let band = treatment?.lightnessBand
+        /// Earth pull, then the lightness band: for families whose hue is an
+        /// offset from an unpulled root, so every generated hue moves toward earth once.
+        func shaped(_ candidates: [OKLCH]) -> [OKLCH] { candidates.map { banded(pulled($0, by: pull), into: band) } }
+        let baseRoots = anchors.isEmpty ? [main] : anchors
+        // The user's colors keep their own hue: only the hues generated from
+        // them (secondary, accent) are pulled. The brief's main color, which
+        // is generated too, is pulled as well.
+        let roots = anchors.isEmpty ? baseRoots.map { pulled($0, by: pull) } : baseRoots
         if anchors.isEmpty {
-            entries.append(place([main], floors: [0], role: nil, group: .dominant))
+            entries.append(place(shaped([main]), floors: [0], role: nil, group: .dominant))
         }
 
-        let counts = groupCounts(size: size, scheme: scheme)
+        var counts = groupCounts(size: size, scheme: scheme)
+        if treatment?.dropsSecondary == true {
+            counts.dominant += counts.secondary
+            counts.secondary = 0
+        }
+        if treatment?.addsAccent == true, counts.accent == 0, size >= 4, counts.dominant > 1 {
+            counts.accent = 1
+            counts.dominant -= 1
+        }
+        let chroma = variation.chroma * (treatment?.chromaScale ?? 1)
         var slots: [BuiltPalette.Group] = Array(repeating: .dominant, count: max(0, counts.dominant - roots.count))
         if counts.secondary > 0 { slots.append(.secondary) }
         slots += Array(repeating: .accent, count: counts.accent)
@@ -292,11 +358,11 @@ enum PaletteBuilder {
         // secondary tones sit on it, the accent a little past it.
         var schemeOffsets = offsets(for: scheme)
         if let secondaryHue {
-            let delta = (secondaryHue - roots[0].h).truncatingRemainder(dividingBy: 360)
+            let delta = (secondaryHue - baseRoots[0].h).truncatingRemainder(dividingBy: 360)
             schemeOffsets = [delta, delta + 20]
         }
         if variation.swapsOffsets, secondaryHue == nil, schemeOffsets.count > 1 { schemeOffsets.swapAt(0, 1) }
-        let accentOffset = schemeOffsets.count > 1 ? schemeOffsets[1] : schemeOffsets[0]
+        let accentOffset = treatment?.accentOffset ?? (schemeOffsets.count > 1 ? schemeOffsets[1] : schemeOffsets[0])
         let neutralOrder: [Bool] = counts.neutral == 1 ? [tone.lightness != .dark] : [true, false]
         var dominantIndex = 0
         var secondaryIndex = 0
@@ -313,24 +379,70 @@ enum PaletteBuilder {
                 // Round-robin over the roots, so two chosen colors get equal shares.
                 let root = roots[dominantIndex % roots.count]
                 dominantIndex += 1
-                slotted[position] = place(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: variation.chroma), floors: [12, 9, 6], role: nil, group: .dominant)
+                // A grey has only lightness to vary: squeezed into a band it
+                // could not hold more than a few distinct tones.
+                let rootBand = root.C < 0.03 ? nil : band
+                let banded = toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma).map { Self.banded($0, into: rootBand) }
+                slotted[position] = place(banded, fallback: neighbors(of: banded, band: rootBand), floors: [12, 9, 6], role: nil, group: .dominant)
             case .secondary:
-                let root = roots[secondaryIndex % roots.count]
+                let root = baseRoots[secondaryIndex % baseRoots.count]
                 let offset = schemeOffsets[(secondaryIndex / roots.count) % schemeOffsets.count]
                 secondaryIndex += 1
-                slotted[position] = place(secondaryCandidates(root: root, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: variation.chroma), floors: [12, 9, 6], role: nil, group: .secondary)
+                // A grey root's hue angle means nothing: a treatment's
+                // secondary counts from the brief's or seed's hue instead.
+                let secondaryRoot = treatment != nil && root.C < 0.03
+                    ? OKLCH(L: root.L, C: root.C, h: freeHue) : root
+                let candidates = shaped(secondaryCandidates(root: secondaryRoot, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: chroma))
+                slotted[position] = place(candidates, fallback: neighbors(of: candidates, band: band), floors: [12, 9, 6], role: nil, group: .secondary)
             case .accent:
-                slotted[position] = place(accentCandidates(root: roots[0], offset: accentOffset, tone: tone, start: variation.accentStart), floors: [12, 9, 6], role: "Accent", group: .accent)
+                // A grey root's hue angle means nothing: a treatment's accent
+                // counts from the brief's or seed's hue instead.
+                let accentRoot = treatment != nil && baseRoots[0].C < 0.03
+                    ? OKLCH(L: baseRoots[0].L, C: baseRoots[0].C, h: freeHue) : baseRoots[0]
+                // A pop accent is vivid unless the vibe asked for muted.
+                let accentTone = treatment?.vividAccent == true && tone.chroma != .muted
+                    ? PaletteTone(lightness: tone.lightness, chroma: .vivid) : tone
+                let candidates = shaped(accentCandidates(root: accentRoot, offset: accentOffset, tone: accentTone, start: variation.accentStart, chromaScale: treatment?.chromaScale ?? 1))
+                slotted[position] = place(candidates, fallback: neighbors(of: candidates, band: band), floors: [12, 9, 6], role: "Accent", group: .accent)
             case .neutral:
                 let light = neutralOrder[neutralIndex % neutralOrder.count]
                 neutralIndex += 1
-                slotted[position] = place(neutralCandidates(root: roots[0], light: light), floors: [12, 9, 6], role: light ? "Background" : "Text", group: .neutral)
+                slotted[position] = place(neutralCandidates(root: roots[0], light: light, aboveBand: band != nil), floors: [12, 9, 6], role: light ? "Background" : "Text", group: .neutral)
             case .anchor, .interface:
                 break
             }
         }
         entries += slotted.compactMap { $0 }
         return entries
+    }
+
+    /// `color` with its lightness mapped from the ladders' span (0.10...0.98)
+    /// into `band`, keeping the rungs' order and spacing. nil leaves it as is.
+    private static func banded(_ color: OKLCH, into band: ClosedRange<Double>?) -> OKLCH {
+        guard let band else { return color }
+        let t = min(1, max(0, (color.L - 0.10) / 0.88))
+        return OKLCH(L: band.lowerBound + t * (band.upperBound - band.lowerBound), C: color.C, h: color.h)
+    }
+
+    /// The same lightnesses a few degrees around the hue, for a banded
+    /// family: squeezed into a band, one hue holds too few tones that stay
+    /// apart, so `pick` falls back to these when the family's own hue has
+    /// none clear of the colors placed. Empty without a band.
+    private static func neighbors(of candidates: [OKLCH], band: ClosedRange<Double>?) -> [OKLCH] {
+        guard band != nil else { return [] }
+        return [20.0, -20, 40, -40, 60, -60].flatMap { shift in
+            candidates.map { OKLCH(L: $0.L, C: $0.C, h: OKLCH.wrap($0.h + shift)) }
+        }
+    }
+
+    /// `color` with its hue moved `fraction` of the shorter way toward 60°
+    /// (earth tones). Greys have no hue to move.
+    private static func pulled(_ color: OKLCH, by fraction: Double) -> OKLCH {
+        guard fraction > 0, color.C >= 0.03 else { return color }
+        var delta = (60 - color.h).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        return OKLCH(L: color.L, C: color.C, h: OKLCH.wrap(color.h + delta * fraction))
     }
 
     /// Lightness rungs for tones of a root, in dark/light pairs, most useful
@@ -402,19 +514,21 @@ enum PaletteBuilder {
         }
     }
 
-    private static func accentCandidates(root: OKLCH, offset: Double, tone: PaletteTone, start: Int = 0) -> [OKLCH] {
+    private static func accentCandidates(root: OKLCH, offset: Double, tone: PaletteTone, start: Int = 0, chromaScale: Double = 1) -> [OKLCH] {
         let shift: Double = tone.lightness == .dark ? -0.06 : (tone.lightness == .light ? 0.04 : 0)
-        let chroma = 0.25 * (tone.chroma == .muted ? 0.6 : (tone.chroma == .vivid ? 1.15 : 1))
+        let chroma = 0.25 * (tone.chroma == .muted ? 0.6 : (tone.chroma == .vivid ? 1.15 : 1)) * chromaScale
         let ladder = accentLadder.indices.map { accentLadder[($0 + start) % accentLadder.count] }
         return ladder.map { OKLCH(L: $0 + shift, C: chroma, h: root.h + offset) }
     }
 
     /// Near-white and near-black tinted with the root's hue — or true
     /// greys when the root is itself grey, whose hue angle means nothing.
-    private static func neutralCandidates(root: OKLCH, light: Bool) -> [OKLCH] {
+    private static func neutralCandidates(root: OKLCH, light: Bool, aboveBand: Bool = false) -> [OKLCH] {
         let tint = root.C < 0.03 ? 0 : 1.0
+        // A lightness band leaves the light neutral above it, clear of the toned colors.
+        let lights = aboveBand ? [0.97, 0.985, 0.96, 0.99] : [0.97, 0.94, 0.91, 0.99]
         return light
-            ? [0.97, 0.94, 0.91, 0.99].map { OKLCH(L: $0, C: 0.012 * tint, h: root.h) }
+            ? lights.map { OKLCH(L: $0, C: 0.012 * tint, h: root.h) }
             : [0.21, 0.26, 0.17, 0.31].map { OKLCH(L: $0, C: 0.02 * tint, h: root.h) }
     }
 
@@ -458,7 +572,9 @@ enum PaletteBuilder {
         size: Int,
         tone: PaletteTone,
         isDark: Bool,
-        variation: Variation = .fixed
+        variation: Variation = .fixed,
+        style: PaletteStyle? = nil,
+        freeHue: Double = 0
     ) -> [BuiltPalette.Entry] {
         var placed = initial
         var entries: [BuiltPalette.Entry] = []
@@ -480,6 +596,14 @@ enum PaletteBuilder {
         }
 
         for recipe in recipes where placed.count < size && !taken.contains(recipe.role) {
+            if let spec = style?.interfaceRoles?[recipe.role] {
+                let candidates = styledCandidates(spec, role: recipe.role, colored: recipe.chromaFollowsTone,
+                                                  primary: primary, freeHue: freeHue, factor: factor, variation: variation)
+                let hex = pick(candidates, placed: placed, floors: [5, 3])
+                placed.append(hex)
+                entries.append(BuiltPalette.Entry(hex: hex, role: recipe.role, group: .interface))
+                continue
+            }
             let spec = isDark ? recipe.dark : recipe.light
             let isNeutral = recipe.hue == .primary && !recipe.chromaFollowsTone
             let accentHue = primary.h + variation.accentOffset
@@ -514,21 +638,59 @@ enum PaletteBuilder {
         return entries
     }
 
+    /// Candidates for one role of an interface style. Colored roles follow
+    /// the tone and move a little with the seed; neutrals keep their place,
+    /// so a background stays a background and text stays readable. A grey
+    /// primary greys the relative neutrals, and its colored roles count
+    /// from the brief's or seed's hue instead of the grey's meaningless angle.
+    private static func styledCandidates(
+        _ spec: PaletteStyle.RoleSpec,
+        role: String,
+        colored: Bool,
+        primary: OKLCH,
+        freeHue: Double,
+        factor: Double,
+        variation: Variation
+    ) -> [OKLCH] {
+        let isGrey = primary.C < 0.03
+        var chroma = spec.C
+        let hue: Double
+        switch spec.hue {
+        case .fixed(let degrees):
+            hue = degrees
+        case .relative(let degrees):
+            let jitter = role == "Accent" ? variation.accentJitter : (role == "Secondary" ? variation.secondaryJitter : 0)
+            hue = (isGrey && colored ? freeHue : primary.h) + degrees + jitter
+            if !colored { chroma *= isGrey ? 0 : variation.neutralTint }
+        }
+        if colored { chroma *= factor * variation.chroma }
+        let L = spec.L + (colored ? variation.colorLightness : 0)
+        // A style may ask for exact black or white, so only 0...1 bounds it.
+        return [0, 0.03, -0.03, 0.06, -0.06].map {
+            OKLCH(L: min(1, max(0, L + $0)), C: chroma, h: OKLCH.wrap(hue))
+        }
+    }
+
     // MARK: - Distinctness
 
     /// The first candidate at least `floor` (CIEDE2000) from every placed
     /// color, trying each floor in turn. If none clears even the lowest,
     /// the not-yet-placed candidate farthest from everything placed (an
     /// already-placed hex only if every candidate is placed).
-    private static func pick(_ candidates: [OKLCH], placed: [String], floors: [Double]) -> String {
+    /// `fallback` candidates are tried, over the same floors, only when none
+    /// of `candidates` clears the lowest floor.
+    private static func pick(_ candidates: [OKLCH], fallback: [OKLCH] = [], placed: [String], floors: [Double]) -> String {
         let hexes = candidates.map(\.hex)
-        for floor in floors {
-            if let hex = hexes.first(where: { !placed.contains($0) && minDistance($0, to: placed) >= floor }) {
-                return hex
+        for group in [hexes, fallback.map(\.hex)] {
+            for floor in floors {
+                if let hex = group.first(where: { !placed.contains($0) && minDistance($0, to: placed) >= floor }) {
+                    return hex
+                }
             }
         }
-        let fresh = hexes.filter { !placed.contains($0) }
-        let pool = fresh.isEmpty ? hexes : fresh
+        let all = hexes + fallback.map(\.hex)
+        let fresh = all.filter { !placed.contains($0) }
+        let pool = fresh.isEmpty ? all : fresh
         // Candidates are never empty, so `max` always finds one.
         return pool.max { minDistance($0, to: placed) < minDistance($1, to: placed) }!
     }
