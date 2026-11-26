@@ -183,7 +183,8 @@ enum OnboardingPaletteSaver {
             anchorHex.map { color.hex.caseInsensitiveCompare($0) == .orderedSame } ?? false
         }
         appData.addPaletteColorsToLibrary(palette.paletteColors.filter(isAnchor), isGenerated: false)
-        appData.addPaletteColorsToLibrary(palette.paletteColors.filter { !isAnchor($0) }, isGenerated: generated)
+        appData.addPaletteColorsToLibrary(palette.paletteColors.filter { !isAnchor($0) }, isGenerated: generated,
+                                         source: saved)
         model.finish(.completed(paletteID: saved.id))
         return saved.id
     }

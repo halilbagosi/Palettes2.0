@@ -22,6 +22,10 @@ final class StoredColor {
     var isFavorite: Bool = false
     var isGenerated: Bool = false
     var sortIndex: Int = 0
+    /// The generated palette this color was saved from (nil otherwise), and
+    /// its name then, shown if that palette is later deleted.
+    var sourcePaletteID: UUID? = nil
+    var sourcePaletteName: String = ""
 
     init(
         id: UUID,
@@ -30,7 +34,9 @@ final class StoredColor {
         usedInPalette: Bool,
         isFavorite: Bool = false,
         isGenerated: Bool = false,
-        sortIndex: Int
+        sortIndex: Int,
+        sourcePaletteID: UUID? = nil,
+        sourcePaletteName: String = ""
     ) {
         self.id = id
         self.name = name
@@ -39,6 +45,8 @@ final class StoredColor {
         self.isFavorite = isFavorite
         self.isGenerated = isGenerated
         self.sortIndex = sortIndex
+        self.sourcePaletteID = sourcePaletteID
+        self.sourcePaletteName = sourcePaletteName
     }
 }
 
@@ -52,6 +60,11 @@ final class StoredPalette {
     var isFavorite: Bool = false
     var isGenerated: Bool = false
     var sortIndex: Int = 0
+    /// How a generated palette was made: the mode it used, and the vibe it
+    /// was described with. Empty when unknown (made by hand, or saved before
+    /// these were recorded).
+    var generationMode: String = ""
+    var generationVibe: String = ""
 
     init(
         id: UUID,
@@ -61,7 +74,9 @@ final class StoredPalette {
         colorRoles: [String] = [],
         isFavorite: Bool = false,
         isGenerated: Bool = false,
-        sortIndex: Int
+        sortIndex: Int,
+        generationMode: String = "",
+        generationVibe: String = ""
     ) {
         self.id = id
         self.name = name
@@ -71,6 +86,8 @@ final class StoredPalette {
         self.isFavorite = isFavorite
         self.isGenerated = isGenerated
         self.sortIndex = sortIndex
+        self.generationMode = generationMode
+        self.generationVibe = generationVibe
     }
 }
 
