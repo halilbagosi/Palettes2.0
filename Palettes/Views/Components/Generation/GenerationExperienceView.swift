@@ -18,6 +18,8 @@ struct GenerationResultView: View {
     /// Centre on the screen this far from both edges, ignoring the side safe
     /// area (landscape, where the bars sit on one side; see `centeredOnScreen`).
     var screenMargin: CGFloat?
+    /// The design style the palette follows, shown under its name.
+    var styleName: String? = nil
 
     @EnvironmentObject var appData: AppData
 
@@ -165,10 +167,24 @@ struct GenerationResultView: View {
 
     // MARK: - Name
 
+    /// The name, and under it the style the palette follows, so generating
+    /// again visibly lands on a different look.
+    private var nameField: some View {
+        VStack(spacing: 2) {
+            editableName
+            if let styleName {
+                Text(styleName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Style, \(styleName)")
+            }
+        }
+    }
+
     /// The generated name in the generated gradient. Editing swaps it for a field
     /// laid out identically, so nothing moves: the display text keeps its place
     /// (hidden) and the field sits exactly over it.
-    private var nameField: some View {
+    private var editableName: some View {
         let shown = name.isEmpty ? "Untitled Palette" : name
         return OnboardingPaletteName(name: shown, usesGradient: true, trailingSymbol: "pencil")
             .lineLimit(3)
