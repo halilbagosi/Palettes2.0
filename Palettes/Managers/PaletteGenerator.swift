@@ -271,17 +271,10 @@ enum PaletteGenerator {
             if change.isEmpty {
                 // Not a step from the palette ("more like a beach"): read it
                 // as a vibe and take whatever it says over the old brief.
-                let brief = await makeBrief(vibe: refining.change)
-                recipe.brief.hue = brief.hue ?? recipe.brief.hue
-                recipe.brief.secondaryHue = brief.secondaryHue
-                recipe.brief.tone = brief.tone
-                // A styled palette keeps its style: the style already sets
-                // the harmony, as on a fresh run. Only unstyled Auto follows
-                // the vibe's harmony. An explicit harmony change ("make it
-                // triadic") is a step, handled in `applying`.
-                if let suggested = brief.scheme, !recipe.scheme.isUIMode, recipe.style == nil {
-                    recipe.scheme = suggested
-                }
+                // A styled palette keeps its style, so only unstyled Auto
+                // follows the vibe's harmony (see `merging`). An explicit
+                // harmony change ("make it triadic") is a step, handled in `applying`.
+                recipe = recipe.merging(await makeBrief(vibe: refining.change))
             }
             // A change must change something.
             if recipe == refining.recipe { recipe.seed = UInt64.random(in: .min ... .max) }

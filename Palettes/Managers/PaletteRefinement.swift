@@ -60,6 +60,22 @@ struct GenerationRecipe: Equatable {
         return next
     }
 
+    /// The recipe with a described change's vibe read as a brief: the vibe's
+    /// hue (when it names one), second hue and tone replace the old brief's.
+    /// Only unstyled Auto follows the vibe's harmony: a styled palette keeps
+    /// its style, which already sets the harmony, and interface modes keep
+    /// their mode.
+    func merging(_ vibe: PaletteBrief) -> GenerationRecipe {
+        var next = self
+        next.brief.hue = vibe.hue ?? brief.hue
+        next.brief.secondaryHue = vibe.secondaryHue
+        next.brief.tone = vibe.tone
+        if let suggested = vibe.scheme, !scheme.isUIMode, style == nil {
+            next.scheme = suggested
+        }
+        return next
+    }
+
     private static func step<T: Equatable>(_ value: T, by delta: Int, in ladder: [T]) -> T {
         guard delta != 0, let index = ladder.firstIndex(of: value) else { return value }
         return ladder[min(ladder.count - 1, max(0, index + delta))]
