@@ -184,22 +184,44 @@ final class PaletteStyleBuilderTests: XCTestCase {
         }
     }
 
+    func testAPinnedHarmonyOnAGreyCountsFromTheFreeHue() {
+        // A grey's own hue angle means nothing: the secondary tones sit at the
+        // free hue + 120 / 240, so another hue moves them.
+        func secondaryHues(hue: Double, seed: UInt64) -> [Double] {
+            let palette = PaletteBuilder.build(PaletteBuildRequest(anchors: ["#808080"], size: 8, scheme: .auto, hue: hue, seed: seed, style: .triadicPlayful))
+            XCTAssertEqual(palette.scheme, .triadic)
+            XCTAssertEqual(palette.hexes.first, "#808080")
+            XCTAssertEqual(Set(palette.hexes).count, 8)
+            return palette.entries.filter { $0.group == .secondary }.compactMap { OKLCH(hex: $0.hex) }.filter { $0.C >= 0.03 }.map(\.h)
+        }
+        for (hue, seed) in [(30.0, UInt64(1)), (200, 2), (320, 3)] {
+            let hues = secondaryHues(hue: hue, seed: seed)
+            XCTAssertFalse(hues.isEmpty, "hue \(hue)")
+            for h in hues {
+                XCTAssertTrue([120.0, 240].contains { OKLCH.hueDistance(h, hue + $0) <= 25 }, "hue \(hue): secondary \(h)")
+            }
+        }
+    }
+
     func testEveryTreatmentKeepsEveryPairDistinct() {
         // No colors, one chromatic, one pale, two chromatic, one grey. A grey
         // is lightness alone: twelve of them cannot all sit 6 apart.
         let sets: [[String]] = [[], ["#FF5E7A"], ["#FFF2A0"], ["#FF5E7A", "#3060A0"], ["#808080"]]
+        // The seeds take turns through balanced, light and vivid tones.
+        let tones: [PaletteTone] = [.balanced, PaletteTone(lightness: .light), PaletteTone(chroma: .vivid)]
         for style in PaletteStyle.deck(for: .auto) {
             for anchors in sets {
                 for size in anchors == ["#808080"] ? [4, 8] : [4, 8, 12] {
                     for seed: UInt64 in 0..<50 {
-                        let hexes = build(anchors, size: size, style: style, seed: seed).hexes
+                        let tone = tones[Int(seed) % tones.count]
+                        let hexes = build(anchors, size: size, style: style, tone: tone, seed: seed).hexes
                         var worst = Double.greatestFiniteMagnitude
                         for i in hexes.indices {
                             for j in hexes.indices where j > i {
                                 worst = min(worst, ColorNamer.perceptualDistance(hex1: hexes[i], hex2: hexes[j]))
                             }
                         }
-                        XCTAssertGreaterThanOrEqual(worst, 6, "\(style) \(anchors) size \(size) seed \(seed): \(hexes)")
+                        XCTAssertGreaterThanOrEqual(worst, 6, "\(style) \(anchors) size \(size) seed \(seed) tone \(tone): \(hexes)")
                     }
                 }
             }

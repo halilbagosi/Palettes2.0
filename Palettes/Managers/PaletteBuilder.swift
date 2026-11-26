@@ -313,8 +313,8 @@ enum PaletteBuilder {
     ) -> [BuiltPalette.Entry] {
         var placed = initial
         var entries: [BuiltPalette.Entry] = []
-        func place(_ candidates: [OKLCH], floors: [Double], role: String?, group: BuiltPalette.Group) -> BuiltPalette.Entry {
-            let hex = pick(candidates, placed: placed, floors: floors)
+        func place(_ candidates: [OKLCH], fallback: [OKLCH] = [], floors: [Double], role: String?, group: BuiltPalette.Group) -> BuiltPalette.Entry {
+            let hex = pick(candidates, fallback: fallback, placed: placed, floors: floors)
             placed.append(hex)
             return BuiltPalette.Entry(hex: hex, role: role, group: group)
         }
@@ -325,7 +325,7 @@ enum PaletteBuilder {
         let band = treatment?.lightnessBand
         /// Earth pull, then the lightness band: for families whose hue is an
         /// offset from an unpulled root, so every generated hue moves toward earth once.
-        func shaped(_ candidates: [OKLCH]) -> [OKLCH] { spreading(candidates.map { banded(pulled($0, by: pull), into: band) }, band: band) }
+        func shaped(_ candidates: [OKLCH]) -> [OKLCH] { candidates.map { banded(pulled($0, by: pull), into: band) } }
         let baseRoots = anchors.isEmpty ? [main] : anchors
         // The user's colors keep their own hue: only the hues generated from
         // them (secondary, accent) are pulled. The brief's main color, which
@@ -382,12 +382,18 @@ enum PaletteBuilder {
                 // A grey has only lightness to vary: squeezed into a band it
                 // could not hold more than a few distinct tones.
                 let rootBand = root.C < 0.03 ? nil : band
-                slotted[position] = place(spreading(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma).map { banded($0, into: rootBand) }, band: rootBand), floors: [12, 9, 6], role: nil, group: .dominant)
+                let banded = toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma).map { Self.banded($0, into: rootBand) }
+                slotted[position] = place(banded, fallback: neighbors(of: banded, band: rootBand), floors: [12, 9, 6], role: nil, group: .dominant)
             case .secondary:
                 let root = baseRoots[secondaryIndex % baseRoots.count]
                 let offset = schemeOffsets[(secondaryIndex / roots.count) % schemeOffsets.count]
                 secondaryIndex += 1
-                slotted[position] = place(shaped(secondaryCandidates(root: root, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: chroma)), floors: [12, 9, 6], role: nil, group: .secondary)
+                // A grey root's hue angle means nothing: a treatment's
+                // secondary counts from the brief's or seed's hue instead.
+                let secondaryRoot = treatment != nil && root.C < 0.03
+                    ? OKLCH(L: root.L, C: root.C, h: freeHue) : root
+                let candidates = shaped(secondaryCandidates(root: secondaryRoot, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: chroma))
+                slotted[position] = place(candidates, fallback: neighbors(of: candidates, band: band), floors: [12, 9, 6], role: nil, group: .secondary)
             case .accent:
                 // A grey root's hue angle means nothing: a treatment's accent
                 // counts from the brief's or seed's hue instead.
@@ -396,7 +402,8 @@ enum PaletteBuilder {
                 // A pop accent is vivid unless the vibe asked for muted.
                 let accentTone = treatment?.vividAccent == true && tone.chroma != .muted
                     ? PaletteTone(lightness: tone.lightness, chroma: .vivid) : tone
-                slotted[position] = place(shaped(accentCandidates(root: accentRoot, offset: accentOffset, tone: accentTone, start: variation.accentStart, chromaScale: treatment?.chromaScale ?? 1)), floors: [12, 9, 6], role: "Accent", group: .accent)
+                let candidates = shaped(accentCandidates(root: accentRoot, offset: accentOffset, tone: accentTone, start: variation.accentStart, chromaScale: treatment?.chromaScale ?? 1))
+                slotted[position] = place(candidates, fallback: neighbors(of: candidates, band: band), floors: [12, 9, 6], role: "Accent", group: .accent)
             case .neutral:
                 let light = neutralOrder[neutralIndex % neutralOrder.count]
                 neutralIndex += 1
@@ -417,12 +424,13 @@ enum PaletteBuilder {
         return OKLCH(L: band.lowerBound + t * (band.upperBound - band.lowerBound), C: color.C, h: color.h)
     }
 
-    /// A banded family's candidates, then the same lightnesses a few degrees
-    /// around the hue: squeezed into a band, one hue holds too few tones that
-    /// stay apart, so `pick` needs neighbors to step to. No band, no change.
-    private static func spreading(_ candidates: [OKLCH], band: ClosedRange<Double>?) -> [OKLCH] {
-        guard band != nil else { return candidates }
-        return candidates + [20.0, -20, 40, -40, 60, -60].flatMap { shift in
+    /// The same lightnesses a few degrees around the hue, for a banded
+    /// family: squeezed into a band, one hue holds too few tones that stay
+    /// apart, so `pick` falls back to these when the family's own hue has
+    /// none clear of the colors placed. Empty without a band.
+    private static func neighbors(of candidates: [OKLCH], band: ClosedRange<Double>?) -> [OKLCH] {
+        guard band != nil else { return [] }
+        return [20.0, -20, 40, -40, 60, -60].flatMap { shift in
             candidates.map { OKLCH(L: $0.L, C: $0.C, h: OKLCH.wrap($0.h + shift)) }
         }
     }
@@ -669,15 +677,20 @@ enum PaletteBuilder {
     /// color, trying each floor in turn. If none clears even the lowest,
     /// the not-yet-placed candidate farthest from everything placed (an
     /// already-placed hex only if every candidate is placed).
-    private static func pick(_ candidates: [OKLCH], placed: [String], floors: [Double]) -> String {
+    /// `fallback` candidates are tried, over the same floors, only when none
+    /// of `candidates` clears the lowest floor.
+    private static func pick(_ candidates: [OKLCH], fallback: [OKLCH] = [], placed: [String], floors: [Double]) -> String {
         let hexes = candidates.map(\.hex)
-        for floor in floors {
-            if let hex = hexes.first(where: { !placed.contains($0) && minDistance($0, to: placed) >= floor }) {
-                return hex
+        for group in [hexes, fallback.map(\.hex)] {
+            for floor in floors {
+                if let hex = group.first(where: { !placed.contains($0) && minDistance($0, to: placed) >= floor }) {
+                    return hex
+                }
             }
         }
-        let fresh = hexes.filter { !placed.contains($0) }
-        let pool = fresh.isEmpty ? hexes : fresh
+        let all = hexes + fallback.map(\.hex)
+        let fresh = all.filter { !placed.contains($0) }
+        let pool = fresh.isEmpty ? all : fresh
         // Candidates are never empty, so `max` always finds one.
         return pool.max { minDistance($0, to: placed) < minDistance($1, to: placed) }!
     }
