@@ -310,7 +310,36 @@ struct ColorDetailView: View {
         }
     }
 
+    /// The color, and under it the generated palette it came from.
     private func colorWindow(fillsHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            colorSwatch(fillsHeight: fillsHeight)
+            if let sourceLine {
+                Text(sourceLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+            }
+        }
+        .matchedGeometryEffect(id: "color", in: foldNamespace)
+    }
+
+    /// "Generated as part of “Name” palette": the palette's current name, or
+    /// its name when saved if it has since been deleted. A color saved before
+    /// that was recorded falls back to the first generated palette holding it.
+    private var sourceLine: String? {
+        guard liveColor.isGenerated else { return nil }
+        let name: String?
+        if let source = liveColor.sourcePalette {
+            name = appData.palettes.first(where: { $0.id == source.paletteID })?.name ?? source.paletteName
+        } else {
+            name = containingPalettes.first(where: \.isGenerated)?.name
+        }
+        guard let name, !name.isEmpty else { return nil }
+        return "Generated as part of “\(name)” palette"
+    }
+
+    private func colorSwatch(fillsHeight: Bool) -> some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
             .fill(liveColor.color)
             .frame(height: fillsHeight ? nil : 180)
@@ -320,7 +349,6 @@ struct ColorDetailView: View {
                     .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             )
             .shadow(color: liveColor.color.opacity(0.3), radius: 10, x: 0, y: 5)
-            .matchedGeometryEffect(id: "color", in: foldNamespace)
     }
 
     /// HEX, R, G and B in one compact row, matching Edit Color.

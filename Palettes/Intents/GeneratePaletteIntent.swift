@@ -56,7 +56,8 @@ struct GeneratePaletteIntent: AppIntent {
         let saved = AppData.shared.addPalette(
             name: generated.name,
             paletteColors: generated.paletteColors,
-            isGenerated: true
+            isGenerated: true,
+            generationVibe: vibe
         )
 
         return .result(

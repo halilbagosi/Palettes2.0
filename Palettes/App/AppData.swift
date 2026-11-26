@@ -368,15 +368,18 @@ class AppData: ObservableObject {
         var seenPaletteIDs = Set<UUID>()
         let uniquePalettes = storedPalettes.filter { seenPaletteIDs.insert($0.id).inserted }
 
-        colors = uniqueColors.map {
+        colors = uniqueColors.map { stored in
             ColorViewModel(
-                id: $0.id,
-                name: $0.name,
-                color: Color(hex: $0.hex) ?? .gray,
-                HEX: $0.hex,
-                usedInPalette: $0.usedInPalette,
-                isFavorite: $0.isFavorite,
-                isGenerated: $0.isGenerated
+                id: stored.id,
+                name: stored.name,
+                color: Color(hex: stored.hex) ?? .gray,
+                HEX: stored.hex,
+                usedInPalette: stored.usedInPalette,
+                isFavorite: stored.isFavorite,
+                isGenerated: stored.isGenerated,
+                sourcePalette: stored.sourcePaletteID.map {
+                    GenerationSource(paletteID: $0, paletteName: stored.sourcePaletteName)
+                }
             )
         }
         palettes = uniquePalettes.map { stored in
@@ -388,7 +391,9 @@ class AppData: ObservableObject {
                 colorNames: stored.colorNames,
                 colorRoles: stored.colorRoles,
                 isFavorite: stored.isFavorite,
-                isGenerated: stored.isGenerated
+                isGenerated: stored.isGenerated,
+                generationMode: stored.generationMode.isEmpty ? nil : stored.generationMode,
+                generationVibe: stored.generationVibe.isEmpty ? nil : stored.generationVibe
             )
         }
     }
@@ -416,6 +421,10 @@ class AppData: ObservableObject {
                 if stored.isFavorite != color.isFavorite { stored.isFavorite = color.isFavorite }
                 if stored.isGenerated != color.isGenerated { stored.isGenerated = color.isGenerated }
                 if stored.sortIndex != index { stored.sortIndex = index }
+                let sourceID = color.sourcePalette?.paletteID
+                let sourceName = color.sourcePalette?.paletteName ?? ""
+                if stored.sourcePaletteID != sourceID { stored.sourcePaletteID = sourceID }
+                if stored.sourcePaletteName != sourceName { stored.sourcePaletteName = sourceName }
             } else {
                 context.insert(StoredColor(
                     id: color.id,
@@ -424,7 +433,9 @@ class AppData: ObservableObject {
                     usedInPalette: color.usedInPalette,
                     isFavorite: color.isFavorite,
                     isGenerated: color.isGenerated,
-                    sortIndex: index
+                    sortIndex: index,
+                    sourcePaletteID: color.sourcePalette?.paletteID,
+                    sourcePaletteName: color.sourcePalette?.paletteName ?? ""
                 ))
             }
         }
@@ -476,6 +487,9 @@ class AppData: ObservableObject {
                 if stored.isFavorite != palette.isFavorite { stored.isFavorite = palette.isFavorite }
                 if stored.isGenerated != palette.isGenerated { stored.isGenerated = palette.isGenerated }
                 if stored.sortIndex != index { stored.sortIndex = index }
+                let mode = palette.generationMode ?? "", vibe = palette.generationVibe ?? ""
+                if stored.generationMode != mode { stored.generationMode = mode }
+                if stored.generationVibe != vibe { stored.generationVibe = vibe }
             } else {
                 context.insert(StoredPalette(
                     id: palette.id,
@@ -485,7 +499,9 @@ class AppData: ObservableObject {
                     colorRoles: palette.colorRoles,
                     isFavorite: palette.isFavorite,
                     isGenerated: palette.isGenerated,
-                    sortIndex: index
+                    sortIndex: index,
+                    generationMode: palette.generationMode ?? "",
+                    generationVibe: palette.generationVibe ?? ""
                 ))
             }
         }
@@ -590,8 +606,10 @@ class AppData: ObservableObject {
     /// the debounced sink later fires and finds nothing changed
     /// (`context.hasChanges` guard).
     @discardableResult
-    func addPalette(name: String, paletteColors: [PaletteColor], isGenerated: Bool = false) -> PaletteViewModel {
-        let palette = PaletteViewModel(name: name, paletteColors: paletteColors, isGenerated: isGenerated)
+    func addPalette(name: String, paletteColors: [PaletteColor], isGenerated: Bool = false,
+                    generationMode: String? = nil, generationVibe: String? = nil) -> PaletteViewModel {
+        let palette = PaletteViewModel(name: name, paletteColors: paletteColors, isGenerated: isGenerated,
+                                       generationMode: generationMode, generationVibe: generationVibe)
         palettes.append(palette)
         persistPalettes(palettes)
         return palette
@@ -600,8 +618,10 @@ class AppData: ObservableObject {
     /// Adds a palette's colors to the Colors library, skipping any hex already
     /// there (case-insensitive). Shared by Generate and onboarding so the two
     /// save paths can't drift. Does not persist synchronously: the normal
-    /// debounced write-back handles it.
-    func addPaletteColorsToLibrary(_ paletteColors: [PaletteColor], isGenerated: Bool) {
+    /// debounced write-back handles it. Generated colors remember `source`,
+    /// the palette they were generated as part of.
+    func addPaletteColorsToLibrary(_ paletteColors: [PaletteColor], isGenerated: Bool,
+                                   source: PaletteViewModel? = nil) {
         for paletteColor in paletteColors {
             let hex = paletteColor.hex
             guard !hex.isEmpty else { continue }
@@ -613,7 +633,10 @@ class AppData: ObservableObject {
                 color: paletteColor.color,
                 HEX: hex,
                 usedInPalette: true,
-                isGenerated: isGenerated
+                isGenerated: isGenerated,
+                sourcePalette: isGenerated ? source.map {
+                    GenerationSource(paletteID: $0.id, paletteName: $0.name)
+                } : nil
             ))
         }
     }

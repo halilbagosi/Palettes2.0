@@ -285,12 +285,20 @@ struct PaletteDetailView: View {
             )
             .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
 
-            Text("\(livePalette.colors.count) color\(livePalette.colors.count == 1 ? "" : "s")")
+            Text(countLine)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.leading, 4)
         }
         .matchedGeometryEffect(id: "hero", in: foldNamespace)
+    }
+
+    /// "5 colors", and for a generated palette how it was generated.
+    private var countLine: String {
+        let count = livePalette.colors.count
+        let colors = "\(count) color\(count == 1 ? "" : "s")"
+        guard let note = livePalette.generationNote else { return colors }
+        return "\(colors) · \(note)"
     }
 
     private var colorGrid: some View {
