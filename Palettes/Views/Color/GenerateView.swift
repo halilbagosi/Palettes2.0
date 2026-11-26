@@ -1007,18 +1007,33 @@ struct GenerateView: View {
         // The saved title must match the one on screen.
         cancelLateNaming()
         let trimmed = resultName.trimmingCharacters(in: .whitespaces)
-        appData.palettes.append(PaletteViewModel(
+        let vibe = vibeDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let palette = PaletteViewModel(
             name: trimmed.isEmpty ? "Generated Palette" : trimmed,
             paletteColors: resultPaletteColors,
-            isGenerated: true
-        ))
+            isGenerated: true,
+            generationMode: savedModeName,
+            generationVibe: vibe.isEmpty ? nil : vibe
+        )
+        appData.palettes.append(palette)
 
         // Add any newly generated colors to the Colors library.
-        appData.addPaletteColorsToLibrary(resultPaletteColors, isGenerated: true)
+        appData.addPaletteColorsToLibrary(resultPaletteColors, isGenerated: true, source: palette)
 
         ToastManager.shared.show("Palette saved", icon: "checkmark.circle.fill")
         withAnimation(.smooth(duration: 0.5)) { phase = .form }
         resetForm()
+    }
+
+    /// The mode the saved palette is credited to: an interface mode by its
+    /// own name; otherwise the color style the result followed (Auto names
+    /// the style it picked), as shown under the result's name.
+    private var savedModeName: String {
+        let chosen = canChooseMode ? mode : .auto
+        switch chosen {
+        case .uiLight, .uiDark: return chosen.displayName
+        case .auto, .style: return resultRecipe?.style?.displayName ?? chosen.displayName
+        }
     }
 
     /// Fresh form for the next generation after a palette was saved.

@@ -126,6 +126,8 @@ enum ScreenshotSeed {
         ]),
     ]
 
+    private static let seedModes = ["Pastel", "Vivid", "Earthy", "Muted"]
+
     static func applyIfRequested(to appData: AppData) {
         guard isActive else { return }
         let defaults = UserDefaults.standard
@@ -137,7 +139,10 @@ enum ScreenshotSeed {
                     PaletteColor(color: Color(hex: $0.hex) ?? .gray, hex: $0.hex, name: $0.name, role: $0.role)
                 },
                 isFavorite: palette.favorite,
-                isGenerated: palette.generated
+                isGenerated: palette.generated,
+                generationMode: palette.generated ? seedModes[palette.name.count % seedModes.count] : nil,
+                // The first generated palette credits a vibe, the rest a mode.
+                generationVibe: palette.name == "Kyoto Dusk" ? "Lanterns over a quiet temple at dusk" : nil
             )
         }
         // The library lists newest first; reversed so Kyoto Dusk leads.
@@ -153,7 +158,9 @@ enum ScreenshotSeed {
                     HEX: swatch.hex,
                     usedInPalette: true,
                     isFavorite: index % 3 == 0 && swatch.role == "Accent",
-                    isGenerated: palette.generated
+                    isGenerated: palette.generated,
+                    sourcePalette: palette.generated
+                        ? GenerationSource(paletteID: models[index].id, paletteName: palette.name) : nil
                 ))
             }
         }
@@ -167,6 +174,10 @@ enum ScreenshotSeed {
             if let tab { appData.activeTab = tab }
             if let openIndex, models.indices.contains(openIndex) {
                 appData.pendingOpenPaletteID = models[openIndex].id
+            }
+            if let colorIndex = defaults.string(forKey: "screenshotOpenColor").flatMap(Int.init),
+               colors.indices.contains(colorIndex) {
+                appData.pendingOpenColorID = colors[colorIndex].id
             }
         }
     }

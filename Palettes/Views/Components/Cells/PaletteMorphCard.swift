@@ -20,6 +20,14 @@ struct PaletteMorphCard: View, Equatable {
     var isSelecting: Bool = false
     /// One-tap copy (the saved format); wired to the copy button in both layouts.
     var onCopy: (() -> Void)? = nil
+    /// Tapping the star favorites or unfavorites. With it the star shows on
+    /// every card, outlined until favorited; without it, only a favorite's
+    /// filled star shows, as a plain badge.
+    var onToggleFavorite: (() -> Void)? = nil
+
+    private var showsStar: Bool {
+        !isSelecting && (isFavorite || onToggleFavorite != nil)
+    }
 
     /// Closures are excluded: callers' closures only read state that is also
     /// reflected in these value fields (e.g. `isSelecting`), so equal values
@@ -32,6 +40,7 @@ struct PaletteMorphCard: View, Equatable {
             && lhs.isCompact == rhs.isCompact && lhs.isGenerated == rhs.isGenerated
             && lhs.isFavorite == rhs.isFavorite && lhs.isSelecting == rhs.isSelecting
             && (lhs.onCopy == nil) == (rhs.onCopy == nil)
+            && (lhs.onToggleFavorite == nil) == (rhs.onToggleFavorite == nil)
     }
 
     var body: some View {
@@ -58,7 +67,7 @@ struct PaletteMorphCard: View, Equatable {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
-            if isFavorite && !isSelecting {
+            if showsStar {
                 favoriteBadge
                     .padding(.top, 12)
                     .padding(.leading, 12)
@@ -80,15 +89,27 @@ struct PaletteMorphCard: View, Equatable {
         }
     }
 
+    @ViewBuilder
     private var favoriteBadge: some View {
-        ZStack {
-            Image(systemName: "star.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.yellow)
-                .offset(y: -1)
+        let star = Image(systemName: isFavorite ? "star.fill" : "star")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isFavorite ? AnyShapeStyle(.yellow) : AnyShapeStyle(.primary))
+            .contentTransition(.symbolEffect(.replace))
+            .offset(y: -1)
+            .frame(width: 38, height: 38)
+        if let onToggleFavorite {
+            Button(action: onToggleFavorite) {
+                star.contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .liquidGlass(.interactive, in: .circle)
+            .sensoryFeedback(.selection, trigger: isFavorite)
+            .accessibilityLabel(isFavorite ? "Remove Favorite" : "Favorite")
+        } else {
+            star
+                .liquidGlass(.regular, in: .circle)
+                .accessibilityLabel("Favorite")
         }
-        .frame(width: 38, height: 38)
-        .liquidGlass(.regular, in: .circle)
     }
 
     // MARK: - Normal layout: name + copy
