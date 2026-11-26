@@ -158,6 +158,28 @@ final class PaletteStyleBuilderTests: XCTestCase {
         XCTAssertNil(PaletteBuilder.impliedHarmony(of: [OKLCH(hex: "#3060A0")!]))
     }
 
+    func testEveryTreatmentKeepsEveryPairDistinct() {
+        // No colors, one chromatic, one pale, two chromatic, one grey. A grey
+        // is lightness alone: twelve of them cannot all sit 6 apart.
+        let sets: [[String]] = [[], ["#FF5E7A"], ["#FFF2A0"], ["#FF5E7A", "#3060A0"], ["#808080"]]
+        for style in PaletteStyle.deck(for: .auto) {
+            for anchors in sets {
+                for size in anchors == ["#808080"] ? [4, 8] : [4, 8, 12] {
+                    for seed: UInt64 in 0..<50 {
+                        let hexes = build(anchors, size: size, style: style, seed: seed).hexes
+                        var worst = Double.greatestFiniteMagnitude
+                        for i in hexes.indices {
+                            for j in hexes.indices where j > i {
+                                worst = min(worst, ColorNamer.perceptualDistance(hex1: hexes[i], hex2: hexes[j]))
+                            }
+                        }
+                        XCTAssertGreaterThanOrEqual(worst, 6, "\(style) \(anchors) size \(size) seed \(seed): \(hexes)")
+                    }
+                }
+            }
+        }
+    }
+
     func testEveryTreatmentReachesItsSizeWithoutRepeats() {
         for style in PaletteStyle.deck(for: .auto) {
             for anchors in anchorSets + [["#3366CC", "#CC6633"]] {

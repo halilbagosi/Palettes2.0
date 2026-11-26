@@ -323,7 +323,7 @@ enum PaletteBuilder {
         let band = treatment?.lightnessBand
         /// Earth pull, then the lightness band: for families whose hue is an
         /// offset from an unpulled root, so every generated hue moves toward earth once.
-        func shaped(_ candidates: [OKLCH]) -> [OKLCH] { candidates.map { banded(pulled($0, by: pull), into: band) } }
+        func shaped(_ candidates: [OKLCH]) -> [OKLCH] { spreading(candidates.map { banded(pulled($0, by: pull), into: band) }, band: band) }
         let baseRoots = anchors.isEmpty ? [main] : anchors
         let roots = baseRoots.map { pulled($0, by: pull) }
         if anchors.isEmpty {
@@ -374,7 +374,10 @@ enum PaletteBuilder {
                 // Round-robin over the roots, so two chosen colors get equal shares.
                 let root = roots[dominantIndex % roots.count]
                 dominantIndex += 1
-                slotted[position] = place(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma).map { banded($0, into: band) }, floors: [12, 9, 6], role: nil, group: .dominant)
+                // A grey has only lightness to vary: squeezed into a band it
+                // could not hold more than a few distinct tones.
+                let rootBand = root.C < 0.03 ? nil : band
+                slotted[position] = place(spreading(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma).map { banded($0, into: rootBand) }, band: rootBand), floors: [12, 9, 6], role: nil, group: .dominant)
             case .secondary:
                 let root = baseRoots[secondaryIndex % baseRoots.count]
                 let offset = schemeOffsets[(secondaryIndex / roots.count) % schemeOffsets.count]
@@ -392,7 +395,7 @@ enum PaletteBuilder {
             case .neutral:
                 let light = neutralOrder[neutralIndex % neutralOrder.count]
                 neutralIndex += 1
-                slotted[position] = place(neutralCandidates(root: roots[0], light: light), floors: [12, 9, 6], role: light ? "Background" : "Text", group: .neutral)
+                slotted[position] = place(neutralCandidates(root: roots[0], light: light, aboveBand: band != nil), floors: [12, 9, 6], role: light ? "Background" : "Text", group: .neutral)
             case .anchor, .interface:
                 break
             }
@@ -407,6 +410,16 @@ enum PaletteBuilder {
         guard let band else { return color }
         let t = min(1, max(0, (color.L - 0.10) / 0.88))
         return OKLCH(L: band.lowerBound + t * (band.upperBound - band.lowerBound), C: color.C, h: color.h)
+    }
+
+    /// A banded family's candidates, then the same lightnesses a few degrees
+    /// around the hue: squeezed into a band, one hue holds too few tones that
+    /// stay apart, so `pick` needs neighbors to step to. No band, no change.
+    private static func spreading(_ candidates: [OKLCH], band: ClosedRange<Double>?) -> [OKLCH] {
+        guard band != nil else { return candidates }
+        return candidates + [20.0, -20, 40, -40, 60, -60].flatMap { shift in
+            candidates.map { OKLCH(L: $0.L, C: $0.C, h: OKLCH.wrap($0.h + shift)) }
+        }
     }
 
     /// `color` with its hue moved `fraction` of the shorter way toward 60°
@@ -497,10 +510,12 @@ enum PaletteBuilder {
 
     /// Near-white and near-black tinted with the root's hue — or true
     /// greys when the root is itself grey, whose hue angle means nothing.
-    private static func neutralCandidates(root: OKLCH, light: Bool) -> [OKLCH] {
+    private static func neutralCandidates(root: OKLCH, light: Bool, aboveBand: Bool = false) -> [OKLCH] {
         let tint = root.C < 0.03 ? 0 : 1.0
+        // A lightness band leaves the light neutral above it, clear of the toned colors.
+        let lights = aboveBand ? [0.97, 0.985, 0.96, 0.99] : [0.97, 0.94, 0.91, 0.99]
         return light
-            ? [0.97, 0.94, 0.91, 0.99].map { OKLCH(L: $0, C: 0.012 * tint, h: root.h) }
+            ? lights.map { OKLCH(L: $0, C: 0.012 * tint, h: root.h) }
             : [0.21, 0.26, 0.17, 0.31].map { OKLCH(L: $0, C: 0.02 * tint, h: root.h) }
     }
 
