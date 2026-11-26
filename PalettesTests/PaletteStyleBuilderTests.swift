@@ -213,11 +213,70 @@ final class PaletteStyleBuilderTests: XCTestCase {
     }
 
     func testVibeToneWinsOverTheTreatment() {
-        func meanL(_ tone: PaletteTone) -> Double {
-            let colors = generated(build(["#3060A0"], size: 8, style: .pastel, tone: tone))
-            return colors.map(\.L).reduce(0, +) / Double(colors.count)
+        func mean(_ style: PaletteStyle, _ tone: PaletteTone, _ value: (OKLCH) -> Double) -> Double {
+            let colors = build(["#3060A0"], size: 8, style: style, tone: tone).entries
+                .filter { $0.group != .anchor && $0.group != .neutral }
+                .compactMap { OKLCH(hex: $0.hex) }
+            return colors.map(value).reduce(0, +) / Double(colors.count)
         }
-        XCTAssertLessThan(meanL(PaletteTone(lightness: .dark)), meanL(.balanced) - 0.1)
+        // Jewel Tones brings dark; a light vibe wins.
+        XCTAssertGreaterThan(mean(.jewelTones, PaletteTone(lightness: .light), \.L), mean(.jewelTones, .balanced, \.L) + 0.1)
+        // Pastel brings muted; a vivid vibe wins.
+        XCTAssertGreaterThan(mean(.pastel, PaletteTone(chroma: .vivid), \.C), mean(.pastel, .balanced, \.C))
+    }
+
+    func testPastelStaysInThePastelBand() {
+        for anchors in [[], ["#3060A0"], ["#FF5E7A"]] as [[String]] {
+            for seed: UInt64 in 0..<6 {
+                let toned = build(anchors, size: 8, style: .pastel, seed: seed).entries
+                    .filter { $0.group != .anchor && $0.group != .neutral }
+                    .compactMap { OKLCH(hex: $0.hex) }
+                XCTAssertFalse(toned.isEmpty)
+                for color in toned {
+                    XCTAssertGreaterThanOrEqual(color.L, 0.745, "\(anchors) seed \(seed)")
+                    XCTAssertLessThanOrEqual(color.L, 0.935, "\(anchors) seed \(seed)")
+                }
+            }
+        }
+    }
+
+    func testEarthyLeadSharesItsFamilysHue() throws {
+        for seed: UInt64 in 0..<6 {
+            let dominant = build([], size: 8, style: .earthy, seed: seed).entries
+                .filter { $0.group == .dominant }
+                .compactMap { OKLCH(hex: $0.hex) }
+            let lead = try XCTUnwrap(dominant.first)
+            for color in dominant.dropFirst() where color.C >= 0.02 {
+                XCTAssertLessThanOrEqual(OKLCH.hueDistance(color.h, lead.h), 5, "seed \(seed)")
+            }
+        }
+    }
+
+    func testEarthyPullsTheAccentTooAndMutesIt() throws {
+        let anchor = try XCTUnwrap(OKLCH(hex: "#3060A0"))
+        func earthPulled(_ h: Double) -> Double {
+            var delta = (60 - h).truncatingRemainder(dividingBy: 360)
+            if delta > 180 { delta -= 360 }
+            if delta < -180 { delta += 360 }
+            return OKLCH.wrap(h + delta * 0.25)
+        }
+        for seed: UInt64 in 0..<6 {
+            let palette = build(["#3060A0"], size: 8, style: .earthy, seed: seed)
+            let accent = try XCTUnwrap(palette.entries.first { $0.group == .accent }.flatMap { OKLCH(hex: $0.hex) }, "seed \(seed)")
+            let expected = PaletteBuilder.offsets(for: palette.scheme).map { earthPulled(anchor.h + $0) }
+            XCTAssertTrue(expected.contains { OKLCH.hueDistance(accent.h, $0) <= 6 }, "seed \(seed): accent \(accent.h), expected one of \(expected)")
+            XCTAssertLessThanOrEqual(accent.C, 0.16, "seed \(seed)")
+        }
+    }
+
+    func testMutedVibeTonesDownThePopAccent() throws {
+        for style in [PaletteStyle.complementaryPop, .monochromePop] {
+            func accentC(_ tone: PaletteTone) throws -> Double {
+                try XCTUnwrap(build(["#3060A0"], size: 6, style: style, tone: tone).entries
+                    .first { $0.group == .accent }.flatMap { OKLCH(hex: $0.hex)?.C })
+            }
+            XCTAssertLessThan(try accentC(PaletteTone(chroma: .muted)), try accentC(.balanced), "\(style)")
+        }
     }
 
     func testEarthyPullsHuesTowardEarth() throws {

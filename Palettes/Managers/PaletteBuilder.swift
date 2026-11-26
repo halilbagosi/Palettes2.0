@@ -320,10 +320,14 @@ enum PaletteBuilder {
         // Each root heads a family of tones: the user's colors, or the
         // brief's main color when there are none.
         let pull = treatment?.earthPull ?? 0
-        let lead = pulled(main, by: pull)
-        let roots = (anchors.isEmpty ? [lead] : anchors).map { pulled($0, by: pull) }
+        let band = treatment?.lightnessBand
+        /// Earth pull, then the lightness band: for families whose hue is an
+        /// offset from an unpulled root, so every generated hue moves toward earth once.
+        func shaped(_ candidates: [OKLCH]) -> [OKLCH] { candidates.map { banded(pulled($0, by: pull), into: band) } }
+        let baseRoots = anchors.isEmpty ? [main] : anchors
+        let roots = baseRoots.map { pulled($0, by: pull) }
         if anchors.isEmpty {
-            entries.append(place([lead], floors: [0], role: nil, group: .dominant))
+            entries.append(place(shaped([main]), floors: [0], role: nil, group: .dominant))
         }
 
         var counts = groupCounts(size: size, scheme: scheme)
@@ -349,7 +353,7 @@ enum PaletteBuilder {
         // secondary tones sit on it, the accent a little past it.
         var schemeOffsets = offsets(for: scheme)
         if let secondaryHue {
-            let delta = (secondaryHue - roots[0].h).truncatingRemainder(dividingBy: 360)
+            let delta = (secondaryHue - baseRoots[0].h).truncatingRemainder(dividingBy: 360)
             schemeOffsets = [delta, delta + 20]
         }
         if variation.swapsOffsets, secondaryHue == nil, schemeOffsets.count > 1 { schemeOffsets.swapAt(0, 1) }
@@ -370,19 +374,21 @@ enum PaletteBuilder {
                 // Round-robin over the roots, so two chosen colors get equal shares.
                 let root = roots[dominantIndex % roots.count]
                 dominantIndex += 1
-                slotted[position] = place(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma), floors: [12, 9, 6], role: nil, group: .dominant)
+                slotted[position] = place(toneCandidates(root: root, tone: tone, rotation: variation.rotation, chroma: chroma).map { banded($0, into: band) }, floors: [12, 9, 6], role: nil, group: .dominant)
             case .secondary:
-                let root = roots[secondaryIndex % roots.count]
+                let root = baseRoots[secondaryIndex % baseRoots.count]
                 let offset = schemeOffsets[(secondaryIndex / roots.count) % schemeOffsets.count]
                 secondaryIndex += 1
-                slotted[position] = place(secondaryCandidates(root: root, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: chroma), floors: [12, 9, 6], role: nil, group: .secondary)
+                slotted[position] = place(shaped(secondaryCandidates(root: root, offset: offset, schemeOffsets: schemeOffsets, tone: tone, chroma: chroma)), floors: [12, 9, 6], role: nil, group: .secondary)
             case .accent:
                 // A grey root's hue angle means nothing: a treatment's accent
                 // counts from the brief's or seed's hue instead.
-                let accentRoot = treatment != nil && roots[0].C < 0.03
-                    ? OKLCH(L: roots[0].L, C: roots[0].C, h: freeHue) : roots[0]
-                let accentTone = treatment?.vividAccent == true ? PaletteTone(lightness: tone.lightness, chroma: .vivid) : tone
-                slotted[position] = place(accentCandidates(root: accentRoot, offset: accentOffset, tone: accentTone, start: variation.accentStart), floors: [12, 9, 6], role: "Accent", group: .accent)
+                let accentRoot = treatment != nil && baseRoots[0].C < 0.03
+                    ? OKLCH(L: baseRoots[0].L, C: baseRoots[0].C, h: freeHue) : baseRoots[0]
+                // A pop accent is vivid unless the vibe asked for muted.
+                let accentTone = treatment?.vividAccent == true && tone.chroma != .muted
+                    ? PaletteTone(lightness: tone.lightness, chroma: .vivid) : tone
+                slotted[position] = place(shaped(accentCandidates(root: accentRoot, offset: accentOffset, tone: accentTone, start: variation.accentStart, chromaScale: treatment?.chromaScale ?? 1)), floors: [12, 9, 6], role: "Accent", group: .accent)
             case .neutral:
                 let light = neutralOrder[neutralIndex % neutralOrder.count]
                 neutralIndex += 1
@@ -393,6 +399,14 @@ enum PaletteBuilder {
         }
         entries += slotted.compactMap { $0 }
         return entries
+    }
+
+    /// `color` with its lightness mapped from the ladders' span (0.10...0.98)
+    /// into `band`, keeping the rungs' order and spacing. nil leaves it as is.
+    private static func banded(_ color: OKLCH, into band: ClosedRange<Double>?) -> OKLCH {
+        guard let band else { return color }
+        let t = min(1, max(0, (color.L - 0.10) / 0.88))
+        return OKLCH(L: band.lowerBound + t * (band.upperBound - band.lowerBound), C: color.C, h: color.h)
     }
 
     /// `color` with its hue moved `fraction` of the shorter way toward 60°
@@ -474,9 +488,9 @@ enum PaletteBuilder {
         }
     }
 
-    private static func accentCandidates(root: OKLCH, offset: Double, tone: PaletteTone, start: Int = 0) -> [OKLCH] {
+    private static func accentCandidates(root: OKLCH, offset: Double, tone: PaletteTone, start: Int = 0, chromaScale: Double = 1) -> [OKLCH] {
         let shift: Double = tone.lightness == .dark ? -0.06 : (tone.lightness == .light ? 0.04 : 0)
-        let chroma = 0.25 * (tone.chroma == .muted ? 0.6 : (tone.chroma == .vivid ? 1.15 : 1))
+        let chroma = 0.25 * (tone.chroma == .muted ? 0.6 : (tone.chroma == .vivid ? 1.15 : 1)) * chromaScale
         let ladder = accentLadder.indices.map { accentLadder[($0 + start) % accentLadder.count] }
         return ladder.map { OKLCH(L: $0 + shift, C: chroma, h: root.h + offset) }
     }

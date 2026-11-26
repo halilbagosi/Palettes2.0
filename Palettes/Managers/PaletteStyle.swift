@@ -142,6 +142,8 @@ extension PaletteStyle {
         var tone: PaletteTone? = nil
         /// Fraction of the shorter way each generated family's hue moves toward 60° (earth).
         var earthPull = 0.0
+        /// Toned colors (not neutrals) are mapped into this lightness band.
+        var lightnessBand: ClosedRange<Double>? = nil
     }
 
     var treatment: Treatment? {
@@ -157,7 +159,7 @@ extension PaletteStyle {
         case .triadicPlayful:
             return Treatment(harmonies: [.triadic], chromaScale: 1.2)
         case .pastel:
-            return Treatment(harmonies: [.analogous, .complementary], tone: PaletteTone(lightness: .light, chroma: .muted))
+            return Treatment(harmonies: [.analogous, .complementary], tone: PaletteTone(chroma: .muted), lightnessBand: 0.75...0.93)
         case .jewelTones:
             return Treatment(harmonies: [.triadic, .splitComplementary], tone: PaletteTone(lightness: .dark, chroma: .vivid))
         case .earthy:
