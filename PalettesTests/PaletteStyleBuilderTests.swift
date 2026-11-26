@@ -300,18 +300,15 @@ final class PaletteStyleBuilderTests: XCTestCase {
         }
     }
 
+    /// #3060A0 sits at OKLCH hue 256.4. A 25% pull toward 60° moves the hues
+    /// 256.4 + {30, -30, 180} (286.4, 226.4, 76.4) to these.
+    private let pulledFromBlue: [HarmonyScheme: [Double]] = [.analogous: [319.8, 184.8], .complementary: [72.3]]
+
     func testEarthyPullsTheAccentTooAndMutesIt() throws {
-        let anchor = try XCTUnwrap(OKLCH(hex: "#3060A0"))
-        func earthPulled(_ h: Double) -> Double {
-            var delta = (60 - h).truncatingRemainder(dividingBy: 360)
-            if delta > 180 { delta -= 360 }
-            if delta < -180 { delta += 360 }
-            return OKLCH.wrap(h + delta * 0.25)
-        }
         for seed: UInt64 in 0..<6 {
             let palette = build(["#3060A0"], size: 8, style: .earthy, seed: seed)
             let accent = try XCTUnwrap(palette.entries.first { $0.group == .accent }.flatMap { OKLCH(hex: $0.hex) }, "seed \(seed)")
-            let expected = PaletteBuilder.offsets(for: palette.scheme).map { earthPulled(anchor.h + $0) }
+            let expected = try XCTUnwrap(pulledFromBlue[palette.scheme], "seed \(seed): \(palette.scheme)")
             XCTAssertTrue(expected.contains { OKLCH.hueDistance(accent.h, $0) <= 6 }, "seed \(seed): accent \(accent.h), expected one of \(expected)")
             XCTAssertLessThanOrEqual(accent.C, 0.16, "seed \(seed)")
         }
@@ -327,16 +324,25 @@ final class PaletteStyleBuilderTests: XCTestCase {
         }
     }
 
-    func testEarthyPullsHuesTowardEarth() throws {
-        let anchor = try XCTUnwrap(OKLCH(hex: "#3060A0"))
-        let dominant = build(["#3060A0"], size: 8, style: .earthy).entries
-            .filter { $0.group == .dominant }
-            .compactMap { OKLCH(hex: $0.hex) }
-            .filter { $0.C >= 0.02 }
-        XCTAssertFalse(dominant.isEmpty)
-        for color in dominant {
-            // A 25% pull moves blue (~262°) about 40° toward 60°; allow for hue rounding at low chroma.
-            XCTAssertLessThan(OKLCH.hueDistance(color.h, 60), OKLCH.hueDistance(anchor.h, 60) - 20)
+    func testEarthyKeepsTheUsersColorsFamilyAndPullsTheRest() throws {
+        for seed: UInt64 in 0..<6 {
+            let palette = build(["#3060A0"], size: 8, style: .earthy, seed: seed)
+            let toned = { (group: BuiltPalette.Group) in
+                palette.entries.filter { $0.group == group }.compactMap { OKLCH(hex: $0.hex) }.filter { $0.C >= 0.03 }
+            }
+            // The family around the user's color stays blue.
+            let dominant = toned(.dominant)
+            XCTAssertFalse(dominant.isEmpty, "seed \(seed)")
+            for color in dominant {
+                XCTAssertLessThanOrEqual(OKLCH.hueDistance(color.h, 256.4), 10, "seed \(seed): dominant \(color.h)")
+            }
+            // The other hues sit where the pulled offsets put them.
+            let expected = try XCTUnwrap(pulledFromBlue[palette.scheme], "seed \(seed): \(palette.scheme)")
+            let others = toned(.secondary) + toned(.accent)
+            XCTAssertFalse(others.isEmpty, "seed \(seed)")
+            for color in others {
+                XCTAssertTrue(expected.contains { OKLCH.hueDistance(color.h, $0) <= 8 }, "seed \(seed): hue \(color.h), expected one of \(expected)")
+            }
         }
     }
 }

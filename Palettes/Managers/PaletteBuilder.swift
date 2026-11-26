@@ -327,7 +327,10 @@ enum PaletteBuilder {
         /// offset from an unpulled root, so every generated hue moves toward earth once.
         func shaped(_ candidates: [OKLCH]) -> [OKLCH] { spreading(candidates.map { banded(pulled($0, by: pull), into: band) }, band: band) }
         let baseRoots = anchors.isEmpty ? [main] : anchors
-        let roots = baseRoots.map { pulled($0, by: pull) }
+        // The user's colors keep their own hue: only the hues generated from
+        // them (secondary, accent) are pulled. The brief's main color, which
+        // is generated too, is pulled as well.
+        let roots = anchors.isEmpty ? baseRoots.map { pulled($0, by: pull) } : baseRoots
         if anchors.isEmpty {
             entries.append(place(shaped([main]), floors: [0], role: nil, group: .dominant))
         }
