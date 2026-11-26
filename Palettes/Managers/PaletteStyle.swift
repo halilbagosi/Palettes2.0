@@ -182,3 +182,38 @@ extension PaletteStyle {
         }
     }
 }
+
+// MARK: - Auto fit
+
+extension PaletteStyle {
+    /// How well this Auto style suits a color (higher is better; 0 for
+    /// interface styles). Pale colors suit Pastel, deep saturated ones Jewel
+    /// Tones, warm muted ones (browns, olives) Earthy, greys Monochrome + Pop,
+    /// and vivid ones the pop schemes. Calm analogous is the general default.
+    func fit(for color: OKLCH) -> Double {
+        let L = color.L
+        let C = color.C
+        let warm = C >= 0.03 && OKLCH.hueDistance(color.h, 60) <= 50
+        switch self {
+        case .monochromePop: return C < 0.03 ? 10 : 1
+        case .pastel: return L >= 0.80 ? 9 : (L >= 0.70 ? 5 : 0)
+        case .jewelTones: return L <= 0.45 && C >= 0.08 ? 9 : (L <= 0.55 && C >= 0.12 ? 5 : 0)
+        case .earthy: return warm && C < 0.11 && (0.30...0.75).contains(L) ? 9 : (warm && C < 0.15 ? 4 : 0)
+        case .complementaryPop: return C >= 0.17 ? 8 : (C >= 0.12 ? 5 : 2)
+        case .triadicPlayful: return C >= 0.17 ? 7 : (C >= 0.12 ? 4 : 1)
+        case .analogous603010: return 6
+        case .splitComplementary: return 4
+        default: return 0
+        }
+    }
+
+    /// `styles`, best-suited to `color` first. Ties keep their given order.
+    static func ranked(_ styles: [PaletteStyle], for color: OKLCH) -> [PaletteStyle] {
+        styles.enumerated()
+            .sorted { a, b in
+                let (fitA, fitB) = (a.element.fit(for: color), b.element.fit(for: color))
+                return fitA != fitB ? fitA > fitB : a.offset < b.offset
+            }
+            .map(\.element)
+    }
+}
