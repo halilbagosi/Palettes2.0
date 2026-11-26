@@ -483,7 +483,7 @@ final class PaletteGeneratorTests: XCTestCase {
 
     @available(iOS 26.0, *)
     @MainActor
-    func testDescribedChangeKeepsAPinnedAutoStyle() async throws {
+    func testChangesKeepAPinnedAutoStylesStyleAndScheme() async throws {
         let store = StyleDeckStore()
         var first: GenerationRecipe?
         _ = try await PaletteGenerator.generate(
@@ -493,6 +493,8 @@ final class PaletteGeneratorTests: XCTestCase {
         )
         let recipe = try XCTUnwrap(first)
         XCTAssertEqual(recipe.style, .earthy)
+        // These heuristics read as steps, so they do not reach the vibe merge
+        // (an empty change); `PaletteRefinementTests` covers `merging` directly.
         for change in ["darker", "more like a quiet forest"] {
             var changed: GenerationRecipe?
             _ = try await PaletteGenerator.generate(

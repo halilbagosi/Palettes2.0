@@ -134,7 +134,7 @@ final class PaletteRefinementTests: XCTestCase {
 
         var styled = recipe
         styled.style = .earthy
-        XCTAssertEqual(styled.merging(vibe).scheme, .auto, "a styled palette keeps its harmony")
+        XCTAssertEqual(styled.merging(vibe).scheme, styled.scheme, "a styled palette keeps its harmony")
         XCTAssertEqual(styled.merging(vibe).style, .earthy)
     }
 
