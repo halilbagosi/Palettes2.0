@@ -391,4 +391,76 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 45) <= 35 }, "no orange in \(result.hexCodes)")
         XCTAssertEqual(result.name, "Ocean Sunset")
     }
+
+    // MARK: - Style decks
+
+    @available(iOS 26.0, *)
+    private var fixedNamer: PaletteGenerator.Namer {
+        { _, _, _ in PaletteGenerator.Naming(title: "Harbor", colorNames: [:]) }
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    private func styles(_ count: Int, base: [String], scheme: HarmonyScheme = .auto, pinned: PaletteStyle? = nil, store: StyleDeckStore) async throws -> [PaletteStyle] {
+        var styles: [PaletteStyle] = []
+        for _ in 0..<count {
+            var recipe: GenerationRecipe?
+            _ = try await PaletteGenerator.generate(
+                baseColors: base.map { PaletteGenerator.BaseColor(hex: $0, name: "Base") },
+                size: 8, vibe: nil, scheme: scheme, pinnedStyle: pinned,
+                namer: fixedNamer, deck: store, onRecipe: { recipe = $0 }
+            )
+            styles.append(try XCTUnwrap(recipe?.style))
+        }
+        return styles
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testInterfaceModesStepThroughTheirStyles() async throws {
+        let store = StyleDeckStore()
+        for scheme in [HarmonyScheme.uiLight, .uiDark] {
+            let deck = PaletteStyle.deck(for: scheme)
+            let drawn = try await styles(deck.count, base: ["#3060A0"], scheme: scheme, store: store)
+            XCTAssertEqual(Set(drawn), Set(deck), "\(scheme) must show every style before repeating")
+        }
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testAutoStartsWithTheBestFitAndStepsDown() async throws {
+        let expected = StyleDeck.autoCandidates(anchors: ["#FFF2A0"], brief: .neutral).styles
+        let drawn = try await styles(expected.count, base: ["#FFF2A0"], store: StyleDeckStore())
+        XCTAssertEqual(drawn, expected)
+        XCTAssertEqual(drawn.first, .pastel)
+        XCTAssertFalse(drawn.contains { PaletteStyle.deck(for: .uiLight).contains($0) || PaletteStyle.deck(for: .uiDark).contains($0) },
+                       "Auto never picks an interface style")
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testPinnedModeKeepsItsStyle() async throws {
+        let drawn = try await styles(3, base: ["#3060A0"], pinned: .earthy, store: StyleDeckStore())
+        XCTAssertEqual(drawn, [.earthy, .earthy, .earthy])
+    }
+
+    @available(iOS 26.0, *)
+    @MainActor
+    func testDescribedChangeKeepsTheStyle() async throws {
+        let store = StyleDeckStore()
+        var first: GenerationRecipe?
+        _ = try await PaletteGenerator.generate(
+            baseColors: [], size: 6, vibe: nil, scheme: .uiDark,
+            namer: fixedNamer, deck: store, onRecipe: { first = $0 }
+        )
+        let recipe = try XCTUnwrap(first)
+        XCTAssertNotNil(recipe.style)
+        var changed: GenerationRecipe?
+        _ = try await PaletteGenerator.generate(
+            baseColors: [], size: nil, vibe: nil,
+            refining: .init(recipe: recipe, change: "darker"),
+            namer: fixedNamer, deck: store, onRecipe: { changed = $0 }
+        )
+        XCTAssertEqual(changed?.style, recipe.style)
+    }
 }

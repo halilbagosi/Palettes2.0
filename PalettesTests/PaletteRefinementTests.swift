@@ -102,4 +102,14 @@ final class PaletteRefinementTests: XCTestCase {
         // Same seed, same main hue.
         XCTAssertEqual(before.mainHue ?? -1, after.mainHue ?? -2, accuracy: 3)
     }
+
+    func testRecipeChangesKeepTheStyleUnlessTheHarmonyChanges() {
+        let recipe = GenerationRecipe(brief: .neutral, size: 6, scheme: .auto, seed: 1, style: .pastel)
+        var darker = PaletteChange()
+        darker.lightness = -1
+        XCTAssertEqual(recipe.applying(darker, lockedCount: 0).style, .pastel)
+        var triadic = PaletteChange()
+        triadic.scheme = .triadic
+        XCTAssertNil(recipe.applying(triadic, lockedCount: 0).style, "an explicit harmony replaces the style")
+    }
 }

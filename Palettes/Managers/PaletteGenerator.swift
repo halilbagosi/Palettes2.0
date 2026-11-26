@@ -232,16 +232,22 @@ enum PaletteGenerator {
     /// - Parameter nameVibe: the vibe the palette's title follows, when it
     ///   differs from `vibe` (which also carries described changes).
     /// - Parameter namer: replaces the model's naming step (tests).
+    /// - Parameter pinnedStyle: an Auto style the user picked as the mode
+    ///   (with `scheme` `.auto`). Every fresh run uses it; no deck draw.
+    /// - Parameter deck: hands out the next design style for a fresh run, so
+    ///   generating again from the same inputs looks different (tests inject one).
     static func generate(
         baseColors: [BaseColor],
         size: Int?,
         vibe: String?,
         scheme: HarmonyScheme = .auto,
+        pinnedStyle: PaletteStyle? = nil,
         existingNames: [String] = [],
         refining: Refinement? = nil,
         nameVibe: String? = nil,
         namingTimeout: Duration = GenerationPacing.namingTimeout,
         namer: Namer? = nil,
+        deck: StyleDeckStore = .shared,
         onRecipe: (@MainActor (GenerationRecipe) -> Void)? = nil,
         onPartialColors: (@MainActor ([Color]) -> Void)? = nil,
         onLateNaming: (@MainActor (PaletteViewModel) -> Void)? = nil,
@@ -269,17 +275,35 @@ enum PaletteGenerator {
                 recipe.brief.hue = brief.hue ?? recipe.brief.hue
                 recipe.brief.secondaryHue = brief.secondaryHue
                 recipe.brief.tone = brief.tone
-                if let suggested = brief.scheme, !recipe.scheme.isUIMode { recipe.scheme = suggested }
+                if let suggested = brief.scheme, !recipe.scheme.isUIMode {
+                    recipe.scheme = suggested
+                    recipe.style = nil
+                }
             }
             // A change must change something.
             if recipe == refining.recipe { recipe.seed = UInt64.random(in: .min ... .max) }
         } else {
             let brief = trimmedVibe.isEmpty ? PaletteBrief.neutral : await makeBrief(vibe: trimmedVibe)
-            // The user's mode always wins. Auto follows the brief's harmony,
-            // unless two or more chosen colors already imply one.
+            // A picked style is used as is. Otherwise each fresh run from the
+            // same colors, mode and vibe takes the next style in the mode's
+            // deck: Auto walks the styles best-suited to the colors first,
+            // interface modes shuffle.
+            assert(pinnedStyle == nil || (pinnedStyle?.treatment != nil && scheme == .auto), "a pinned style is an Auto style")
+            let deckKey = StyleDeckKey(anchors: locked.map(\.hex), scheme: scheme, vibe: trimmedVibe)
+            let style: PaletteStyle?
+            if let pinnedStyle {
+                style = pinnedStyle
+            } else if scheme == .auto {
+                let auto = StyleDeck.autoCandidates(anchors: locked.map(\.hex), brief: brief)
+                style = deck.next(for: deckKey, candidates: auto.styles, first: auto.first, ordered: auto.ordered)
+            } else {
+                style = deck.next(for: deckKey, candidates: PaletteStyle.deck(for: scheme))
+            }
+            // The user's mode always wins. Unstyled Auto follows the brief's
+            // harmony, unless two or more chosen colors already imply one;
+            // styled Auto leaves the harmony to its style.
             var resolvedScheme = scheme
-            // A vibe that names two colors is not one-hue, whatever the model's harmony.
-            if scheme == .auto, locked.count < 2, let suggested = brief.scheme,
+            if style == nil, scheme == .auto, locked.count < 2, let suggested = brief.scheme,
                !(suggested == .monochromatic && brief.secondaryHue != nil) {
                 resolvedScheme = suggested
             }
@@ -287,7 +311,8 @@ enum PaletteGenerator {
                 brief: brief,
                 size: PaletteBrief.resolvedSize(requested: size, locked: locked.count, suggested: brief.suggestedSize, interface: resolvedScheme.isUIMode),
                 scheme: resolvedScheme,
-                seed: UInt64.random(in: .min ... .max)
+                seed: UInt64.random(in: .min ... .max),
+                style: style
             )
         }
         try Task.checkCancellation()
@@ -300,7 +325,8 @@ enum PaletteGenerator {
             tone: recipe.brief.tone,
             hue: recipe.brief.hue,
             secondaryHue: recipe.brief.secondaryHue,
-            seed: recipe.seed
+            seed: recipe.seed,
+            style: recipe.style
         ))
         recipe.builtHue = built.mainHue
         if let onRecipe {

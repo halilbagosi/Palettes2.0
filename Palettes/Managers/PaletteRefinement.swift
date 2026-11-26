@@ -25,6 +25,9 @@ struct GenerationRecipe: Equatable {
     /// The main hue the builder actually used, for relative hue changes when
     /// the brief left the hue to the seed.
     var builtHue: Double?
+    /// The design style it was built in (see `PaletteStyle`). A described
+    /// change keeps it; nil for palettes built before styles existed.
+    var style: PaletteStyle? = nil
 
     /// The recipe with `change` applied. The seed is kept, so a rebuild only
     /// moves what the change asks for.
@@ -44,6 +47,8 @@ struct GenerationRecipe: Equatable {
 
         if let scheme = change.scheme, !self.scheme.isUIMode {
             next.scheme = scheme
+            // An explicit harmony replaces the style.
+            next.style = nil
         }
 
         if let size = change.size {
