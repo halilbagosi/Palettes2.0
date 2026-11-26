@@ -34,6 +34,8 @@ struct StyleDeck {
     private struct Round {
         var order: [PaletteStyle]
         var position: Int
+        /// The style drawn last, so a new round never starts by repeating it.
+        var last: PaletteStyle? = nil
     }
 
     private var rounds: [StyleDeckKey: Round] = [:]
@@ -61,20 +63,34 @@ struct StyleDeck {
         if let existing = rounds[key], Set(existing.order) == Set(candidates) {
             round = existing
         } else {
-            var order = ordered ? candidates : candidates.shuffled(using: &rng)
-            if !ordered, let first, let index = order.firstIndex(of: first) { order.swapAt(0, index) }
-            round = Round(order: order, position: 0)
+            // A fresh deck, or the candidates changed under this key (a vibe
+            // read differently): an ordered walk resumes after the last style,
+            // a shuffle never starts with it.
+            let last = rounds[key]?.last
+            round = Round(order: Self.makeOrder(candidates, ordered: ordered, first: last == nil ? first : nil, after: last, using: &rng), position: 0, last: last)
+            if ordered, let last, let index = round.order.firstIndex(of: last) { round.position = index + 1 }
         }
         if round.position >= round.order.count {
-            let last = round.order.last
-            var order = ordered ? candidates : candidates.shuffled(using: &rng)
-            if !ordered, order.count > 1, order[0] == last { order.swapAt(0, 1) }
-            round = Round(order: order, position: 0)
+            round.order = Self.makeOrder(candidates, ordered: ordered, first: nil, after: round.last, using: &rng)
+            round.position = 0
         }
         let style = round.order[round.position]
         round.position += 1
+        round.last = style
         store(round, for: key)
         return style
+    }
+
+    /// A round's order: the given order, or a shuffle that leads with `first`
+    /// and never starts with `last` (the style just shown).
+    private static func makeOrder<G: RandomNumberGenerator>(
+        _ candidates: [PaletteStyle], ordered: Bool, first: PaletteStyle?, after last: PaletteStyle?, using rng: inout G
+    ) -> [PaletteStyle] {
+        guard !ordered else { return candidates }
+        var order = candidates.shuffled(using: &rng)
+        if let first, let index = order.firstIndex(of: first) { order.swapAt(0, index) }
+        if order.count > 1, order[0] == last { order.swapAt(0, 1) }
+        return order
     }
 
     private mutating func store(_ round: Round, for key: StyleDeckKey) {

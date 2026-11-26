@@ -25,6 +25,12 @@ final class StyleDeckTests: XCTestCase {
             ("#8B5A2B", .earthy),            // warm muted brown
             ("#1E3A8A", .jewelTones),        // deep saturated navy
             ("#FF5E7A", .complementaryPop),  // vivid coral
+            ("#FFD700", .complementaryPop),  // vivid gold: bright, not pastel
+            ("#A0E000", .complementaryPop),  // vivid lime
+            ("#808000", .earthy),            // olive
+            ("#C46A4A", .earthy),            // terracotta
+            ("#C9A227", .earthy),            // mustard
+            ("#3B2414", .earthy),            // dark brown
         ]
         for (hex, expected) in cases {
             let color = OKLCH(hex: hex)!
@@ -33,11 +39,11 @@ final class StyleDeckTests: XCTestCase {
     }
 
     func testRankingKeepsEveryStyleAndBreaksTiesByDeckOrder() {
-        let ranked = PaletteStyle.ranked(auto, for: OKLCH(hex: "#3060A0")!)
-        XCTAssertEqual(Set(ranked), Set(auto))
-        XCTAssertEqual(ranked.count, auto.count)
-        // Equal fits keep their deck order: Monochrome + Pop and Pastel never outrank the calm default for a mid blue.
-        XCTAssertLessThan(ranked.firstIndex(of: .analogous603010)!, ranked.firstIndex(of: .monochromePop)!)
+        XCTAssertEqual(Set(PaletteStyle.ranked(auto, for: OKLCH(hex: "#3060A0")!)), Set(auto))
+        // A soft mid blue: Monochrome + Pop and Triadic Playful tie at 1, and Pastel, Jewel Tones and Earthy tie at 0. Ties keep deck order.
+        let soft = OKLCH(L: 0.6, C: 0.05, h: 250)
+        XCTAssertEqual(PaletteStyle.ranked(auto, for: soft),
+                       [.analogous603010, .splitComplementary, .complementaryPop, .monochromePop, .triadicPlayful, .pastel, .jewelTones, .earthy])
     }
 
     func testInterfaceStylesHaveNoFit() {
@@ -182,5 +188,35 @@ final class StyleDeckTests: XCTestCase {
         var brief = PaletteBrief.neutral
         brief.secondaryHue = 40
         XCTAssertFalse(StyleDeck.autoCandidates(anchors: [], brief: brief).styles.contains(.monochromePop))
+    }
+
+    func testRecentlyDrawnKeySurvivesEviction() {
+        var deck = StyleDeck()
+        var rng = SplitMix64(seed: 1)
+        let keys = (0...StyleDeck.capacity).map { key([String(format: "#%06X", $0 * 4099)]) }
+        for k in keys.dropLast() { _ = deck.next(for: k, candidates: light, using: &rng) }
+        _ = deck.next(for: keys[0], candidates: light, using: &rng)   // key 0 is now the most recent
+        _ = deck.next(for: keys[StyleDeck.capacity], candidates: light, using: &rng)
+        XCTAssertTrue(deck.contains(keys[0]), "least recently used, not first inserted, is dropped")
+        XCTAssertFalse(deck.contains(keys[1]))
+    }
+
+    func testChangedCandidatesNeverRepeatTheLastStyle() {
+        var deck = StyleDeck()
+        var rng = SplitMix64(seed: 8)
+        let k = key(["#FFF2A0"], .auto)
+        let full: [PaletteStyle] = [.pastel, .analogous603010, .earthy, .splitComplementary]
+        XCTAssertEqual(deck.next(for: k, candidates: full, ordered: true, using: &rng), .pastel)
+        // The vibe reads differently this time and drops Earthy: the walk resumes after Pastel.
+        let fewer: [PaletteStyle] = [.pastel, .analogous603010, .splitComplementary]
+        XCTAssertEqual(deck.next(for: k, candidates: fewer, ordered: true, using: &rng), .analogous603010)
+        // Shuffled decks don't repeat across a change either.
+        for seed: UInt64 in 0..<30 {
+            var shuffled = StyleDeck()
+            var r = SplitMix64(seed: seed)
+            let shown = shuffled.next(for: key(), candidates: light, using: &r)!
+            let next = shuffled.next(for: key(), candidates: Array(light.dropLast()), using: &r)
+            XCTAssertNotEqual(next, shown, "seed \(seed)")
+        }
     }
 }

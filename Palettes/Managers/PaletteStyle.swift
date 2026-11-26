@@ -186,19 +186,16 @@ extension PaletteStyle {
 // MARK: - Auto fit
 
 extension PaletteStyle {
-    /// How well this Auto style suits a color (higher is better; 0 for
-    /// interface styles). Pale colors suit Pastel, deep saturated ones Jewel
-    /// Tones, warm muted ones (browns, olives) Earthy, greys Monochrome + Pop,
-    /// and vivid ones the pop schemes. Calm analogous is the general default.
+    /// How well this Auto style suits a color (higher is better; 0 for interface styles). Pale, soft colors suit Pastel (bright but vivid ones don't), deep saturated ones Jewel Tones, warm muted ones (browns, olives, terracotta, mustard, tan) Earthy, greys Monochrome + Pop, vivid ones the pop schemes. Calm analogous is the general default.
     func fit(for color: OKLCH) -> Double {
         let L = color.L
         let C = color.C
         let warm = C >= 0.03 && OKLCH.hueDistance(color.h, 60) <= 50
         switch self {
         case .monochromePop: return C < 0.03 ? 10 : 1
-        case .pastel: return L >= 0.80 ? 9 : (L >= 0.70 ? 5 : 0)
+        case .pastel: return L >= 0.80 && C <= 0.13 ? 9 : (L >= 0.70 && C <= 0.10 ? 5 : 0)
         case .jewelTones: return L <= 0.45 && C >= 0.08 ? 9 : (L <= 0.55 && C >= 0.12 ? 5 : 0)
-        case .earthy: return warm && C < 0.11 && (0.30...0.75).contains(L) ? 9 : (warm && C < 0.15 ? 4 : 0)
+        case .earthy: return warm && C < 0.15 && (0.25...0.80).contains(L) ? 9 : (warm && C < 0.18 ? 4 : 0)
         case .complementaryPop: return C >= 0.17 ? 8 : (C >= 0.12 ? 5 : 2)
         case .triadicPlayful: return C >= 0.17 ? 7 : (C >= 0.12 ? 4 : 1)
         case .analogous603010: return 6
