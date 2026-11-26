@@ -134,9 +134,9 @@ extension PaletteStyle {
         var dropsSecondary = false
         /// Gives a monochromatic palette one accent (plain monochromatic has none).
         var addsAccent = false
-        /// The accent takes vivid chroma whatever the tone.
+        /// The accent takes vivid chroma, unless the vibe's own tone asks for muted.
         var vividAccent = false
-        /// Multiplies the chroma of generated tones.
+        /// Multiplies the chroma of generated tones and of the accent.
         var chromaScale = 1.0
         /// A tone it brings. A vibe's own tone wins channel by channel.
         var tone: PaletteTone? = nil
