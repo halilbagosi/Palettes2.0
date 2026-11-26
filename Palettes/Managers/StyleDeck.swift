@@ -130,6 +130,11 @@ extension StyleDeck {
         if colors.isEmpty, brief.secondaryHue != nil {
             styles.removeAll { $0 == .monochromePop }
         }
+        // A vibe that names a color that isn't earthy keeps it: Earthy would
+        // pull it toward brown ("ocean" turning teal).
+        if colors.isEmpty, let hue = brief.hue, OKLCH.hueDistance(hue, 60) > 50 {
+            styles.removeAll { $0 == .earthy }
+        }
 
         var removed: Set<PaletteStyle> = []
         switch brief.tone.lightness {

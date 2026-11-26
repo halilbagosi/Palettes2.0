@@ -392,6 +392,23 @@ final class PaletteGeneratorTests: XCTestCase {
         XCTAssertEqual(result.name, "Ocean Sunset")
     }
 
+    /// Whatever style Auto draws for a vibe that names colors, the vibe's colors survive.
+    @available(iOS 26.0, *)
+    @MainActor
+    func testOceanSunsetSurvivesEveryAutoStyleItCanDraw() async throws {
+        let brief = PaletteBrief.heuristic(from: "ocean sunset")
+        for style in StyleDeck.autoCandidates(anchors: [], brief: brief).styles {
+            let result = try await PaletteGenerator.generate(
+                baseColors: [], size: 6, vibe: "ocean sunset", scheme: .auto, pinnedStyle: style,
+                namer: { _, _, _ in PaletteGenerator.Naming(title: "Ocean Sunset", colorNames: [:]) },
+                deck: StyleDeckStore()
+            )
+            let hues = result.hexCodes.compactMap { OKLCH(hex: $0) }.filter { $0.C >= 0.03 }.map(\.h)
+            XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 240) <= 30 }, "\(style): no blue in \(result.hexCodes)")
+            XCTAssertTrue(hues.contains { OKLCH.hueDistance($0, 45) <= 35 }, "\(style): no orange in \(result.hexCodes)")
+        }
+    }
+
     // MARK: - Style decks
 
     @available(iOS 26.0, *)

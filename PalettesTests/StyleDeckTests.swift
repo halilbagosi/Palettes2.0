@@ -219,4 +219,12 @@ final class StyleDeckTests: XCTestCase {
             XCTAssertNotEqual(next, shown, "seed \(seed)")
         }
     }
+
+    func testVibeNamingANonEarthyColorDropsEarthy() {
+        var brief = PaletteBrief.neutral
+        brief.hue = 240
+        XCTAssertFalse(StyleDeck.autoCandidates(anchors: [], brief: brief).styles.contains(.earthy))
+        brief.hue = 55
+        XCTAssertTrue(StyleDeck.autoCandidates(anchors: [], brief: brief).styles.contains(.earthy))
+    }
 }
